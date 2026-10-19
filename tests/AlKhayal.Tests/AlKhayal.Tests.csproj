@@ -11,4 +11,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AlKhayal.Core\AlKhayal.Core.csproj" />
+    <ProjectReference Include="..\..\src\AlKhayal.Data\AlKhayal.Data.csproj" />
+  </ItemGroup>
 </Project>
