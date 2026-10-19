@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AlKhayal.Core/AlKhayal.Core.csproj" />
+    <Project Path="src/AlKhayal.Data/AlKhayal.Data.csproj" />
+    <Project Path="src/AlKhayal.UI/AlKhayal.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AlKhayal.Tests/AlKhayal.Tests.csproj" />
+  </Folder>
+</Solution>
