@@ -31,3 +31,32 @@ Applies to this repository's C# WPF desktop UI and all visual changes.
 ## If the task is underspecified
 
 Implement only the approved UI structure for the requested feature. Ask for missing consequential product decisions rather than guessing. Record new approved design choices in `design.md`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Database rules
+- Data access: plain SQL queries with Dapper. No EF/ORM. Always use parameters (@Name), never string concatenation.
+- Schema lives in src/AlKhayal.Data/Migrations/NNN_name.sql, run in order by Migrator at startup.
+- Before the first release: migrations may be edited or merged. After release: never edit an existing migration, add a new numbered one.
