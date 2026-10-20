@@ -16,6 +16,7 @@ namespace AlKhayal.Data.Database
 
                 Execute(conn, null,
                     "CREATE TABLE IF NOT EXISTS SchemaVersion (Name TEXT PRIMARY KEY, AppliedAt TEXT NOT NULL)");
+                Execute(conn, null, "PRAGMA foreign_keys = ON;");
 
                 var assembly = Assembly.GetExecutingAssembly();
                 var scripts = assembly.GetManifestResourceNames()

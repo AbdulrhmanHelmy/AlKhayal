@@ -1,0 +1,16 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f7fa; --surface: #ffffff; --surface-2: #eaf0f6; --surface-3: #f8fafc;
+  --border: #d9e0ea; --border-strong: #bcc8d8; --text: #021542; --text-secondary: #5b6785;
+  --primary: #021542; --primary-hover: #0b275e; --primary-foreground: #ffffff;
+  --gold: #b88a44; --gold-soft: #f6ead8; --secondary-blue: #0073a2;
+  --success: #1e9e6a; --success-soft: #e7f7f0; --warning: #b77b00; --warning-soft: #fff5d9;
+  --danger: #d64545; --danger-soft: #fdecec; --info-soft: #e9f4fb; --focus: #1877c9; --focus-ring: rgba(24, 119, 201, .24);
+  --gold-border: #d6bd95; --danger-border: #e6aaaa; --warning-border: #e7cb80; --chart-end: #6c5a59;
+  --overlay: rgba(2, 10, 32, .58); --shadow-1: 0 2px 8px rgba(2, 21, 66, .07); --shadow-2: 0 12px 30px rgba(2, 21, 66, .14);
+  --radius-sm: 6px; --radius: 8px; --radius-lg: 12px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --topbar-height: 52px; --quickbar-height: 82px; --tabs-height: 42px; --status-height: 30px;
+  --sidebar-width: 260px; --sidebar-collapsed: 64px; --font: Tahoma, "Segoe UI", Arial, sans-serif;
+  --content-max: 1680px; --content-gutter: clamp(14px, 1.6vw, 24px);
+}

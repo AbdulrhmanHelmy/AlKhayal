@@ -1,10 +1,15 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AlKhayal.Core/AlKhayal.Core.csproj" />
+    <Project Path="src/AlKhayal.Application/AlKhayal.Application.csproj" />
     <Project Path="src/AlKhayal.Data/AlKhayal.Data.csproj" />
+    <Project Path="src/AlKhayal.Api/AlKhayal.Api.csproj" />
+    <Project Path="src/AlKhayal.Server.Host/AlKhayal.Server.Host.csproj" />
     <Project Path="src/AlKhayal.UI/AlKhayal.UI.csproj" />
+    <Project Path="src/AlKhayal.Printing/AlKhayal.Printing.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/AlKhayal.Tests/AlKhayal.Tests.csproj" />
+    <Project Path="tests/AlKhayal.UnitTests/AlKhayal.UnitTests.csproj" />
+    <Project Path="tests/AlKhayal.IntegrationTests/AlKhayal.IntegrationTests.csproj" />
   </Folder>
 </Solution>

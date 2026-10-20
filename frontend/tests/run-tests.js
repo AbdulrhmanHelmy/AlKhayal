@@ -1,0 +1,34 @@
+"use strict";
+var assert = require("assert"), fs = require("fs"), path = require("path");
+var root = path.resolve(__dirname, "..", ".."), calculations = require(path.join(root, "frontend", "js", "core", "calculations.js"));
+var registry = JSON.parse(fs.readFileSync(path.join(root, "frontend", "data", "screens.json"), "utf8"));
+var indexHtml = fs.readFileSync(path.join(root, "frontend", "index.html"), "utf8");
+var layoutCss = fs.readFileSync(path.join(root, "frontend", "css", "layout.css"), "utf8");
+var modulesCss = fs.readFileSync(path.join(root, "frontend", "css", "modules.css"), "utf8");
+var appJs = fs.readFileSync(path.join(root, "frontend", "js", "app.js"), "utf8");
+var allowedRenderers = new Set(["dashboard", "settings", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services"]);
+
+var routes = registry.screens.map(function (screen) { return screen.route; });
+assert.strictEqual(new Set(routes).size, routes.length, "screen routes must be unique");
+assert.ok(routes.length >= 90, "the full inventory should register at least 90 distinct screens");
+registry.modules.forEach(function (module) { module.items.forEach(function (route) { assert.ok(routes.indexOf(route) >= 0, "navigation route is missing: " + route); }); });
+registry.quickAccess.forEach(function (item) { assert.ok(routes.indexOf(item.route) >= 0, "quick-access route is missing: " + item.route); });
+registry.screens.forEach(function (screen) { assert.ok(allowedRenderers.has(screen.renderer), "unknown renderer: " + screen.renderer); assert.ok(screen.title && screen.module && screen.description, "screen metadata is incomplete: " + screen.route); });
+assert.ok(indexHtml.indexOf('id="workspace"') >= 0 && indexHtml.indexOf('id="sidebarNavigation"') >= 0, "shell scroll regions must remain addressable");
+assert.ok(layoutCss.indexOf("min-height: 0") >= 0 && layoutCss.indexOf("overflow-y: auto") >= 0, "shell must define a bounded vertical content scroller");
+assert.ok(layoutCss.indexOf("grid-template-columns: minmax(0, 1fr) var(--sidebar-width)") >= 0, "shell must use intrinsic grid sizing");
+assert.ok(modulesCss.indexOf("height: calc(100vh") < 0, "module layouts must not own a second viewport height");
+assert.ok(indexHtml.indexOf("toggle-icon-close") >= 0 && indexHtml.indexOf("toggle-icon-open") >= 0, "sidebar toggle must expose directional panel icons");
+assert.ok(indexHtml.indexOf("طي القائمة الجانبية") >= 0 && appJs.indexOf("توسيع القائمة الجانبية") >= 0, "sidebar toggle labels must be Arabic and state-specific");
+assert.ok(appJs.indexOf("iconPaths") >= 0 && appJs.indexOf("settings:") >= 0 && appJs.indexOf("suppliers:") >= 0, "navigation icons must use the local semantic SVG map");
+assert.ok(layoutCss.indexOf("gap: 0; padding-inline: 0") >= 0, "collapsed rail controls must remove expanded spacing");
+var responsiveViewports = [[1920, 1080], [1600, 900], [1366, 768], [1280, 720], [1024, 768], [900, 600]];
+assert.strictEqual(responsiveViewports.length, 6, "responsive viewport matrix is explicit");
+
+var totals = calculations.invoice([{ quantity: 2, price: 19.95 }, { quantity: 3, price: 10 }], 4.90, 14);
+assert.deepStrictEqual(totals, { subtotal: 69.9, discount: 4.9, tax: 9.1, total: 74.1 });
+var schedule = calculations.installments(1000, 100, 3, "2026-11-01");
+assert.strictEqual(schedule.length, 3); assert.strictEqual(schedule.reduce(function (sum, item) { return sum + item.amount; }, 0), 900); assert.strictEqual(schedule[2].dueDate, "2027-01-01");
+var sample = [{ name: "أحمد", amount: 2 }, { name: "محمود", amount: 1 }];
+assert.strictEqual(calculations.filter(sample, "أح", ["name"]).length, 1); assert.strictEqual(calculations.sort(sample, "amount", "asc")[0].amount, 1);
+console.log("Frontend registry and calculation tests passed (" + routes.length + " screens).");

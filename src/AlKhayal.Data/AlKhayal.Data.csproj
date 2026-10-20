@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\AlKhayal.Core\AlKhayal.Core.csproj" />
+    <ProjectReference Include="..\AlKhayal.Application\AlKhayal.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.89" />

@@ -1,0 +1,11 @@
+(function (root, factory) {
+  var api = factory(); if (typeof module === "object" && module.exports) module.exports = api; else root.AlKhayalCalculations = api;
+}(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+  function round(value) { return Math.round((Number(value) + Number.EPSILON) * 100) / 100; }
+  function invoice(lines, discount, taxRate) { var subtotal = round((lines || []).reduce(function (sum, line) { return sum + Number(line.quantity || 0) * Number(line.price || 0); }, 0)); var discountValue = round(Math.min(Math.max(Number(discount || 0), 0), subtotal)); var taxable = round(subtotal - discountValue), tax = round(taxable * Math.max(Number(taxRate || 0), 0) / 100); return { subtotal: subtotal, discount: discountValue, tax: tax, total: round(taxable + tax) }; }
+  function installments(amount, downPayment, count, firstDueDate) { amount = Math.max(Number(amount || 0), 0); downPayment = Math.min(Math.max(Number(downPayment || 0), 0), amount); count = Math.max(parseInt(count, 10) || 1, 1); var remaining = round(amount - downPayment), base = Math.floor((remaining / count) * 100) / 100, date = new Date(firstDueDate), result = []; for (var index = 0; index < count; index++) { var due = new Date(date.getTime()); due.setMonth(due.getMonth() + index); result.push({ number: index + 1, dueDate: due.toISOString().slice(0, 10), amount: index === count - 1 ? round(remaining - base * (count - 1)) : base, status: "مستحق" }); } return result; }
+  function filter(rows, query, keys, normalizer) { var normalize = normalizer || function (value) { return String(value || "").toLowerCase(); }, needle = normalize(query); if (!needle) return (rows || []).slice(); return (rows || []).filter(function (row) { return keys.some(function (key) { return normalize(row[key]).indexOf(needle) >= 0; }); }); }
+  function sort(rows, key, direction) { var multiplier = direction === "desc" ? -1 : 1; return (rows || []).slice().sort(function (left, right) { var a = left[key], b = right[key]; if (typeof a === "number" && typeof b === "number") return (a - b) * multiplier; return String(a == null ? "" : a).localeCompare(String(b == null ? "" : b), "ar") * multiplier; }); }
+  return { round: round, invoice: invoice, installments: installments, filter: filter, sort: sort };
+}));
