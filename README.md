@@ -1,10 +1,12 @@
 # الخيال POS
 
-AlKhayal is an Arabic-first, offline-first point-of-sale and ERP foundation for Windows. The repository contains a functional shared HTML interface for 92 registered screens, real SQLite-backed authentication, an OWIN Web API 2 host, and a lightweight WinForms/WebView2 desktop shell.
+AlKhayal is an Arabic-first, offline-first point-of-sale and ERP foundation for Windows. The repository contains a functional shared HTML interface for 96 registered screens, real SQLite-backed authentication, business activity profiles, feature configuration, company/general settings, an OWIN Web API 2 host, and a lightweight WinForms/WebView2 desktop shell.
 
 ## What is implemented
 
 - Real local authentication with PBKDF2 password hashes, HttpOnly SameSite session cookies, CSRF-protected logout, roles, disabled-account handling, and persisted SQLite sessions.
+- Real multi-activity business profiles with one primary activity, deterministic capability recommendations, administrator override preservation, and first-run/settings UI.
+- Real SQLite-backed company information, currency/date/time/tax defaults, administrator audit, and device-local Light/Dark/System appearance.
 - A responsive RTL shell with navy/gold Light, Dark, and System themes; top navigation; quick access; a right sidebar; workspace tabs; status bar; dialogs; toasts; tables; forms; charts; and keyboard focus states.
 - The full requested navigation inventory across customers, sales, suppliers, purchases, returns, printing, expenses, treasury, alerts, inventory, employees, permissions, analytics, installments, maintenance, branches, cash services, and settings.
 - Deterministic Egyptian Arabic demonstration data and session-only interactions for business screens.

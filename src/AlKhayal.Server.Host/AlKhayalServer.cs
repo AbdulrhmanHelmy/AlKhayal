@@ -4,7 +4,15 @@ using System.Text;
 using System.Threading;
 using AlKhayal.Api;
 using AlKhayal.Application.Authentication;
+using AlKhayal.Application.BusinessActivities;
+using AlKhayal.Application.Features;
+using AlKhayal.Application.Users;
+using AlKhayal.Application.Settings;
 using AlKhayal.Data.Authentication;
+using AlKhayal.Data.BusinessActivities;
+using AlKhayal.Data.Features;
+using AlKhayal.Data.Users;
+using AlKhayal.Data.Settings;
 using AlKhayal.Data.Database;
 using Microsoft.Owin;
 using Microsoft.Owin.Hosting;
@@ -29,7 +37,13 @@ namespace AlKhayal.Server.Host
             var users = new SqliteUserStore(connectionString);
             var sessions = new SqliteSessionStore(connectionString);
             var auth = new AuthService(users, sessions, new PasswordHasher(), new SecureTokenGenerator(), new SystemClock());
-            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AuthService) ? auth : null);
+            var activityStore = new SqliteBusinessActivityStore(connectionString);
+            var features = new FeatureService(new SqliteFeatureStore(connectionString), activityStore);
+            var activities = new BusinessActivityService(activityStore, features);
+            var userManagement = new UserManagementService(new SqliteUserManagementStore(connectionString), new JsonScreenCatalog(options.FrontendPath), new PasswordHasher());
+            var settingsStore = new SqliteSettingsStore(connectionString, options.DatabasePath);
+            var settings = new SettingsService(settingsStore, settingsStore);
+            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : null);
 
             _server = WebApp.Start(options.Url, app =>
             {
@@ -44,6 +58,12 @@ namespace AlKhayal.Server.Host
                 var contentTypes = new Microsoft.Owin.StaticFiles.ContentTypes.FileExtensionContentTypeProvider();
                 contentTypes.Mappings[".json"] = "application/json; charset=utf-8";
                 fileOptions.StaticFileOptions.ContentTypeProvider = contentTypes;
+                fileOptions.StaticFileOptions.OnPrepareResponse = context =>
+                {
+                    context.OwinContext.Response.Headers.Set("Cache-Control", "no-store, no-cache, must-revalidate");
+                    context.OwinContext.Response.Headers.Set("Pragma", "no-cache");
+                    context.OwinContext.Response.Headers.Set("Expires", "0");
+                };
                 app.UseFileServer(fileOptions);
             });
         }

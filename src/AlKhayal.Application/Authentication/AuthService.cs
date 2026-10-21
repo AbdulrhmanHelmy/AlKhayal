@@ -14,6 +14,7 @@ namespace AlKhayal.Application.Authentication
             var user = await _users.FindByUsernameAsync(command.Username.Trim(), ct).ConfigureAwait(false);
             if (user == null || !_hasher.Verify(command.Password, user.PasswordHash)) return Fail("invalid_credentials", "بيانات الدخول غير صحيحة.");
             if (!user.IsActive) return Fail("disabled_account", "هذا الحساب موقوف. راجع مسؤول النظام.");
+            await _users.UpdateLastLoginAsync(user.Id, _clock.UtcNow, ct).ConfigureAwait(false);
             var identity = ToIdentity(user);
             var session = new SessionRecord { Token = _tokens.CreateToken(), CsrfToken = _tokens.CreateToken(), UserId = user.Id, Username = user.Username, DisplayName = user.DisplayName, Role = user.Role, ExpiresUtc = _clock.UtcNow.AddHours(8) };
             await _sessions.SaveAsync(session, ct).ConfigureAwait(false);

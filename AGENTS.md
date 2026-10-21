@@ -2,7 +2,7 @@
 
 ## Project identity
 
-AlKhayal POS is a lightweight Arabic-first point-of-sale and ERP foundation. The repository implements the platform foundation, real SQLite-backed authentication, and a complete route-driven UI prototype covering 92 business screens. Business datasets and mutations are still deterministic, session-only demonstrations unless an endpoint explicitly states otherwise. It is offline-first for standalone deployments, targets Windows 7 SP1 through Windows 11 subject to the runtime caveats below, and must remain usable on low-resource hardware. The codebase is deliberately AI-agent-first: changes must be discoverable, small, explicit, testable, and documented.
+AlKhayal POS is a lightweight Arabic-first point-of-sale and ERP foundation. The repository implements the platform foundation, real SQLite-backed authentication, administrator/cashier account management, persisted cashier screen permissions, persisted business activity profiles, persisted optional-module/product-capability configuration, persisted company/general/tax settings, and a complete route-driven UI prototype covering 96 business and administration screens. Other business datasets and mutations are still deterministic, session-only demonstrations unless an endpoint explicitly states otherwise. It is offline-first for standalone deployments, targets Windows 7 SP1 through Windows 11 subject to the runtime caveats below, and must remain usable on low-resource hardware. The codebase is deliberately AI-agent-first: changes must be discoverable, small, explicit, testable, and documented.
 
 Arabic is the primary user-facing language. HTML uses `dir="rtl"`, labels and validation are Arabic, and layouts must remain usable with long Arabic strings. Store dates as UTC and display local business time at the presentation boundary.
 
@@ -30,6 +30,8 @@ Use `frontend/css` for tokens, themes, shared app styles, and page styles; `fron
 
 `frontend/data/screens.json` is the canonical screen/navigation registry. Every new route must have unique metadata, a registered renderer, a module navigation reference or documented deep-link purpose, and coverage in `frontend/tests/run-tests.js`. Shared deterministic sample records belong in `frontend/js/mocks/data.js`; business-screen mutations must remain behind `frontend/js/services/mock-services.js` until a real Application/API use case exists. Never present session-only mock actions as persisted accounting, inventory, printing, backup, or sales operations.
 
+The persistent sidebar is for operational workflows. `settings-program` is the single administration entry and renders the registry-driven Settings hub. Administrative screens declare `settingsGroup` and `settingsOrder`; hidden compatibility routes declare `navigationHidden` and `redirectTo`. Do not duplicate Settings links in sidebar modules, search, quick access, or dashboard code. Every registry renderer and redirect target must be validated at startup and by the executable frontend registry test.
+
 All API calls use relative URLs in the same-origin browser and `credentials: same-origin`; the client never stores passwords or bearer tokens in localStorage. Validate in JavaScript for usability, then validate again in Application/API. Keep JavaScript compatible with Chromium 109: avoid browser APIs unavailable there, transpilation assumptions, and excessive animation. Design for low memory and fast first render.
 
 ### UI shell and desktop UX contract
@@ -39,6 +41,8 @@ The shell has one viewport owner: `.app-shell` fills the WebView2 viewport, `.ap
 Shared responsive breakpoints are 1180px, 1080px, 1050px, 760px, and 560px. At 1080px the sidebar becomes a persisted 64px SVG icon rail without overwriting the user's saved preference. Quick-access tiles and workspace tabs must remain bounded and keyboard reachable. Mock notices use the compact wording `وضع تجريبي — البيانات غير محفوظة فعليًا`.
 
 The WinForms host uses `src/AlKhayal.UI/app.manifest` for Per-Monitor DPI awareness and `AutoScaleMode.Dpi`; WebView2 is dock-filled, starts at zoom 1.0, disables built-in zoom/pinch, and blocks only desktop-host browser zoom gestures. Do not use CSS `zoom`, `transform: scale()`, or global browser-zoom suppression. See `docs/ui-audit.md` and `docs/design.md` before changing shell behavior.
+
+The self-hosted frontend is served with no-store response headers and the desktop clears only the WebView2 network cache before first navigation. This prevents a cached shell from consuming a newer `screens.json` whose renderer script was not present in the cached HTML. Do not remove either safeguard without an equivalent versioned-asset strategy and regression coverage.
 
 ## Backend standards
 

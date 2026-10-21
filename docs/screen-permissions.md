@@ -1,0 +1,13 @@
+# Cashier screen permissions
+
+`frontend/data/screens.json` is the canonical screen registry. The server reads its stable `route`, Arabic title, module, optional `featureKey`, and `administratorOnly` metadata at startup. Grants persist in `UserScreenPermissions` by cashier ID and route ID; JavaScript and localStorage are never authorization sources.
+
+Administrators receive every registry screen whose effective module/capability is enabled. Cashiers receive only explicitly granted, non-administrator screens whose feature is enabled. A cashier with no grants receives a safe Arabic empty state rather than broad default access. Disabled-module grants remain stored and appear inactive in the editor; re-enabling the module restores effective access without rewriting grants.
+
+The effective-access endpoint drives sidebar groups, compact navigation, quick access, global search, dashboard shortcuts, direct navigation, and workspace tabs. Revoked or disabled open tabs are removed and the shell redirects to an allowed dashboard/first screen, or to the empty state. Permission state deduplicates concurrent loads and compares only role plus screen IDs before emitting one `alkhayal:access-changed` event. Feature refresh performs a non-notifying access reload to avoid the Task 2 recursive-render freeze pattern.
+
+Administrative screens are marked `administratorOnly` and rejected by the backend permission service even if a caller submits their route IDs directly. Existing activity and feature mutations retain administrator and CSRF checks. Future persisted business endpoints must associate their operation with a screen/module and enforce effective access server-side rather than depending on route hiding.
+
+`settings-program` is the only main navigation entry for administration. Settings destinations carry `settingsGroup` metadata in the same registry; the hub filters them through the same effective-access snapshot used by every other navigation surface. Consequently a cashier cannot discover or retain User Management through Settings, sidebar, search, quick access, dashboard, direct navigation, or an already-open tab. Administrator-only routes are also excluded from assignable cashier grants by the server catalog.
+
+The old permission placeholder routes remain solely for compatibility. They are `navigationHidden`, administrator-only, and redirect to `users-list`; they never appear as assignable cashier screens and do not represent additional roles or per-action permission systems. `shift-approval` remains an independent employee workflow and is not redirected into User Management.

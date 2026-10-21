@@ -10,11 +10,15 @@ Generated from `frontend/data/screens.json` by `node tools/generate-ui-coverage.
 |---|---|---|---|---|---|---|---|
 | الرئيسية | الرئيسية | `dashboard` | `frontend/js/modules/dashboard.js` | dashboard | Aggregated mock store | KPIs, charts, alerts and navigation | Browser smoke |
 | الإعدادات | إعدادات البرنامج | `settings-program` | `frontend/js/modules/renderers.js` | settings | UI/session state | Edit settings and save in session | Browser smoke |
-| الإعدادات | إعدادات النظام | `settings-system` | `frontend/js/modules/renderers.js` | settings | UI/session state | Edit settings and save in session | Registry verified |
-| الإعدادات | إعدادات عامة | `settings-general` | `frontend/js/modules/renderers.js` | settings | UI/session state | Edit settings and save in session | Registry verified |
+| الإعدادات | نوع النشاط التجاري | `business-activities` | `frontend/js/modules/business-activities.js` | business-activities | SQLite/API | Search, multi-select, primary activity, preview and confirmed persistence | Automated integration |
+| الإعدادات | الوحدات والميزات | `feature-management` | `frontend/js/modules/feature-management.js` | feature-management | SQLite/API | Core/optional groups, capability switches, dependencies, recommendations | Automated integration + browser smoke |
+| الإعدادات | إعدادات النظام | `settings-system` | `frontend/js/app.js` | legacy-redirect | Compatibility | Redirect to real General Settings | Automated registry |
+| الإعدادات | الإعدادات العامة | `settings-general` | `frontend/js/modules/general-settings.js` | general-settings | SQLite/API | Edit validated date/time/currency/tax defaults | Automated integration |
+| الإعدادات | بيانات المنشأة | `settings-company` | `frontend/js/modules/general-settings.js` | company-settings | SQLite/API | Edit validated reusable company profile | Automated integration |
+| الإعدادات | المظهر | `settings-appearance` | `frontend/js/modules/general-settings.js` | appearance-settings | Device preference | Apply Light/Dark/System immediately | Native smoke |
 | الإعدادات | إعدادات الفاتورة | `settings-invoice` | `frontend/js/modules/renderers.js` | settings | UI/session state | Edit settings and save in session | Registry verified |
 | الإعدادات | إعدادات الطابعات | `settings-printers` | `frontend/js/modules/renderers.js` | printer | UI/session state | Configuration and print preview only | Registry verified |
-| الإعدادات | إعدادات النسخ الاحتياطي | `settings-backup` | `frontend/js/modules/renderers.js` | settings | UI/session state | Edit settings and save in session | Registry verified |
+| الإعدادات | البيانات والصيانة | `settings-backup` | `frontend/js/modules/general-settings.js` | database-settings | SQLite/API read | Inspect database status; backup/restore explicitly unavailable | Automated integration |
 | العملاء | إدارة العملاء | `customers-list` | `frontend/js/modules/renderers.js` | entity-list | customers | Search, filter, sort, paginate, inspect and session actions | Browser smoke |
 | العملاء | إضافة عميل | `customer-add` | `frontend/js/modules/renderers.js` | entity-form | customers | Validate and save to the session store | Registry verified |
 | العملاء | تعديل بيانات عميل | `customer-edit` | `frontend/js/modules/renderers.js` | entity-form | customers | Validate and save to the session store | Registry verified |
@@ -101,4 +105,4 @@ Generated from `frontend/data/screens.json` by `node tools/generate-ui-coverage.
 | الصيانة والفروع | حركة مالية للفروع | `branch-finance` | `frontend/js/modules/renderers.js` | workflow | branches | Review and simulated confirmation | Registry verified |
 | الصيانة والفروع | خدمات كاش | `cash-services` | `frontend/js/modules/renderers.js` | cash-services | UI/session state | Interactive session workflow or preview | Registry verified |
 
-Total distinct screens: **92**.
+Total distinct screens: **96**.

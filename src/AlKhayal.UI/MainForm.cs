@@ -65,6 +65,10 @@ namespace AlKhayal.UI
 
                 var environment = await CoreWebView2Environment.CreateAsync(null, dataDirectory);
                 await _browser.EnsureCoreWebView2Async(environment);
+                // Frontend files and the screen registry must be from the same deployment version.
+                // This preserves cookies/local storage while preventing an older cached shell from
+                // consuming a newer no-store screens.json and missing newly registered renderers.
+                await _browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Network.clearBrowserCache", "{}");
                 _browser.Dock = DockStyle.Fill;
                 _browser.Margin = Padding.Empty;
                 _browser.ZoomFactor = 1.0;

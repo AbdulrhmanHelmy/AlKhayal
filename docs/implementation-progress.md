@@ -1,5 +1,7 @@
 # AlKhayal POS implementation progress
 
+Phase 1 Task 2 is implemented: SQLite-backed optional-module and product-capability configuration, activity recommendation integration, dependency validation, audit logging, protected API endpoints, Arabic management UI, and centralized navigation gating. See `docs/phase-1-task-2-report.md`.
+
 Last updated: 2026-10-20
 
 This checklist is the durable hand-off for the full UI-foundation implementation. A checked item means code exists and has been verified at the level stated in the validation section; it does not imply production business persistence.
@@ -81,8 +83,8 @@ This checklist is the durable hand-off for the full UI-foundation implementation
 ## Final verification
 
 - `dotnet build AlKhayal.slnx --no-restore` — passed with 0 warnings and 0 errors.
-- `dotnet test AlKhayal.slnx --no-restore --no-build` — passed, 7 tests.
-- `node frontend/tests/run-tests.js` — passed, 92 distinct screens.
+- `dotnet test AlKhayal.slnx --no-restore --no-build` — passed, 14 tests (6 unit, 8 integration).
+- `node frontend/tests/run-tests.js` — passed, 96 distinct screens after Task 4.
 - `node --check` across `frontend/js/**/*.js` — passed.
 - Local browser smoke — passed for login/session restore, dashboard, POS mock checkout, sales, purchases, customers, suppliers, inventory, finance, reports, maintenance, settings, compact RTL navigation, theme switching, and logout.
 
@@ -95,3 +97,12 @@ This checklist is the durable hand-off for the full UI-foundation implementation
 - [x] Add Per-Monitor DPI manifest, WinForms DPI scaling, WebView2 zoom factor 1.0, and desktop-only zoom gesture suppression.
 - [x] Add static responsive shell-contract checks to `frontend/tests/run-tests.js`.
 - [x] Build and frontend checks pass. Real WinForms/WebView2 login-window inspection passed; authenticated multi-viewport/DPI visual qualification remains unverified because credentials were not automated.
+
+## Phase 1 / Task 1 — business activity profiles
+
+- [x] Central 13-activity registry and deterministic, source-tracked capability recommendations.
+- [x] Real SQLite selection/primary persistence and administrator-safe capability metadata migration.
+- [x] Authenticated read API plus administrator/CSRF-protected save API.
+- [x] First-run and settings UI with search, multi-select, primary selection, preview, confirmation, themes, RTL, and compact layout.
+- [x] Unit, migration, SQLite persistence, OWIN authorization/restart, and frontend contract tests.
+- [x] Architecture, design, database, API, testing, catalog, and implementation-report documentation.
