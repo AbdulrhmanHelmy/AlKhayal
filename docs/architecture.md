@@ -1,4 +1,12 @@
-# Architecture
+﻿# Architecture
+
+Phase 2.3 product tracking configuration and the deferred physical-stock boundary are specified in [phase-2-task-3-tracking.md](phase-2-task-3-tracking.md).
+
+## Phase 2.1 catalog vertical slice
+
+`CatalogService` in Application owns product/category/unit validation, fixed-scale price conversion, idempotent create request hashes, and optimistic version rules. `ICatalogStore` is the port; `SqliteCatalogStore` owns short transactions and parameterized SQL. `CatalogController` translates authenticated HTTP contracts, validates CSRF on mutations, checks effective cashier screen access, and keeps activation, archive, migration review, category writes, and unit writes administrator-only where specified. The host composes these dependencies; the frontend never opens SQLite directly.
+
+Migration 008 is additive. It retains `Products.Id`, `Products.Name`, and the original `Products.Price`, while `ProductDetails.SellPriceScaled` becomes the authoritative price. A hidden default variant gives every product a future-compatible identity without exposing incomplete variant setup. No inventory ledger, stock quantity, warehouse, barcode, or tracking persistence is implemented by Task 2.1. The five-task future boundary is defined in `docs/phase-2-architecture-blueprint.md`.
 
 ## General settings boundary
 
@@ -33,3 +41,6 @@ The frontend has no build step, framework, CDN, remote font, or service worker. 
 ## Desktop compatibility
 
 The WinForms shell owns host lifetime, WebView2 runtime detection, application-specific browser data, navigation allowlisting, connection errors, and disposal. It currently targets x86 because that is the runtime/native-loader combination verified on the development machine. Windows 7 requires a separately packaged Chromium 109-compatible WebView2 runtime and real-device testing; that deployment has not been qualified.
+# Phase 2 / Task 2.4 inventory boundary
+
+The standalone host now composes `InventoryService` with `SqliteInventoryStore`. The Warehouse Directory and browser clients use authenticated `/api/inventory/*` calls; neither WinForms nor JavaScript owns stock quantities. `InventoryService` validates command shape, fixed-scale decimal input, feature gates, and request identity. `SqliteInventoryStore` owns the single SQLite posting transaction, tracking identity changes, immutable movements, derived balances, and audit events. See [inventory-ledger.md](inventory-ledger.md) for invariants and limits.

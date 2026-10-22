@@ -2,7 +2,7 @@
 
 ## Project identity
 
-AlKhayal POS is a lightweight Arabic-first point-of-sale and ERP foundation. The repository implements the platform foundation, real SQLite-backed authentication, administrator/cashier account management, persisted cashier screen permissions, persisted business activity profiles, persisted optional-module/product-capability configuration, persisted company/general/tax settings, and a complete route-driven UI prototype covering 96 business and administration screens. Other business datasets and mutations are still deterministic, session-only demonstrations unless an endpoint explicitly states otherwise. It is offline-first for standalone deployments, targets Windows 7 SP1 through Windows 11 subject to the runtime caveats below, and must remain usable on low-resource hardware. The codebase is deliberately AI-agent-first: changes must be discoverable, small, explicit, testable, and documented.
+AlKhayal POS is a lightweight Arabic-first point-of-sale and ERP foundation. The repository implements the platform foundation, real SQLite-backed authentication, administrator/cashier account management, persisted cashier screen permissions, persisted business activity profiles, persisted optional-module/product-capability configuration, persisted company/general/tax settings, and the real Phase 2.1 product catalog (products, categories, units, scale-4 sale/reference-purchase prices, activation/archive, and legacy review), plus a complete route-driven UI covering 99 business and administration screens. Other business datasets and mutations are still deterministic, session-only demonstrations unless an endpoint explicitly states otherwise. It is offline-first for standalone deployments, targets Windows 7 SP1 through Windows 11 subject to the runtime caveats below, and must remain usable on low-resource hardware. The codebase is deliberately AI-agent-first: changes must be discoverable, small, explicit, testable, and documented.
 
 Arabic is the primary user-facing language. HTML uses `dir="rtl"`, labels and validation are Arabic, and layouts must remain usable with long Arabic strings. Store dates as UTC and display local business time at the presentation boundary.
 
@@ -12,7 +12,8 @@ Arabic is the primary user-facing language. HTML uses `dir="rtl"`, labels and va
 - Windows Forms shell with Microsoft WebView2. The frontend is HTML5/CSS3/vanilla JavaScript, with no React, Angular, Electron, runtime CDN, or remote-font dependency.
 - ASP.NET Web API 2 on OWIN Self-Host. The API serves the same `frontend/` files and is the business-operation boundary.
 - SQLite with Dapper/plain parameterized SQL and ordered embedded migrations. No PostgreSQL implementation yet.
-- Standalone mode binds `127.0.0.1`; LAN server mode binds a configured server interface and keeps SQLite on that server's local disk; LAN clients navigate to the configured server URL and do not start a local API. Cloud mode is future work on a separate modern host (ASP.NET Core/PostgreSQL).
+- Standalone mode binds `127.0.0.1`; LAN server mode binds a configured server interface and keeps SQLite on that server's local disk; LAN clients navigate to the configured server URL and do not start a local API. Cloud mode is future work on a 
+separate modern host (ASP.NET Core/PostgreSQL).
 
 Do not reintroduce WPF or replace the approved stack without an explicit architecture decision record. Never use SQLite over a network share. The desktop may be replaced later, but the shared frontend and HTTP contract should remain portable.
 

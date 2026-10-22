@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "specPath": null,
+  "specSearchOrder": ["AGENTS.md", "docs/"],
+  "buildCommand": "dotnet build AlKhayal.slnx --no-restore",
+  "testCommands": ["dotnet test AlKhayal.slnx --no-restore", "node frontend/tests/run-tests.js"],
+  "notes": "No Phase 3.5 section was found in AGENTS.md or docs/ on 2026-10-22. Set specPath to the exact source file after locating a requested section."
+}

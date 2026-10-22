@@ -1,4 +1,4 @@
-# AlKhayal POS design contract
+﻿# AlKhayal POS design contract
 
 The canonical, maintained design specification is [docs/design.md](docs/design.md). It defines the Arabic RTL shell, semantic navy/gold tokens, themes, density, responsive behavior, reusable components, route-driven screen model, accessibility expectations, and the explicit boundary between real authentication and session-only business demonstrations.
 
@@ -23,3 +23,8 @@ The real `users-list` route is reached through `الإعدادات ← المس�
 The shell scroll ownership and DPI/zoom contract are maintained in [docs/ui-audit.md](docs/ui-audit.md) and [docs/design.md](docs/design.md). New modules must not introduce nested viewport calculations, document-level horizontal overflow, emoji navigation icons, or large repeated mock-data banners.
 
 The real General Settings, Company Information, Appearance, and Data & Maintenance screens use the same registry-driven Settings hub and shared responsive form primitives. Business-wide values are SQLite-backed; appearance is an explicitly device-local preference that reuses the existing Light/Dark/System theme controller. See [docs/general-settings.md](docs/general-settings.md).
+
+The real product catalog preserves the existing card, toolbar, table, modal, form, workspace-tab, RTL, and theme primitives. `products-list` is the primary visible product destination; add/edit/quick-add stay permission-checked contextual routes. Category and unit management remain administrator routes and are discoverable from the catalog. Their management pages are full-width table-first views with compact 540px add/edit modals, inline validation, guarded close behavior, focus return, and status actions; no permanent management forms or unsafe delete action is shown. The form persists an optional scale-4 reference purchase cost and can create/select a category in the same modal pattern without unmounting the unsaved draft. The inventory sidebar exposes only Product Catalog and a no-fake-data Warehouse Directory placeholder; actual warehouses, quantities, movements, and average cost remain Task 2.4 work.
+# Task 2.4 warehouse implementation
+
+Warehouse Directory now hosts the persisted inventory workflows inside the approved RTL shell. Keep the Inventory sidebar limited to Product Catalog and Warehouse Directory. Use the existing compact forms, modal focus behavior, navy/gold tokens, and light/dark/system themes. Stock values shown here come from the inventory API only. Implementation details and operator flows are in [docs/warehouse-management.md](docs/warehouse-management.md).

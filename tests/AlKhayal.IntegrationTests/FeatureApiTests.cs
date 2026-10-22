@@ -42,6 +42,8 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(HttpStatusCode.OK, (await Put(admin, csrf, "modules/installments", "{\"isEnabled\":true}")).StatusCode);
                     Assert.Equal(HttpStatusCode.OK, (await Put(admin, csrf, "modules/installments", "{\"isEnabled\":false}")).StatusCode);
                     Assert.Equal(HttpStatusCode.OK, (await Put(admin, csrf, "modules/installments", "{\"isEnabled\":true}")).StatusCode);
+                    Assert.Equal(HttpStatusCode.Conflict, (await Put(admin, csrf, "capabilities/expiry-dates", "{\"isEnabled\":true}")).StatusCode);
+                    Assert.Equal(HttpStatusCode.OK, (await Put(admin, csrf, "capabilities/batch-tracking", "{\"isEnabled\":true}")).StatusCode);
                     Assert.Equal(HttpStatusCode.OK, (await Put(admin, csrf, "capabilities/expiry-dates", "{\"isEnabled\":true}")).StatusCode);
                     Assert.Equal(HttpStatusCode.OK, (await Put(admin, csrf, "capabilities/expiry-dates", "{\"isEnabled\":false}")).StatusCode);
                     var preview = await Post(admin, csrf, "recommendations/preview", "{\"activityKeys\":[\"mobile-phones\"]}"); Assert.Equal(HttpStatusCode.OK, preview.StatusCode); Assert.Contains("maintenance-management", await preview.Content.ReadAsStringAsync());

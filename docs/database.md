@@ -1,4 +1,18 @@
-# Database
+﻿# Database
+
+The Phase 2.3 tracking foundation reuses persisted product capability assignments. Physical batch and identifier tables are created by the atomic inventory ledger migration `011_inventory_ledger.sql` described below; see [phase-2-task-3-tracking.md](phase-2-task-3-tracking.md) for the Task 2.3 scope.
+
+## Migration 009 — product reference purchase cost
+
+`009_product_purchase_price.sql` additively adds nullable `ProductDetails.PurchasePriceScaled` with a non-negative check. Non-null values use the existing signed-64-bit scale-4 money policy. Existing rows remain `NULL`, explicitly meaning unknown; the migration does not invent a zero cost, calculate average inventory cost, or create stock movements. Catalog create/update transactions write this reference value alongside the existing product details.
+
+## Migration 008 — product catalog foundation
+
+`008_product_catalog_foundation.sql` adds `ProductCategories`, `Units`, `ProductDetails`, the internal default subset of `ProductVariants`, `ProductMigrationIssues`, and `CatalogOperations`. Root and child category names have separate normalized unique indexes because SQLite treats `NULL` values as distinct. Unit codes are normalized and unique; unit ID 1 (`PCS`, قطعة) is the protected system default. Product details reference active categories/units through Application/Data validation, store price as a non-negative signed 64-bit integer at scale 4, and carry a monotonic `Version` for optimistic concurrency.
+
+The migrator performs the legacy price backfill in C# inside the same transaction as migration 008. It parses only invariant integer/real/text decimal representations, multiplies with checked `decimal`, rounds midpoint away from zero once, and range-checks `long`. Invalid names/types/text/negative/overflow values retain their original `Products` row and price, receive an inactive zero placeholder detail with `review_required`, and create a review issue. Startup reconciliation applies the same quarantine policy to a legacy-only row created after migration. The original `Products.Price` is recovery evidence; it is not read by the catalog API after migration.
+
+No developer database is recreated or deleted. Tests use unique temporary files, clear SQLite pools, and delete only those files.
 
 ## Migration 007 — general settings
 
@@ -21,4 +35,9 @@ User mutations that can remove administrator access count active administrators 
 
 Development provisioning runs only through an explicit `--provision-user [username]` command. Password reset for an existing account is a separate explicit `--reset-password [username]` command. Both read the password from the console without echoing it and never store it in an environment variable or command-line argument. Any non-empty password is accepted. Passwords use PBKDF2-SHA256 with random salts and are never stored or returned in plaintext. Existing usernames are not silently overwritten during provisioning; `--provision-demo` remains an interactive compatibility alias.
 
-The UI's products, invoices, accounts, inventory, and other business records remain mock session data and are not SQLite tables or migrations. Business activity profile tables contain configuration metadata only. Persisting business records requires explicit money/rounding policy, transactional sale/payment/inventory rules, operation-key idempotency, audit records, and a new numbered migration.
+Products, categories, units, and optional reference purchase costs are persisted by migrations 008–010, and warehouses, stock movements, balances, batches, physical identifiers, and inventory audit are persisted by migration 011 as described below. Invoices, purchases, accounts, and every other business record outside those migrations remain session-only demonstrations and are not SQLite tables. Business activity profile tables contain configuration metadata only. Persisting any further business record requires explicit money/rounding policy, transactional sale/payment rules, operation-key idempotency, audit records, and a new numbered migration.
+# Phase 2 / Task 2.4 inventory migration
+
+Migration `011_inventory_ledger.sql` is additive to the Task 2.3 catalog schema. It creates the default warehouse, inventory documents/lines, immutable stock movements, batch and physical-unit identities, movement links, balance projection, and inventory audit. Partial unique balance indexes distinguish null batch from a real batch. Projection triggers compare each inserted/updated row with its ledger aggregate; posted documents, lines, movements, and audit rows are protected against edits. See [inventory-ledger.md](inventory-ledger.md) for the complete table list, scale policy, restore/rebuild process, and tracking limits.
+
+Warehouse rows are created and edited transactionally by `SqliteInventoryStore.SaveWarehouseAsync`. `Warehouses.NormalizedCode` is the trimmed, Unicode-normalized, upper-cased code and carries a unique constraint, so codes that differ only by case or spacing are rejected as duplicates on both create and edit. The active default and a warehouse that still holds stock cannot be deactivated, only an empty nondefault warehouse can, and reactivating it is an ordinary edit of the same row. Creating a second warehouse still requires the effective `multiple-warehouses` module; editing, deactivating, or reactivating an existing warehouse does not. See [warehouse-management.md](warehouse-management.md) for the directory workflow.

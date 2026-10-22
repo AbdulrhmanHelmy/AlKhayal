@@ -1,4 +1,24 @@
-# API contracts
+﻿# API contracts
+
+Product configuration accepts `batch-tracking`, `expiry-dates`, `serial-numbers`, and `imei-tracking` in `capabilityKeys`. Application automatically includes batch when expiry is selected and serial when IMEI is selected. Catalog summaries include `hasBatchTracking` alongside the existing tracking flags. Physical intake endpoints are deferred; see [phase-2-task-3-tracking.md](phase-2-task-3-tracking.md).
+
+## Product catalog
+
+All catalog endpoints return the existing `{ success, data, error }` envelope, require an authenticated cookie, use effective screen access for cashiers, and require `X-CSRF-Token` on mutations. `salePrice` is required; `purchasePrice` is nullable and represents a reference/default acquisition cost, not inventory average cost. Both non-null monetary values are non-negative invariant decimal strings with four-place storage semantics; they are never JSON binary-floating numbers. Product detail responses return `purchasePrice: null` when the cost is unknown.
+
+- `GET /api/catalog/products`: bounded `page`/`pageSize` (maximum 100), `search`, exact `categoryId`, nullable `isActive`, and optional `includeArchived`. Each item also returns ordered `sizeValues` and `colorValues`, active `variantCount`, and persisted `hasExpiryTracking`, `hasSerialTracking`, and `hasImeiTracking` flags. Global feature disablement does not erase these saved summaries.
+- `GET /api/catalog/products/{id}`; `POST /api/catalog/products`; `PUT /api/catalog/products/{id}`.
+- `PUT /api/catalog/products/{id}/state`; `POST /api/catalog/products/{id}/archive` (administrator only).
+- `GET|POST /api/catalog/categories`; `PUT /api/catalog/categories/{id}`. Writes are administrator-only.
+- `GET|POST /api/catalog/units`; `PUT /api/catalog/units/{id}`. Writes are administrator-only.
+- `GET /api/catalog/migration-issues` (administrator only).
+- `GET /api/catalog/products/{id}` returns the product detail aggregate, including effective capability state, attribute values, product units/conversions, variants, SKUs, and barcode history.
+- `GET /api/catalog/attributes?kind=all|system|custom&includeInactive=false` returns global size/color/custom attributes and values. Administrator-only CSRF-protected writes are `POST /api/catalog/attributes`, `PUT /api/catalog/attributes/{id}`, `POST /api/catalog/attributes/{id}/values`, and `PUT /api/catalog/attribute-values/{id}`.
+- `GET /api/catalog/barcodes/lookup?code=...` performs authenticated scanner lookup and returns the product, variant, unit, rational conversion, effective prices, and a non-sellable reason when archived/inactive/retired. It requires the effective `barcode-scanning` capability.
+
+Product create/update accepts an optional `configuration` object containing capability keys, attribute value assignments, product units (`numerator`/`denominator`), variants, per-variant SKUs, and multiple barcodes. Writes are atomic and administrator-only when configuration is supplied. Existing default variants remain compatible with simple Task 2.1 products.
+
+Create product requires an `operationKey`. Reusing it with the same canonical request returns the first product; reusing it for different data returns HTTP 409 `operation_key_conflict`. Updates require `version`; stale writes return HTTP 409 `version_conflict`. Other stable codes include `invalid_category`, `invalid_unit`, `duplicate_category`, `duplicate_unit`, `category_cycle`, `review_required`, `archived`, `screen_forbidden`, and `invalid_csrf`.
 
 ## General settings endpoints
 
@@ -33,3 +53,6 @@ Feature endpoints require authentication:
 User-management endpoints require an authenticated administrator. Mutations additionally require `X-CSRF-Token`: `GET/POST /api/users`, `GET/PUT /api/users/{id}`, `PUT /api/users/{id}/status`, `POST /api/users/{id}/reset-password`, and `GET/PUT /api/users/{id}/screen-permissions`. They return 400 for validation/role/screen errors, 401 for missing sessions, 403 for cashier or CSRF failures, 404 for missing users, and 409 for duplicate usernames or last-active-administrator protection. Passwords and hashes are never returned.
 
 Static frontend files, including `frontend/data/screens.json`, are served from the same OWIN origin with `Cache-Control: no-store, no-cache, must-revalidate`, `Pragma: no-cache`, and an expired response. This keeps the shell scripts and route registry on one deployment version in persistent WebView2 profiles. Other business-screen operations do not yet have HTTP contracts: their UI state is explicitly in-memory and must not be interpreted as durable server behavior.
+# Phase 2 / Task 2.4 inventory API
+
+Authenticated routes under `/api/inventory`: `GET/POST /warehouses`, `GET/PUT /warehouses/{id}`, `GET /products`, `GET /products/{id}`, `GET /balances`, `GET /movements`, `GET /tracking?identifier=`, `POST /post`, `POST /counts`, `GET /counts/{id}`, `POST /counts/{id}/post`, `POST /counts/{id}/cancel`, `POST /documents/{id}/reverse`, `GET /integrity`, and `POST /integrity/rebuild`. All mutations require the session CSRF header; warehouse management, reversals, and integrity administration require administrator role. Other inventory routes require existing `warehouses-list` screen access. Query pages are bounded to 100 rows. Posting requires a stable `operationKey`, document `type`, warehouse, reason except opening, and product-unit/variant lines with decimal-string quantity. Positive intake requires decimal-string `unitCost`. Conflicts include `operation_key_conflict`, `insufficient_stock`, `stale_count`, `batch_required`, and `identifier_not_in_stock`. See [inventory-ledger.md](inventory-ledger.md) for transaction and reversal rules.

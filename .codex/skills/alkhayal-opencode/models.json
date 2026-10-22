@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "provider": "opencode-go",
+  "selectionRule": "Use only verified models; if no economical candidate is verified, use glm-5.3 for all batches.",
+  "models": [
+    { "id": "opencode-go/mimo-v2.6-flash", "role": "economical", "status": "verified", "notes": "Read-only CLI smoke test returned OK on 2026-10-22. UI, CRUD, boilerplate, small-fix candidate; task quality and relative price remain unmeasured." },
+    { "id": "opencode-go/kimi-k2.7-code", "role": "multi-file", "status": "verified", "notes": "Read-only CLI smoke test returned OK on 2026-10-22. Interconnected-feature candidate; task quality and relative price remain unmeasured." },
+    { "id": "opencode-go/glm-5.2", "role": "hard", "status": "verified", "notes": "Read-only CLI smoke test returned OK on 2026-10-22. Difficult-implementation candidate; task quality and relative price remain unmeasured." },
+    { "id": "opencode-go/glm-5.3", "role": "fallback", "status": "verified", "notes": "Read-only CLI smoke test returned OK on 2026-10-22. User-reported working fallback; task quality, relative price, and quota remain unmeasured." }
+  ]
+}

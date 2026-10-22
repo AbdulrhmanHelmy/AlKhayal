@@ -13,13 +13,16 @@ var accessStateJs = fs.readFileSync(path.join(root, "frontend", "js", "services"
 var userManagementJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "user-management.js"), "utf8");
 var dashboardJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "dashboard.js"), "utf8");
 var renderersJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "renderers.js"), "utf8");
+var catalogJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "catalog.js"), "utf8");
+var inventoryJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "inventory.js"), "utf8");
+var uiJs = fs.readFileSync(path.join(root, "frontend", "js", "components", "ui.js"), "utf8");
 var settingsHubJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "settings-hub.js"), "utf8");
 var generalSettingsJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "general-settings.js"), "utf8");
 var settingsStateJs = fs.readFileSync(path.join(root, "frontend", "js", "services", "settings-state.js"), "utf8");
 var posJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "pos.js"), "utf8");
 var mainFormCs = fs.readFileSync(path.join(root, "src", "AlKhayal.UI", "MainForm.cs"), "utf8");
 var serverHostCs = fs.readFileSync(path.join(root, "src", "AlKhayal.Server.Host", "AlKhayalServer.cs"), "utf8");
-var allowedRenderers = new Set(["dashboard", "settings", "settings-hub", "legacy-redirect", "business-activities", "feature-management", "user-management", "company-settings", "general-settings", "appearance-settings", "database-settings", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services"]);
+var allowedRenderers = new Set(["dashboard", "settings", "settings-hub", "legacy-redirect", "business-activities", "feature-management", "user-management", "company-settings", "general-settings", "appearance-settings", "database-settings", "catalog-products", "catalog-product-form", "catalog-categories", "catalog-units", "warehouse-directory", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services"]);
 
 var routes = registry.screens.map(function (screen) { return screen.route; });
 assert.strictEqual(new Set(routes).size, routes.length, "screen routes must be unique");
@@ -27,6 +30,10 @@ assert.ok(routes.length >= 90, "the full inventory should register at least 90 d
 registry.modules.forEach(function (module) { module.items.forEach(function (route) { assert.ok(routes.indexOf(route) >= 0, "navigation route is missing: " + route); }); });
 var sidebarRoutes = registry.modules.reduce(function(all,module){return all.concat(module.items);},[]);
 assert.strictEqual(new Set(sidebarRoutes).size,sidebarRoutes.length,"main sidebar routes must not be duplicated");
+assert.deepStrictEqual(registry.modules.find(function(module){return module.id==="inventory";}).items,["products-list","warehouses-list"],"inventory sidebar must contain only the product and warehouse directories");
+assert.ok(indexHtml.indexOf('js/modules/inventory.js')>=0&&inventoryJs.indexOf('R["warehouse-directory"]=directory')>=0,"real warehouse renderer must load after catalog module");
+assert.ok(inventoryJs.indexOf('/api/inventory/post')>=0&&inventoryJs.indexOf('/api/inventory/counts')>=0&&inventoryJs.indexOf('/api/inventory/movements')>=0,"inventory views must use persisted APIs");
+assert.ok(registry.screens.filter(function(screen){return ["stock-adjustment","warehouse-transfer","stock-movements"].indexOf(screen.route)>=0;}).every(function(screen){return screen.redirectTo==="warehouses-list";}),"legacy stock routes must resolve through the warehouse directory");
 registry.quickAccess.forEach(function (item) { assert.ok(routes.indexOf(item.route) >= 0, "quick-access route is missing: " + item.route); });
 registry.screens.forEach(function (screen) { assert.ok(allowedRenderers.has(screen.renderer), "unknown renderer: " + screen.renderer); assert.ok(screen.title && screen.module && screen.description, "screen metadata is incomplete: " + screen.route); });
 assert.ok(indexHtml.indexOf('id="workspace"') >= 0 && indexHtml.indexOf('id="sidebarNavigation"') >= 0, "shell scroll regions must remain addressable");
@@ -74,6 +81,35 @@ assert.ok(generalSettingsJs.indexOf("/api/settings/company")>=0&&generalSettings
 assert.ok(generalSettingsJs.indexOf("إلغاء التغييرات")>=0&&generalSettingsJs.indexOf("context.isActive()")>=0,"settings forms must support cancel and stale-response protection");
 assert.ok(generalSettingsJs.indexOf("context.state.companyDraft")>=0&&generalSettingsJs.indexOf("context.state.generalDraft")>=0,"unsaved settings drafts must survive workspace tab switches");
 assert.ok(generalSettingsJs.indexOf("AlKhayalTheme.set")>=0&&generalSettingsJs.indexOf("light")>=0&&generalSettingsJs.indexOf("dark")>=0&&generalSettingsJs.indexOf("system")>=0,"appearance must reuse all three existing theme modes");
+assert.ok(indexHtml.indexOf("catalog.js")>=0&&catalogJs.indexOf("/api/catalog/products")>=0,"the real catalog module must load and use the catalog API");
+assert.strictEqual(registry.screens.find(function(screen){return screen.route==="products-list";}).renderer,"catalog-products","product list must use the real catalog renderer");
+assert.strictEqual(registry.screens.find(function(screen){return screen.route==="product-add";}).renderer,"catalog-product-form","product creation must use the real catalog renderer");
+assert.strictEqual(registry.screens.find(function(screen){return screen.route==="product-edit";}).renderer,"catalog-product-form","product editing must use the real catalog renderer");
+assert.ok(catalogJs.indexOf('R["warehouse-directory"]')<0&&inventoryJs.indexOf('R["warehouse-directory"]=directory')>=0,"Warehouse Directory must have one real renderer");
+assert.ok(catalogJs.indexOf("/api/catalog/attributes")>=0&&catalogJs.indexOf("/api/catalog/barcodes/lookup")>=0,"Task 2.2 catalog configuration endpoints must be wired");
+assert.ok(catalogJs.indexOf("data-capability")>=0&&catalogJs.indexOf("data-unit-num")>=0&&catalogJs.indexOf("data-variant-id")>=0,"product detail must expose capabilities, exact unit conversions, and variants");
+assert.ok(catalogJs.indexOf("data-capability-toggle")>=0&&catalogJs.indexOf("catalog-capability-switch")>=0,"product capabilities must use accessible Arabic toggle switches");
+assert.ok(catalogJs.indexOf("item.isGloballyEnabled||item.isAssigned")>=0&&catalogJs.indexOf("محفوظة سابقًا")>=0&&catalogJs.indexOf("item.isAssigned?' checked'")>=0,"global availability must hide unavailable new switches and preserve historical assignments");
+assert.ok(catalogJs.indexOf('data-free-values="')>=0&&catalogJs.indexOf('data-add-free-value')>=0&&catalogJs.indexOf('area.querySelector("[data-free-value-list]").appendChild(row)')>=0,"sizes and colors must use inline editable rows without rerendering the form");
+assert.ok(catalogJs.indexOf('unitRows=[{id:base?base.id:null,unitId:baseId,numerator:1,denominator:1,isBase:true')>=0,"the selected base unit must produce a canonical 1/1 mapping without enabling multiple units");
+assert.ok(catalogJs.indexOf('barcodeItem||record.id&&hasIdentifiers')>=0&&catalogJs.indexOf('data-capability-panel="product-barcode-settings"')>=0,"barcode inputs follow global availability while saved identifiers remain accessible");
+assert.ok(catalogJs.indexOf('state.drafts')>=0&&catalogJs.indexOf('restoreProductDraft')>=0&&catalogJs.indexOf('catalog-form-actions')>=0,"product drafts and one accessible save footer must survive tab renders");
+assert.ok(catalogJs.indexOf("data-capability-panel")>=0&&catalogJs.indexOf("data-requires-key")>=0&&catalogJs.indexOf("serial-numbers")>=0&&catalogJs.indexOf("batch-tracking")>=0,"conditional fields and capability dependencies must be represented");
+assert.ok(modulesCss.indexOf(".catalog-switch-track")>=0&&modulesCss.indexOf("focus-within")>=0,"catalog switches must have visible keyboard focus and theme-aware styling");
+assert.ok(catalogJs.indexOf("context.isActive()")>=0&&catalogJs.indexOf("data-catalog-retry")>=0,"catalog renderers must protect stale responses and expose retry states");
+assert.ok(catalogJs.indexOf("سعر الشراء")>=0&&catalogJs.indexOf("purchasePrice")>=0&&catalogJs.indexOf("ليست متوسط تكلفة المخزون")>=0,"product forms must capture the optional reference purchase cost honestly");
+assert.ok(catalogJs.indexOf("data-add-category-inline")>=0&&catalogJs.indexOf("categories.push(saved)")>=0&&catalogJs.indexOf("select.value=String(saved.id)")>=0,"inline category creation must preserve the mounted draft, refresh options, and select the new category");
+assert.ok(catalogJs.indexOf("data-manage-categories")>=0&&catalogJs.indexOf('context.navigate("product-categories")')>=0&&catalogJs.indexOf('context.navigate("unit-add")')>=0,"catalog must expose category and unit management contextually");
+assert.ok(catalogJs.indexOf("compactCategories")>=0&&catalogJs.indexOf("compactUnits")>=0&&catalogJs.indexOf('R["catalog-categories"]=compactCategories')>=0&&catalogJs.indexOf('R["catalog-units"]=compactUnits')>=0,"category and unit routes must use table-first renderers");
+assert.ok(catalogJs.indexOf("catalogManagementModal")>=0&&catalogJs.indexOf("+ إضافة تصنيف")>=0&&catalogJs.indexOf("+ إضافة وحدة قياس")>=0,"catalog management must expose compact modal add actions");
+assert.ok(catalogJs.indexOf("جارٍ الحفظ")>=0&&catalogJs.indexOf("تغييرات غير محفوظة")>=0&&catalogJs.indexOf("data-toggle-management")>=0,"management modals must validate, prevent duplicate saves, and protect unsaved edits");
+assert.ok(uiJs.indexOf("beforeClose")>=0&&uiJs.indexOf("focusSelector")>=0&&uiJs.indexOf("event.key === \"Escape\"")>=0,"shared modal behavior must support close guards, initial focus, Escape, and focus trapping");
+var inventoryModule=registry.modules.find(function(module){return module.id==="inventory";});
+assert.deepStrictEqual(Array.from(inventoryModule.items),["products-list","warehouses-list"],"inventory sidebar must contain only Product Catalog and Warehouse Directory");
+assert.strictEqual(registry.screens.find(function(screen){return screen.route==="warehouses-list";}).renderer,"warehouse-directory","Warehouse Directory must resolve to its real renderer");
+assert.ok(inventoryJs.indexOf('/api/inventory/warehouses')>=0&&inventoryJs.indexOf('/api/inventory/balances')>=0&&inventoryJs.indexOf('data-select-warehouse')>=0,"Warehouse Directory must query persisted warehouses and balances with searchable selection");
+var hiddenInventoryActions=["product-add","product-edit","product-quick-add","warehouse-add","stock-adjustment","warehouse-transfer","stock-movements","low-stock","manufacturing"];
+hiddenInventoryActions.forEach(function(route){var screen=registry.screens.find(function(item){return item.route===route;});assert.ok(screen&&screen.navigationHidden,"action-only inventory route must remain registered but hidden from top-level discovery: "+route);assert.strictEqual(typeof screen.renderer,"string");});
 assert.ok(settingsStateJs.indexOf("loadPromise")>=0&&settingsStateJs.indexOf("/api/settings/general")>=0,"settings reads must be deduplicated");
 assert.ok(!registry.modules.some(function(module){return module.id==="permissions"||module.id==="printing";}),"standalone permissions and configuration-only printing groups must be removed from the sidebar");
 assert.ok(!sidebarRoutes.some(function(route){return route==="users-list"||route==="user-permissions"||route==="sales-permissions"||route==="settings-permissions";}),"user administration routes must not appear directly in sidebar groups");
@@ -90,7 +126,7 @@ settingsEntries.forEach(function(screen){assert.ok(routes.indexOf(screen.route)>
 assert.ok(appJs.indexOf("typeof renderers[screen.renderer]")>=0,"startup must fail visibly when registry renderer code is missing");
 assert.ok(mainFormCs.indexOf("Network.clearBrowserCache")>=0&&serverHostCs.indexOf("no-store, no-cache, must-revalidate")>=0,"desktop startup and static serving must prevent shell/registry cache version skew");
 assert.ok(appJs.indexOf("resolveRoute")>=0&&appJs.indexOf("screen.redirectTo")>=0,"legacy route compatibility must use centralized route resolution");
-function verifyRuntimeRendererResolution(){var context={window:{AlKhayalUtils:{},AlKhayalUI:{},AlKhayalServices:{},AlKhayalCalculations:{},AlKhayalApi:{},AlKhayalFeatures:{},AlKhayalSettings:{},AlKhayalTheme:{}}};context.window.window=context.window;[renderersJs,activityJs,featureJs,settingsHubJs,generalSettingsJs,userManagementJs,dashboardJs,posJs].forEach(function(source,index){vm.runInNewContext(source,context,{filename:"renderer-"+index+".js"});});registry.screens.forEach(function(screen){assert.strictEqual(typeof context.window.AlKhayalRenderers[screen.renderer],"function","route must resolve to executable renderer: "+screen.route+" -> "+screen.renderer);});}
+function verifyRuntimeRendererResolution(){var context={window:{AlKhayalUtils:{},AlKhayalUI:{},AlKhayalServices:{},AlKhayalCalculations:{},AlKhayalApi:{},AlKhayalFeatures:{},AlKhayalSettings:{},AlKhayalTheme:{}}};context.window.window=context.window;[renderersJs,catalogJs,inventoryJs,activityJs,featureJs,settingsHubJs,generalSettingsJs,userManagementJs,dashboardJs,posJs].forEach(function(source,index){vm.runInNewContext(source,context,{filename:"renderer-"+index+".js"});});registry.screens.forEach(function(screen){assert.strictEqual(typeof context.window.AlKhayalRenderers[screen.renderer],"function","route must resolve to executable renderer: "+screen.route+" -> "+screen.renderer);});}
 verifyRuntimeRendererResolution();
 function verifyRepeatedAdministrationRendering(){var requests=0;var utils={normalize:function(value){return String(value||"").toLowerCase();},escape:function(value){return String(value==null?"":value);}};var ui={pageHeader:function(){return "";},field:function(){return "";}};var context={window:{AlKhayalUtils:utils,AlKhayalUI:ui,AlKhayalFeatures:{routeEnabled:function(){return true;}},AlKhayalApi:{request:function(){requests+=1;return new Promise(function(){});}},AlKhayalRenderers:{},confirm:function(){return true;}}};context.window.window=context.window;vm.runInNewContext(settingsHubJs,context,{filename:"settings-hub-repeat.js"});vm.runInNewContext(userManagementJs,context,{filename:"user-management-repeat.js"});function container(){var input={focus:function(){},setSelectionRange:function(){}};return{innerHTML:"",querySelector:function(selector){return selector==="[data-settings-search]"?input:null;},querySelectorAll:function(){return[];}};}var renderContext={registry:registry,user:{role:"administrator",id:"admin"},canNavigate:function(){return true;},navigate:function(){},isActive:function(){return true;}};var settings=registry.screens.find(function(screen){return screen.route==="settings-program";}),users=registry.screens.find(function(screen){return screen.route==="users-list";});for(var index=0;index<5;index+=1){context.window.AlKhayalRenderers["settings-hub"](settings,container(),renderContext);context.window.AlKhayalRenderers["user-management"](users,container(),renderContext);}assert.strictEqual(requests,5,"five User Management reopen cycles must issue one bounded list request each without recursive loads");}
 verifyRepeatedAdministrationRendering();
@@ -149,4 +185,28 @@ var schedule = calculations.installments(1000, 100, 3, "2026-11-01");
 assert.strictEqual(schedule.length, 3); assert.strictEqual(schedule.reduce(function (sum, item) { return sum + item.amount; }, 0), 900); assert.strictEqual(schedule[2].dueDate, "2027-01-01");
 var sample = [{ name: "أحمد", amount: 2 }, { name: "محمود", amount: 1 }];
 assert.strictEqual(calculations.filter(sample, "أح", ["name"]).length, 1); assert.strictEqual(calculations.sort(sample, "amount", "asc")[0].amount, 1);
+function verifyCatalogSavedSummaryAndEditHydration(){
+  var source=catalogJs.replace('  R["catalog-products"]=products;', '  global.__catalogTest={catalogSummaryBadges:catalogSummaryBadges,capabilityDetails:capabilityDetails};\n  R["catalog-products"]=products;');
+  assert.notStrictEqual(source,catalogJs,"catalog test hook must attach to the registered module");
+  var utils={escape:function(value){return String(value==null?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");},number:function(value){return String(value);},money:function(value){return String(value);}};
+  var context={window:{AlKhayalUtils:utils,AlKhayalUI:{badge:function(value){return "<span>"+value+"</span>";}},AlKhayalApi:{},AlKhayalRenderers:{}}};
+  vm.runInNewContext(source,context,{filename:"catalog-summary-hydration.js"});
+  var helpers=context.window.__catalogTest;
+  assert.strictEqual(helpers.catalogSummaryBadges({sizeValues:[],colorValues:[],variantCount:1}),"","simple products must have no optional badges");
+  assert.ok(helpers.catalogSummaryBadges({sizeValues:[],colorValues:[],variantCount:1,hasBatchTracking:true}).indexOf("تشغيلات")>=0,"batch-only products need a compact persisted tracking badge");
+  assert.ok(helpers.catalogSummaryBadges({sizeValues:[],colorValues:[],variantCount:1,hasExpiryTracking:true,hasBatchTracking:true}).indexOf("تشغيلات")<0,"expiry and its required batch must not create redundant badges");
+  var badges=helpers.catalogSummaryBadges({sizeValues:["M","L","XL"],colorValues:["أسود","أبيض"],variantCount:6,hasExpiryTracking:true});
+  assert.ok(badges.indexOf("مقاسات: M، L +1")>=0&&badges.indexOf("ألوان: أسود، أبيض")>=0&&badges.indexOf("تركيبات: 6")>=0&&badges.indexOf("صلاحية")>=0,"badges must contain actual values and configuration");
+  assert.ok(badges.indexOf('title="مقاسات: M، L، XL"')>=0,"the full value list must remain accessible");
+  var record={id:7,variantMode:true,attributes:[{attributeId:1,kind:"size",values:[{valueId:11,value:"M"},{valueId:12,value:"L"}]},{attributeId:2,kind:"color",values:[{valueId:21,value:"أسود"},{valueId:22,value:"أبيض"}]}],capabilities:[{key:"sizes",isAssigned:true},{key:"colors",isAssigned:true}],variants:[{id:101,isDefault:true,isActive:true,attributeValueIds:[11,21],sku:"SKU-1",barcodes:[{code:"BC-1",isRetired:false}]},{id:102,isDefault:false,isActive:true,attributeValueIds:[11,22],barcodes:[]},{id:103,isDefault:false,isActive:true,attributeValueIds:[12,21],barcodes:[]},{id:104,isDefault:false,isActive:true,attributeValueIds:[12,22],barcodes:[]}]};
+  var snapshot={capabilities:[{key:"sizes",isEnabled:true},{key:"colors",isEnabled:true}]};
+  var html=helpers.capabilityDetails(record,[],[],true,snapshot);
+  assert.ok(html.indexOf('value="M"')>=0&&html.indexOf('value="L"')>=0&&html.indexOf('value="أسود"')>=0&&html.indexOf('value="أبيض"')>=0,"Edit must restore saved free-text values even when the global attribute list is unavailable");
+  assert.ok(html.indexOf('data-capability-toggle="sizes" checked')>=0&&html.indexOf('data-capability-toggle="colors" checked')>=0,"saved switches must restore ON state");
+  assert.ok(html.indexOf('data-variant-id="101"')>=0&&html.indexOf('data-variant-id="104"')>=0&&html.indexOf('SKU-1')>=0&&html.indexOf('BC-1')>=0,"variant summary must show saved combinations and identifiers");
+  assert.ok(html.indexOf('<td>11, 21</td>')<0,"variant summary must show value labels instead of raw IDs");
+  var disabled=helpers.capabilityDetails(record,[],[],true,{capabilities:[{key:"sizes",isEnabled:false},{key:"colors",isEnabled:false}]});
+  assert.ok(disabled.indexOf("محفوظة سابقًا")>=0&&disabled.indexOf('value="M" readonly')>=0,"global disablement must keep historical values visible and read-only");
+}
+verifyCatalogSavedSummaryAndEditHydration();
 Promise.all([verifyFeatureStateLifecycle(),verifyAccessStateLifecycle(),verifySettingsStateLifecycle()]).then(function () { console.log("Frontend registry, settings/feature/access lifecycle, user management, and calculation tests passed (" + routes.length + " screens)."); }).catch(function (error) { console.error(error); process.exitCode = 1; });

@@ -1,0 +1,18 @@
+---
+name: alkhayal-opencode
+description: Route AlKhayal POS implementation phases and features through verified OpenCode Go models, then independently review and validate the changes in Codex Desktop. Use for requests such as "Complete Phase 3.5" in this repository.
+---
+
+# AlKhayal OpenCode workflow
+
+Codex Desktop owns requirements, planning, routing, validation, and independent review. OpenCode Go performs implementation. Keep context and calls small without compromising correctness.
+
+1. Read `AGENTS.md` and the task-relevant rules in [project-rules.md](project-rules.md). Inspect `git status`, the relevant code and tests, and [config.json](config.json). For a named phase, find only its requested section: `AGENTS.md` first, then the configured specification path and `docs/`. Record the exact source path in `config.json` when found. If absent, ask one short question; do not invent requirements.
+2. Classify the task: small = one implementation call and lightweight review; medium = one concise plan, 2–5 cohesive batches and a consolidated review; high-risk money, accounting, stock, inventory, or migration work = a structured plan with invariants and failure scenarios, dependency-ordered batches, critical checkpoint reviews, and a final review. Avoid calls for trivial operations and avoid splitting tightly coupled changes.
+3. Describe each batch with objective, allowed files/scope, dependencies, acceptance criteria, build/test commands, complexity (small/medium/large), and risk (low/medium/high). No numeric cost estimate. Plan connected batches once.
+4. Before routing, run `scripts/list-models.ps1`, confirm `opencode run --help`, and read [models.json](models.json). Use only verified `opencode-go/*` models. Choose the least expensive verified model likely to succeed, considering context size, past success, retry cost, and shared Go usage; relative prices are unknown until documented evidence is available. If no economical candidate is verified, use `opencode-go/glm-5.3` for every batch. Never switch to `opencode/*`, another provider, or paid usage silently. Do not change privacy, billing, or credentials settings.
+5. Send only the relevant `AGENTS.md` rules, task and acceptance criteria, architecture constraints, short completed-batch summaries, and necessary file paths/content. Run dependent batches sequentially; never allow parallel repository writes. Before the first and after every batch, use `scripts/git-state.ps1` and compare changed paths to that batch's allowlist. Preserve existing uncommitted files by excluding them or asking before overlap. Stop on out-of-scope edits.
+6. Append one line per OpenCode call to ignored `.codex/opencode-log.md`: date, task, batch, model, success/fail, attempt. After each batch run the configured build and relevant tests. If validation fails, identify environment, context, test, or implementation cause before reviewing code. Fix environment without a model retry; allow one targeted same-model correction for a simple error; escalate only a capability-blocked batch to a stronger verified Go model. At most two repair rounds across the request without user approval. Never restart completed batches.
+7. Review `git diff`, build output, and test results; read full files only when the diff lacks context. Report completed batches, model per batch and reason, validation, repairs/escalations, remaining issues, and actual usage measurements. Codex Plus usage is unknown unless a documented interface provides it. Do not claim precise savings from the call log.
+
+Use `scripts/smoke-test.ps1` only for read-only model availability checks. Read quota data only from a documented interface; otherwise mark it unknown.

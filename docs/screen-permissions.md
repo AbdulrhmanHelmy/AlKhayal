@@ -1,5 +1,7 @@
 # Cashier screen permissions
 
+Catalog API authorization uses the existing effective screen-access service, not frontend visibility. `products-list`, `product-add`, `product-edit`, and `product-quick-add` can be granted independently to cashiers and map to the corresponding read/create/update endpoints. Product activation/archive and migration issues remain administrator-only. `product-categories` and the retained `unit-add` route are administrator-only Settings entries and cannot be granted to cashiers.
+
 `frontend/data/screens.json` is the canonical screen registry. The server reads its stable `route`, Arabic title, module, optional `featureKey`, and `administratorOnly` metadata at startup. Grants persist in `UserScreenPermissions` by cashier ID and route ID; JavaScript and localStorage are never authorization sources.
 
 Administrators receive every registry screen whose effective module/capability is enabled. Cashiers receive only explicitly granted, non-administrator screens whose feature is enabled. A cashier with no grants receives a safe Arabic empty state rather than broad default access. Disabled-module grants remain stored and appear inactive in the editor; re-enabling the module restores effective access without rewriting grants.
