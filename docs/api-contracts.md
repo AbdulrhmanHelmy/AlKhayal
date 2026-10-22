@@ -41,7 +41,6 @@ All endpoints return `{ "success": true, "data": ... }` or `{ "success": false, 
 - `GET /api/business-activities/selected` requires an authenticated session and returns `{ isConfigured, primaryActivityKey, activityKeys }`.
 - `GET /api/business-activities/recommendations` requires an authenticated session. With no query it evaluates the saved selection; `?activityKeys=clothing,footwear` previews an unsaved selection. It returns deduplicated recommendations, source activity keys, Arabic reasons, newly recommended keys, recommendations that no longer apply, and preserved administrator override keys.
 - `PUT /api/business-activities/selected` requires an authenticated `administrator` session and `X-CSRF-Token`. The body is `{ activityKeys, primaryActivityKey, applyRecommendations }`. It rejects unknown/inactive keys and a primary key outside the selection. Saving replaces only selection metadata; it does not delete business data. Recommendations are applied only when explicitly requested and never overwrite `administrator` capability rows.
-
 Feature endpoints require authentication:
 
 - `GET /api/features` returns stable catalog metadata for all core/optional modules and product capabilities.
@@ -52,7 +51,13 @@ Feature endpoints require authentication:
 
 User-management endpoints require an authenticated administrator. Mutations additionally require `X-CSRF-Token`: `GET/POST /api/users`, `GET/PUT /api/users/{id}`, `PUT /api/users/{id}/status`, `POST /api/users/{id}/reset-password`, and `GET/PUT /api/users/{id}/screen-permissions`. They return 400 for validation/role/screen errors, 401 for missing sessions, 403 for cashier or CSRF failures, 404 for missing users, and 409 for duplicate usernames or last-active-administrator protection. Passwords and hashes are never returned.
 
-Static frontend files, including `frontend/data/screens.json`, are served from the same OWIN origin with `Cache-Control: no-store, no-cache, must-revalidate`, `Pragma: no-cache`, and an expired response. This keeps the shell scripts and route registry on one deployment version in persistent WebView2 profiles. Other business-screen operations do not yet have HTTP contracts: their UI state is explicitly in-memory and must not be interpreted as durable server behavior.
-# Phase 2 / Task 2.4 inventory API
+Static frontend files, including `frontend/data/screens.json`, are served from the same OWIN origin with `Cache-Control: no-store, no-cache, must-revalidate`, `Pragma: no-cache`, and an expired response. This keeps the shell scripts and route registry on one deployment version in persistent WebView2 profiles.
+
+Other business-screen operations do not yet have HTTP contracts: their UI state is explicitly in-memory and must not be interpreted as durable server behavior. Customer records and customer payments are exceptions: customer management endpoints persist customer data in SQLite.
+
+- `GET /api/customers` returns the authenticated user's customer records from SQLite.
+- `POST /api/customers` creates a customer; `PUT /api/customers/{id}` updates one; `DELETE /api/customers/{id}` deletes one. All writes require the session cookie and `X-CSRF-Token`. Customer codes are unique. The customer management list and add/edit/delete actions use these endpoints; other business screens remain session-only unless explicitly implemented.
+
+## Phase 2 / Task 2.4 inventory API
 
 Authenticated routes under `/api/inventory`: `GET/POST /warehouses`, `GET/PUT /warehouses/{id}`, `GET /products`, `GET /products/{id}`, `GET /balances`, `GET /movements`, `GET /tracking?identifier=`, `POST /post`, `POST /counts`, `GET /counts/{id}`, `POST /counts/{id}/post`, `POST /counts/{id}/cancel`, `POST /documents/{id}/reverse`, `GET /integrity`, and `POST /integrity/rebuild`. All mutations require the session CSRF header; warehouse management, reversals, and integrity administration require administrator role. Other inventory routes require existing `warehouses-list` screen access. Query pages are bounded to 100 rows. Posting requires a stable `operationKey`, document `type`, warehouse, reason except opening, and product-unit/variant lines with decimal-string quantity. Positive intake requires decimal-string `unitCost`. Conflicts include `operation_key_conflict`, `insufficient_stock`, `stale_count`, `batch_required`, and `identifier_not_in_stock`. See [inventory-ledger.md](inventory-ledger.md) for transaction and reversal rules.

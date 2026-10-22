@@ -9,6 +9,7 @@
     add: function (entity, record) { var rows = collection(entity), next = rows.reduce(function (max, item) { return Math.max(max, Number(item.id) || 0); }, 0) + 1, saved = Object.assign({ id: next }, record); rows.unshift(saved); notify(entity); return saved; },
     update: function (entity, id, changes) { var row = this.find(entity, id); if (!row) return null; Object.assign(row, changes); notify(entity); return row; },
     remove: function (entity, id) { var rows = collection(entity), index = rows.findIndex(function (item) { return String(item.id) === String(id); }); if (index < 0) return false; rows.splice(index, 1); notify(entity); return true; },
+    replace: function (entity, records) { state[entity] = U.clone(Array.isArray(records) ? records : []); notify(entity); return state[entity].slice(); },
     reset: function () { state = U.clone(seed); notify("*"); },
     subscribe: function (listener) { listeners.push(listener); return function () { listeners = listeners.filter(function (item) { return item !== listener; }); }; }
   };
