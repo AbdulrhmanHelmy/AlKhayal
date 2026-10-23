@@ -33,7 +33,7 @@ namespace AlKhayal.Data.Customers
         public bool Update(Customer customer)
         {
             using (var connection = new SQLiteConnection(_connectionString))
-                return connection.Execute("UPDATE Customers SET Code=@Code, Name=@Name, Phone=@Phone, Address=@Address, Balance=@Balance, CreditLimit=@CreditLimit, Subscription=@Subscription, Status=@Status, UpdatedAt=@Now WHERE Id=@Id", new { customer.Id, customer.Code, customer.Name, customer.Phone, customer.Address, customer.Balance, customer.CreditLimit, customer.Subscription, customer.Status, Now = System.DateTime.UtcNow.ToString("o") }) == 1;
+                return connection.Execute("UPDATE Customers SET Code=@Code, Name=@Name, Phone=@Phone, Address=@Address, Subscription=@Subscription, Status=@Status, UpdatedAt=@Now WHERE Id=@Id", new { customer.Id, customer.Code, customer.Name, customer.Phone, customer.Address, customer.Subscription, customer.Status, Now = System.DateTime.UtcNow.ToString("o") }) == 1;
         }
 
         public bool Delete(long id)

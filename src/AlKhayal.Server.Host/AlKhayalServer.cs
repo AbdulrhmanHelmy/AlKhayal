@@ -11,6 +11,7 @@ using AlKhayal.Application.Settings;
 using AlKhayal.Application.Catalog;
 using AlKhayal.Application.Inventory;
 using AlKhayal.Application.Customers;
+using AlKhayal.Application.Suppliers;
 using AlKhayal.Data.Authentication;
 using AlKhayal.Data.BusinessActivities;
 using AlKhayal.Data.Features;
@@ -19,6 +20,7 @@ using AlKhayal.Data.Settings;
 using AlKhayal.Data.Catalog;
 using AlKhayal.Data.Inventory;
 using AlKhayal.Data.Customers;
+using AlKhayal.Data.Suppliers;
 using AlKhayal.Data.Database;
 using Microsoft.Owin;
 using Microsoft.Owin.Hosting;
@@ -53,7 +55,9 @@ namespace AlKhayal.Server.Host
             var inventory = new InventoryService(new SqliteInventoryStore(connectionString),features);
             var customers = new CustomerService(new SqliteCustomerRepository(connectionString));
             var accounts = new CustomerAccountService(new SqliteCustomerAccountRepository(connectionString));
-            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : null);
+            var suppliers = new SupplierService(new SqliteSupplierRepository(connectionString));
+            var supplierAccounts = new SupplierAccountService(new SqliteSupplierAccountRepository(connectionString));
+            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : type == typeof(SupplierService) ? suppliers : type == typeof(SupplierAccountService) ? supplierAccounts : null);
 
             _server = WebApp.Start(options.Url, app =>
             {

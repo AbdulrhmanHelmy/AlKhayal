@@ -1,0 +1,69 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using AlKhayal.Core.Interfaces;
+using AlKhayal.Core.Models;
+
+namespace AlKhayal.Application.Suppliers
+{
+    public sealed class SupplierAccountService
+    {
+        private readonly ISupplierAccountRepository _accounts;
+        public SupplierAccountService(ISupplierAccountRepository accounts) { _accounts = accounts; }
+
+        public SupplierInvoice AddInvoice(long supplierId, SupplierInvoice invoice)
+        {
+            if (invoice == null) throw new ArgumentException("بيانات الفاتورة مطلوبة.");
+            if (supplierId <= 0) throw new ArgumentException("اختر موردًا صحيحًا.");
+            var total = Round(invoice.Total);
+            if (total <= 0) throw new ArgumentException("إجمالي الفاتورة يجب أن يكون أكبر من صفر.");
+            var invoiceDate = NormalizeDate(invoice.InvoiceDate, "تاريخ الفاتورة غير صحيح.", true);
+            var dueDate = NormalizeDate(invoice.DueDate, "تاريخ الاستحقاق غير صحيح.", false);
+            if (dueDate != null && string.CompareOrdinal(dueDate, invoiceDate) < 0) throw new ArgumentException("تاريخ الاستحقاق لا يمكن أن يسبق تاريخ الفاتورة.");
+            var number = string.IsNullOrWhiteSpace(invoice.InvoiceNumber) ? null : invoice.InvoiceNumber.Trim();
+            if (number != null && number.Length > 60) throw new ArgumentException("رقم الفاتورة يجب ألا يتجاوز 60 حرفًا.");
+            if (invoice.Notes != null && invoice.Notes.Length > 1000) throw new ArgumentException("الملاحظات يجب ألا تتجاوز 1000 حرف.");
+            return _accounts.AddInvoice(supplierId, number, invoiceDate, dueDate, total, invoice.Notes);
+        }
+
+        public SupplierPayment AddPayment(long supplierId, SupplierPayment payment)
+        {
+            if (payment == null) throw new ArgumentException("بيانات الدفعة مطلوبة.");
+            if (supplierId <= 0) throw new ArgumentException("اختر موردًا صحيحًا.");
+            var amount = Round(payment.Amount);
+            if (amount <= 0) throw new ArgumentException("قيمة الدفعة يجب أن تكون أكبر من صفر.");
+            if (payment.InvoiceId.HasValue && payment.InvoiceId.Value <= 0) throw new ArgumentException("الفاتورة المختارة غير صحيحة.");
+            if (string.IsNullOrWhiteSpace(payment.Method)) throw new ArgumentException("طريقة السداد مطلوبة.");
+            if (string.IsNullOrWhiteSpace(payment.Account)) throw new ArgumentException("حساب السداد مطلوب.");
+            if (payment.Notes != null && payment.Notes.Length > 1000) throw new ArgumentException("الملاحظات يجب ألا تتجاوز 1000 حرف.");
+            var paymentDate = NormalizeDate(payment.PaymentDate, "تاريخ الدفعة غير صحيح.", true);
+            return _accounts.AddPayment(supplierId, payment.InvoiceId, amount, paymentDate, payment.Method.Trim(), payment.Account.Trim(), payment.Notes);
+        }
+
+        public List<SupplierInvoice> GetInvoices(long supplierId) { return _accounts.GetInvoices(supplierId); }
+        public List<SupplierPayment> GetPayments(long supplierId) { return _accounts.GetPayments(supplierId); }
+
+        public SupplierStatement GetStatement(long supplierId, string from, string to)
+        {
+            var fromDate = NormalizeDate(from, "تاريخ البداية غير صحيح.", false);
+            var toDate = NormalizeDate(to, "تاريخ النهاية غير صحيح.", false);
+            if (fromDate != null && toDate != null && string.CompareOrdinal(fromDate, toDate) > 0) throw new ArgumentException("تاريخ البداية يجب ألا يكون بعد تاريخ النهاية.");
+            return _accounts.GetStatement(supplierId, fromDate, toDate);
+        }
+
+        // Deterministic money policy: two decimals, midpoint away from zero.
+        private static decimal Round(decimal value) { return Math.Round(value, 2, MidpointRounding.AwayFromZero); }
+
+        private static string NormalizeDate(string value, string message, bool required)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                if (required) throw new ArgumentException(message);
+                return null;
+            }
+            DateTime parsed;
+            if (!DateTime.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed)) throw new ArgumentException(message);
+            return parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+    }
+}

@@ -209,4 +209,10 @@ function verifyCatalogSavedSummaryAndEditHydration(){
   assert.ok(disabled.indexOf("محفوظة سابقًا")>=0&&disabled.indexOf('value="M" readonly')>=0,"global disablement must keep historical values visible and read-only");
 }
 verifyCatalogSavedSummaryAndEditHydration();
+(function verifySupplierWiring(){
+  assert.ok(renderersJs.indexOf('"/api/suppliers"')>=0&&renderersJs.indexOf('supplierStatement')>=0&&renderersJs.indexOf('supplierPayment')>=0,"supplier screens must use the persisted suppliers API");
+  assert.ok(renderersJs.indexOf('data-pay-invoice')>=0&&renderersJs.indexOf('دفع آجل')>=0&&renderersJs.indexOf('/payments')>=0,"supplier invoices must expose a credit-payment button wired to the payments endpoint");
+  assert.ok(renderersJs.indexOf('/invoices')>=0,"supplier account page must load invoices from the API");
+  ["suppliers-list","supplier-credit","supplier-payment","supplier-balance"].forEach(function(route){var screen=registry.screens.find(function(item){return item.route===route;});assert.ok(screen&&screen.description.indexOf("تجريبي")<0,"supplier screen must not be described as a demo: "+route);});
+}());
 Promise.all([verifyFeatureStateLifecycle(),verifyAccessStateLifecycle(),verifySettingsStateLifecycle()]).then(function () { console.log("Frontend registry, settings/feature/access lifecycle, user management, and calculation tests passed (" + routes.length + " screens)."); }).catch(function (error) { console.error(error); process.exitCode = 1; });

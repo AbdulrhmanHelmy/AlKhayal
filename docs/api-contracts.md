@@ -57,6 +57,11 @@ Other business-screen operations do not yet have HTTP contracts: their UI state 
 
 - `GET /api/customers` returns the authenticated user's customer records from SQLite.
 - `POST /api/customers` creates a customer; `PUT /api/customers/{id}` updates one; `DELETE /api/customers/{id}` deletes one. All writes require the session cookie and `X-CSRF-Token`. Customer codes are unique. The customer management list and add/edit/delete actions use these endpoints; other business screens remain session-only unless explicitly implemented.
+- Suppliers are also persisted. All endpoints require the session cookie; writes also require `X-CSRF-Token`. Amounts are rounded to 2 decimals (midpoint away from zero) in the Application layer; dates are `yyyy-MM-dd`.
+  - `GET /api/suppliers` lists suppliers with `payable` (currently owed) and `paid` (sum of payments). `POST /api/suppliers` creates one (optional opening `payable`); `PUT /api/suppliers/{id}` updates identity/contact fields only and never changes `payable`; `DELETE /api/suppliers/{id}` returns `409 supplier_in_use` when the supplier has invoices or payments.
+  - `GET /api/suppliers/{id}/invoices` lists the supplier's invoices with `total`, `paidAmount`, `remaining`, and `status`. `POST /api/suppliers/{id}/invoices` (`invoiceNumber?`, `invoiceDate`, `dueDate?`, `total`, `notes?`) records a credit invoice and increases `payable` in one SQLite transaction. Invoice numbers are unique per supplier; a blank number is auto-generated (`SI-…`).
+  - `POST /api/suppliers/{id}/payments` (`invoiceId?`, `amount`, `paymentDate`, `method`, `account`, `notes?`) records a payment, reduces `payable`, and when `invoiceId` is given increases that invoice's `paidAmount`, all in one transaction. The amount may not exceed the invoice's remaining amount (or the supplier's `payable` when no invoice is given). Returns `201` with a `SP-…` reference.
+  - `GET /api/suppliers/{id}/statement?from=&to=` returns opening balance, period invoices (credit), period payments (debit), closing balance, and ordered movements.
 
 ## Phase 2 / Task 2.4 inventory API
 

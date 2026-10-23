@@ -122,6 +122,15 @@ namespace AlKhayal.Api
                     (Application.Customers.CustomerAccountService)_get(
                         typeof(Application.Customers.CustomerAccountService)));
 
+            if (t == typeof(Controllers.SuppliersController))
+                return new Controllers.SuppliersController(
+                    (Application.Suppliers.SupplierService)_get(
+                        typeof(Application.Suppliers.SupplierService)),
+                    (Application.Authentication.AuthService)_get(
+                        typeof(Application.Authentication.AuthService)),
+                    (Application.Suppliers.SupplierAccountService)_get(
+                        typeof(Application.Suppliers.SupplierAccountService)));
+
             if (t == typeof(Controllers.SystemController))
                 return new Controllers.SystemController();
 

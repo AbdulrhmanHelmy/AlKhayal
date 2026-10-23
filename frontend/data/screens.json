@@ -361,73 +361,31 @@
       "route": "suppliers-list",
       "module": "الموردين",
       "title": "قائمة الموردين",
-      "description": "دليل الموردين وأرصدة التعامل.",
+      "description": "دليل الموردين وأرصدة التعامل المحفوظة في قاعدة البيانات.",
       "renderer": "entity-list",
       "data": "suppliers"
     },
-    {
-      "route": "supplier-purchases",
-      "module": "الموردين",
-      "title": "مشتريات المورد",
-      "description": "تفاصيل فواتير الشراء مجمعة حسب المورد.",
-      "renderer": "report",
-      "data": "purchases",
-      "report": "supplier-purchases"
-    },
+  
     {
       "route": "supplier-credit",
       "module": "الموردين",
       "title": "حسابات الموردين آجلاً",
-      "description": "متابعة الالتزامات الآجلة ومواعيدها.",
+      "description": "حساب كل مورد وفواتيره الآجلة مع زر الدفع الآجل، من قاعدة البيانات.",
       "renderer": "statement",
       "data": "suppliers",
       "party": "supplier"
     },
-    {
-      "route": "supplier-balance",
-      "module": "الموردين",
-      "title": "رصيد المورد",
-      "description": "ملخص المستحق والمدفوع لكل مورد.",
-      "renderer": "entity-list",
-      "data": "suppliers"
-    },
+
     {
       "route": "supplier-payment",
       "module": "الموردين",
       "title": "سداد حساب المورد",
-      "description": "إدخال دفعة مورد تجريبية ومراجعة أثرها المتوقع.",
+      "description": "تسجيل دفعة للمورد (على فاتورة أو على الحساب) وتحديث رصيده في قاعدة البيانات.",
       "renderer": "payment",
       "data": "suppliers",
       "party": "supplier"
     },
-    {
-      "route": "supplier-payment-confirm",
-      "module": "الموردين",
-      "title": "تأكيد سداد المورد",
-      "description": "مراجعة وتأكيد محاكاة دفعات الموردين.",
-      "renderer": "workflow",
-      "data": "suppliers",
-      "workflow": "supplier-payment"
-    },
-    {
-      "route": "supplier-reports",
-      "module": "الموردين",
-      "title": "تقارير الموردين",
-      "description": "مؤشرات التوريد والأرصدة وأكبر الموردين.",
-      "renderer": "report",
-      "data": "suppliers",
-      "report": "suppliers"
-    },
-    {
-      "route": "supplier-paid-report",
-      "module": "الموردين",
-      "title": "تقرير المبالغ المسددة للموردين",
-      "description": "تفصيل دفعات الموردين حسب الفترة.",
-      "renderer": "report",
-      "data": "suppliers",
-      "report": "supplier-paid"
-    },
-
+   
     {
       "route": "purchase-management",
       "module": "المشتريات",

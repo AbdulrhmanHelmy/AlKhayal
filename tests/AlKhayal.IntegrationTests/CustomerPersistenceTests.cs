@@ -28,8 +28,13 @@ namespace AlKhayal.IntegrationTests
                 Assert.Equal(25m, customer.Balance);
 
                 customer.Address = "شارع النيل";
+                customer.Balance = 0;
+                customer.CreditLimit = 0;
                 Assert.True(reopenedRepository.Update(customer));
-                Assert.Equal("شارع النيل", new SqliteCustomerRepository(connectionString).GetById(id).Address);
+                var updated = new SqliteCustomerRepository(connectionString).GetById(id);
+                Assert.Equal("شارع النيل", updated.Address);
+                Assert.Equal(25m, updated.Balance);
+                Assert.Equal(500m, updated.CreditLimit);
                 Assert.True(reopenedRepository.Delete(id));
                 Assert.Null(reopenedRepository.GetById(id));
             }
