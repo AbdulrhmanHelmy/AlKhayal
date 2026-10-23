@@ -22,7 +22,7 @@ namespace AlKhayal.IntegrationTests
                 using (var connection = new SQLiteConnection(cs))
                 {
                     connection.Open();
-                    Assert.Equal(11, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(16, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal("قطعة", connection.ExecuteScalar<string>("SELECT Name FROM Units WHERE Id=1"));
                     Assert.Equal(1, connection.ExecuteScalar<long>("PRAGMA foreign_keys"));
                     Assert.Equal("ok", connection.ExecuteScalar<string>("PRAGMA integrity_check"));
@@ -71,7 +71,7 @@ namespace AlKhayal.IntegrationTests
                                        !name.EndsWith("008_product_catalog_foundation.sql") &&
                                        !name.EndsWith("009_product_purchase_price.sql") &&
                                        !name.EndsWith("010_product_variants_and_identifiers.sql") &&
-                                       !name.EndsWith("011_inventory_ledger.sql"))
+                                       !name.EndsWith("011_inventory_ledger.sql") && !name.EndsWith("016_inventory_fifo.sql"))
                         .OrderBy(name => name, StringComparer.Ordinal))
                     {
                         string sql;
@@ -121,7 +121,7 @@ namespace AlKhayal.IntegrationTests
                     connection.Execute("CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL); PRAGMA foreign_keys=ON;");
                     var assembly = typeof(Migrator).Assembly;
                     foreach (var resource in assembly.GetManifestResourceNames()
-                        .Where(name => name.EndsWith(".sql") && !name.EndsWith("010_product_variants_and_identifiers.sql") && !name.EndsWith("011_inventory_ledger.sql"))
+                        .Where(name => name.EndsWith(".sql") && !name.EndsWith("010_product_variants_and_identifiers.sql") && !name.EndsWith("011_inventory_ledger.sql") && !name.EndsWith("016_inventory_fifo.sql"))
                         .OrderBy(name => name, StringComparer.Ordinal))
                     {
                         string sql;
@@ -149,7 +149,7 @@ namespace AlKhayal.IntegrationTests
                 using (var connection = new SQLiteConnection(cs))
                 {
                     connection.Open();
-                    Assert.Equal(11, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(16, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     var baseUnit = connection.QuerySingleOrDefault<dynamic>("SELECT UnitId, ToBaseNumerator, ToBaseDenominator, IsBase, IsSaleUnit, IsPurchaseUnit FROM ProductUnits WHERE ProductId=101");
                     Assert.NotNull(baseUnit);
                     Assert.Equal(1L, (long)baseUnit.UnitId);
@@ -178,7 +178,7 @@ namespace AlKhayal.IntegrationTests
                     connection.Execute("CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL); PRAGMA foreign_keys=ON;");
                     var assembly = typeof(Migrator).Assembly;
                     foreach (var resource in assembly.GetManifestResourceNames()
-                        .Where(name => name.EndsWith(".sql") && !name.EndsWith("010_product_variants_and_identifiers.sql") && !name.EndsWith("011_inventory_ledger.sql"))
+                        .Where(name => name.EndsWith(".sql") && !name.EndsWith("010_product_variants_and_identifiers.sql") && !name.EndsWith("011_inventory_ledger.sql") && !name.EndsWith("016_inventory_fifo.sql"))
                         .OrderBy(name => name, StringComparer.Ordinal))
                     {
                         string sql;

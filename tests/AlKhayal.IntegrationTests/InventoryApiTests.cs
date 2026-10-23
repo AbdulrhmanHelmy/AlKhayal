@@ -42,6 +42,7 @@ namespace AlKhayal.IntegrationTests
                 {
                     Assert.Equal(HttpStatusCode.Unauthorized,(await anonymous.GetAsync("api/inventory/warehouses")).StatusCode);
                     Assert.Equal(HttpStatusCode.Unauthorized,(await anonymous.PostAsync("api/inventory/post",Json("{}"))).StatusCode);
+                    Assert.Equal(HttpStatusCode.Unauthorized,(await anonymous.PostAsync("api/inventory/cost-basis/reconcile",Json("{}"))).StatusCode);
                 }
                 using(var cashier=new HttpClient(new HttpClientHandler{UseCookies=true}){BaseAddress=baseUrl})
                 {
@@ -54,10 +55,14 @@ namespace AlKhayal.IntegrationTests
                 {
                     var csrf=await Login(admin,"inventory-admin");
                     Assert.Equal(HttpStatusCode.OK,(await admin.GetAsync("api/inventory/warehouses")).StatusCode);
-                    var body="{\"operationKey\":\"api-receipt-1\",\"type\":\"manual_receipt\",\"warehouseId\":1,\"reason\":\"تصحيح\",\"lines\":[{\"variantId\":"+variant+",\"productUnitId\":"+unit+",\"quantity\":\"10\",\"unitCost\":\"2\"}]}";
+                    var body="{\"operationKey\":\"api-receipt-1\",\"type\":\"manual_receipt\",\"warehouseId\":1,\"reason\":\"تصحيح\",\"lines\":[{\"variantId\":"+variant+",\"productUnitId\":"+unit+",\"quantity\":\"10\",\"unitCost\":\"2\",\"salePrice\":\"3\"}]}";
                     Assert.Equal(HttpStatusCode.Forbidden,(await admin.PostAsync("api/inventory/post",Json(body))).StatusCode);
                     var req=new HttpRequestMessage(HttpMethod.Post,"api/inventory/post"){Content=Json(body)};req.Headers.Add("X-CSRF-Token",csrf);
                     var response=await admin.SendAsync(req);Assert.Equal(HttpStatusCode.Created,response.StatusCode);
+                    var replay=new HttpRequestMessage(HttpMethod.Post,"api/inventory/post"){Content=Json(body)};replay.Headers.Add("X-CSRF-Token",csrf);
+                    var replayResponse=await admin.SendAsync(replay);Assert.Equal(HttpStatusCode.Created,replayResponse.StatusCode);Assert.Contains("\"replayed\":true",await replayResponse.Content.ReadAsStringAsync());
+                    Assert.Equal(HttpStatusCode.Forbidden,(await admin.PostAsync("api/inventory/cost-basis/reconcile",Json("{}"))).StatusCode);
+                    using(var c=new SQLiteConnection(cs)){c.Open();Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryCostLayers"));Assert.Equal(30000,c.ExecuteScalar<long>("SELECT SellPriceOverrideScaled FROM ProductVariants WHERE Id=@Id",new{Id=variant}));}
                     var balances=await admin.GetStringAsync("api/inventory/balances?warehouseId=1");Assert.Contains("10000000",balances);
                     var grant=new HttpRequestMessage(HttpMethod.Put,"api/users/2/screen-permissions"){Content=Json("{\"screenIds\":[\"warehouses-list\"]}")};grant.Headers.Add("X-CSRF-Token",csrf);
                     Assert.Equal(HttpStatusCode.OK,(await admin.SendAsync(grant)).StatusCode);
@@ -71,6 +76,8 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(HttpStatusCode.Created,(await cashier.SendAsync(req)).StatusCode);
                     var blocked=new HttpRequestMessage(HttpMethod.Post,"api/inventory/integrity/rebuild"){Content=Json("{}")};blocked.Headers.Add("X-CSRF-Token",csrf);
                     Assert.Equal(HttpStatusCode.Forbidden,(await cashier.SendAsync(blocked)).StatusCode);
+                    var basis=new HttpRequestMessage(HttpMethod.Post,"api/inventory/cost-basis/reconcile"){Content=Json("{}")};basis.Headers.Add("X-CSRF-Token",csrf);
+                    Assert.Equal(HttpStatusCode.Forbidden,(await cashier.SendAsync(basis)).StatusCode);
                 }
             }
             finally{if(server!=null)server.Dispose();SQLiteConnection.ClearAllPools();if(Directory.Exists(root))Directory.Delete(root,true);}

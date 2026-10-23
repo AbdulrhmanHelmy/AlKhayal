@@ -28,5 +28,14 @@ namespace AlKhayal.Application.Customers
             return _accounts.GetStatement(customerId, from, to);
         }
         public List<CustomerPayment> GetPayments(long customerId) { return _accounts.GetPayments(customerId); }
+        public CustomerStatementTransaction PostTransaction(long customerId,string type,decimal amount,string occurredOn,string notes,string operationKey)
+        {
+            if(customerId<=0||amount<=0||amount*10000m!=decimal.Truncate(amount*10000m)) throw new ArgumentException("أدخل مبلغًا موجبًا بدقة لا تتجاوز أربع خانات عشرية.");
+            if(type!="increase"&&type!="collection"&&type!="reduction") throw new ArgumentException("نوع العملية غير صالح.");
+            if(string.IsNullOrWhiteSpace(operationKey)||operationKey.Trim().Length>120) throw new ArgumentException("تعذر التحقق من تكرار العملية. حدّث الصفحة وحاول مرة أخرى.");
+            DateTime date;if(!DateTime.TryParseExact(occurredOn,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out date)) throw new ArgumentException("تاريخ العملية غير صحيح.");
+            if(notes!=null&&notes.Length>1000)throw new ArgumentException("الملاحظات يجب ألا تتجاوز 1000 حرف.");
+            return _accounts.PostTransaction(customerId,type,amount,date.ToString("yyyy-MM-dd"),notes,operationKey.Trim());
+        }
     }
 }

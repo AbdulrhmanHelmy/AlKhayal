@@ -1,6 +1,8 @@
 (function (global) {
   "use strict";
   var csrfKey = "alkhayal_csrf";
+  var errorMessages = { unauthorized: "انتهت جلسة الدخول.", forbidden: "لا تملك صلاحية تنفيذ هذا الإجراء.", invalid_csrf: "انتهت صلاحية الطلب. أعد المحاولة.", not_found: "تعذر العثور على البيانات المطلوبة.", conflict: "تعارضت العملية مع تغيير أحدث. حدّث الشاشة وأعد المحاولة.", invalid_response: "استجابة غير صالحة من الخادم.", database_busy: "قاعدة البيانات مشغولة حاليًا. أعد المحاولة بعد لحظات." };
+  function safeErrorMessage(value, code, status) { if (value && /[\u0600-\u06ff]/.test(value)) return value; if (errorMessages[code]) return errorMessages[code]; if (status === 401) return errorMessages.unauthorized; if (status === 403) return errorMessages.forbidden; if (status === 404) return errorMessages.not_found; if (status === 409) return errorMessages.conflict; return "تعذر تنفيذ الطلب. أعد المحاولة."; }
   function rememberCsrf(data) { if (data && data.csrfToken) sessionStorage.setItem(csrfKey, data.csrfToken); return data; }
   async function request(path, options) {
     var config = Object.assign({ credentials: "same-origin" }, options || {});
@@ -11,7 +13,7 @@
     try { response = await fetch(path, config); }
     catch (networkError) { var unavailable = new Error("الخادم غير متاح حاليًا."); unavailable.code = "network_error"; unavailable.status = 0; throw unavailable; }
     var body = await response.json().catch(function () { return { success: false, error: { code: "invalid_response", message: "استجابة غير صالحة من الخادم." } }; });
-    if (!response.ok || !body.success) { var error = new Error(body.error && body.error.message || "تعذر تنفيذ الطلب."); error.code = body.error && body.error.code; error.status = response.status; if (response.status === 401) sessionStorage.removeItem(csrfKey); throw error; }
+    if (!response.ok || !body.success) { var code = body.error && body.error.code, error = new Error(safeErrorMessage(body.error && body.error.message, code, response.status)); error.code = code; error.status = response.status; if (response.status === 401) sessionStorage.removeItem(csrfKey); throw error; }
     return rememberCsrf(body.data);
   }
   global.AlKhayalApi = { request: request, clearSession: function () { sessionStorage.removeItem(csrfKey); } };

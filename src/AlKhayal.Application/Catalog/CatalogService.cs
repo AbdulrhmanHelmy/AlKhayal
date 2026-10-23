@@ -13,6 +13,7 @@ namespace AlKhayal.Application.Catalog
     public sealed class CatalogService
     {
         public const long MoneyScale = 10000L;
+        private static readonly HashSet<string> ProductFormCapabilities = new HashSet<string>(new[] { "expiry-dates", "batch-tracking", "sizes", "colors", "product-variants" }, System.StringComparer.OrdinalIgnoreCase);
         private readonly ICatalogStore _store;
         private readonly ICatalogFeatureReader _features;
         public CatalogService(ICatalogStore store) : this(store, null) { }
@@ -232,6 +233,7 @@ namespace AlKhayal.Application.Catalog
             }
             foreach (var key in requested)
             {
+                if (ProductFormCapabilities.Contains(key)) continue;
                 if (existing.Contains(key)) continue;
                 bool enabled;
                 if (!states.TryGetValue(key, out enabled) || !enabled)

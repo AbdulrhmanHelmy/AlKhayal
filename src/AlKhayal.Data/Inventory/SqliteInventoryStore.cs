@@ -12,7 +12,7 @@ using Dapper;
 
 namespace AlKhayal.Data.Inventory
 {
-    public sealed class SqliteInventoryStore : IInventoryStore
+    public sealed partial class SqliteInventoryStore : IInventoryStore
     {
         private readonly string _connectionString;
         public SqliteInventoryStore(string connectionString) { _connectionString=connectionString+"Default Timeout=5;"; }
@@ -50,7 +50,11 @@ namespace AlKhayal.Data.Inventory
                     if(command.Id.HasValue&&old.IsDefault&&!command.IsDefault)return Fail<WarehouseRecord>("default_warehouse","عيّن مخزنًا افتراضيًا آخر أولًا.");
                     if(command.IsDefault&&!command.IsActive)return Fail<WarehouseRecord>("invalid_warehouse","يجب أن يكون المخزن الافتراضي نشطًا.");
                     if(command.IsDefault)await c.ExecuteAsync(Cmd("UPDATE Warehouses SET IsDefault=0 WHERE IsDefault=1",null,tx,ct)).ConfigureAwait(false);
-                    var now=Now();var normalized=Code(command.Code);
+                    var now=Now();
+                    // Codes are a stable internal identity.  A blank code from the simplified UI
+                    // receives a generated one; edits retain the stored code rather than rewriting history.
+                    if(string.IsNullOrWhiteSpace(command.Code)) command.Code=old==null ? await NextWarehouseCodeAsync(c,tx,ct).ConfigureAwait(false) : old.Code;
+                    var normalized=Code(command.Code);
                     long id;
                     if(command.Id.HasValue)
                     {
@@ -68,6 +72,17 @@ namespace AlKhayal.Data.Inventory
                 }
             }
             catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Constraint){return Fail<WarehouseRecord>("duplicate_warehouse","كود المخزن مستخدم بالفعل.");}
+        }
+
+        private static async Task<string> NextWarehouseCodeAsync(SQLiteConnection c,SQLiteTransaction tx,CancellationToken ct)
+        {
+            var number=await c.ExecuteScalarAsync<long>(Cmd("SELECT COUNT(*)+1 FROM Warehouses",null,tx,ct)).ConfigureAwait(false);
+            while(true)
+            {
+                var candidate="WH-"+number.ToString("0000",CultureInfo.InvariantCulture);
+                if(await c.ExecuteScalarAsync<long>(Cmd("SELECT COUNT(*) FROM Warehouses WHERE NormalizedCode=@Code",new{Code=candidate},tx,ct)).ConfigureAwait(false)==0)return candidate;
+                number=checked(number+1);
+            }
         }
 
         private sealed class VariantState
@@ -95,7 +110,7 @@ namespace AlKhayal.Data.Inventory
                     tx.Commit();return result;
                 }
             }
-            catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Busy||e.ResultCode==SQLiteErrorCode.Locked){return Fail<InventoryPostResult>("database_busy","المخزون مشغول الآن. أعد المحاولة بمفتاح العملية نفسه.");}
+            catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Busy||e.ResultCode==SQLiteErrorCode.Locked){return Fail<InventoryPostResult>("database_busy","المخزون مشغول الآن. أعد الحفظ دون تغيير البيانات.");}
             catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Constraint){return Fail<InventoryPostResult>("inventory_conflict","تعارضت البيانات مع حركة مخزون أخرى. حدّث الأرصدة وحاول مرة أخرى.");}
             catch(OverflowException){return Fail<InventoryPostResult>("numeric_overflow","الكمية أو القيمة تتجاوز الحد المسموح.");}
         }
@@ -180,6 +195,8 @@ namespace AlKhayal.Data.Inventory
                 }
                 else if(!string.IsNullOrWhiteSpace(line.LotNumber))return Fail<InventoryPostResult>("unexpected_batch","هذا المنتج لا يتتبع التشغيلات.");
                 var balance=await FindBalanceAsync(c,tx,command.WarehouseId,line.VariantId,batchId,ct).ConfigureAwait(false);
+                var costTotals=await c.QuerySingleAsync<BalanceState>(Cmd("SELECT COALESCE(SUM(RemainingQuantityScaled),0) QuantityBaseScaled,COALESCE(SUM(RemainingValueScaled),0) ValueScaled FROM InventoryCostLayers WHERE WarehouseId=@WarehouseId AND VariantId=@VariantId AND BatchId IS @BatchId",new{command.WarehouseId,line.VariantId,BatchId=batchId},tx,ct)).ConfigureAwait(false);
+                if(costTotals.QuantityBaseScaled!=(balance==null?0:balance.QuantityBaseScaled)||costTotals.ValueScaled!=(balance==null?0:balance.ValueScaled))return Fail<InventoryPostResult>("fifo_integrity","أرصدة التكلفة لا تطابق المخزون. يلزم فحص البيانات قبل الحفظ.");
                 if(line.ExpectedVersion.HasValue&&line.ExpectedVersion.Value!=(balance==null?0:balance.Version))return Fail<InventoryPostResult>("stale_count","تغير رصيد المخزن أثناء الجرد. أعد الجرد.");
                 if(line.ExpectedQuantity!=null){long expected;if(!InventoryService.TryScale(line.ExpectedQuantity,6,out expected)||expected!=(balance==null?0:balance.QuantityBaseScaled))return Fail<InventoryPostResult>("stale_count","تغير رصيد المخزن أثناء الجرد. أعد الجرد.");}
                 if(baseQuantity<0&&(balance==null||balance.QuantityBaseScaled<Math.Abs(baseQuantity)))return Fail<InventoryPostResult>("insufficient_stock","الرصيد المتاح أقل من الكمية المطلوبة.");
@@ -189,19 +206,36 @@ namespace AlKhayal.Data.Inventory
                 var units=line.PhysicalUnits??new InventoryUnitInput[0];
                 if(variant.SerialTracked&&units.Count!=Math.Abs(baseQuantity)/1000000L)return Fail<InventoryPostResult>("serial_quantity","عدد الأرقام الفعلية لا يطابق الكمية.");
                 if(!variant.SerialTracked&&units.Count>0)return Fail<InventoryPostResult>("unexpected_identifiers","هذا المنتج لا يتتبع الأرقام الفعلية.");
-                var unitCost=(long?)null;long value;
+                var unitCost=(long?)null;long value;List<CostTake> costTakes=null;
                 if(baseQuantity==0)value=0;
                 else if(baseQuantity>0)
                 {
-                    long parsed;if(!InventoryService.TryScale(line.UnitCost,4,out parsed))return Fail<InventoryPostResult>("cost_required","أدخل تكلفة اقتناء فعلية.");
-                    unitCost=parsed;
-                    value=checked((long)Math.Round((decimal)parsed*baseQuantity/1000000m,0,MidpointRounding.AwayFromZero));
+                    long parsed;if(!InventoryService.TryScale(line.UnitCost,4,out parsed))return Fail<InventoryPostResult>("cost_required","أدخل سعر الشراء الفعلي لكل وحدة مختارة.");
+                    unitCost=InventoryCosting.BaseUnitPrice(parsed,numerator,denominator);
+                    value=InventoryCosting.ReceiptValue(parsed,entered);
+                    if(command.Type=="manual_receipt")
+                    {
+                        long sale;if(!InventoryService.TryScale(line.SalePrice,4,out sale))return Fail<InventoryPostResult>("sale_price_required","أدخل سعر البيع الجديد.");
+                        var baseSale=InventoryCosting.BaseUnitPrice(sale,numerator,denominator);
+                        // A variant override changes only the selected variant. Bump the product
+                        // aggregate version so a stale catalog editor cannot undo the new price.
+                        await c.ExecuteAsync(Cmd("UPDATE ProductVariants SET SellPriceOverrideScaled=@Sale,Version=Version+1,UpdatedUtc=@Now WHERE Id=@Id",new{Sale=baseSale,Now=now,Id=line.VariantId},tx,ct)).ConfigureAwait(false);
+                        await c.ExecuteAsync(Cmd(@"UPDATE ProductDetails SET SellPriceScaled=CASE WHEN NOT EXISTS(SELECT 1 FROM ProductVariants other WHERE other.ProductId=@Id AND other.Id<>@VariantId) THEN @Sale ELSE SellPriceScaled END,
+                            Version=Version+1,UpdatedUtc=@Now WHERE ProductId=@Id",new{Sale=baseSale,line.VariantId,Now=now,Id=variant.ProductId},tx,ct)).ConfigureAwait(false);
+                        // Keep the existing simple-product catalog price (and its legacy mirror)
+                        // consistent with the single variant. Multiple variants retain their base price.
+                        await c.ExecuteAsync(Cmd("UPDATE Products SET Price=@Price WHERE Id=@Id AND NOT EXISTS(SELECT 1 FROM ProductVariants other WHERE other.ProductId=@Id AND other.Id<>@VariantId)",new{Price=baseSale/10000m,Id=variant.ProductId,line.VariantId},tx,ct)).ConfigureAwait(false);
+                        await c.ExecuteAsync(Cmd("INSERT INTO CatalogAuditLog(ProductId,EntityType,EntityId,Action,ChangeJson,ChangedByUserId,ChangedUtc) VALUES(@ProductId,'variant',@VariantId,'inventory_receipt_price',@Details,@UserId,@Now)",new{variant.ProductId,line.VariantId,Details="{\"documentId\":"+documentId.ToString(CultureInfo.InvariantCulture)+",\"salePriceScaled\":"+baseSale.ToString(CultureInfo.InvariantCulture)+"}",command.UserId,Now=now},tx,ct)).ConfigureAwait(false);
+                    }
                 }
                 else
                 {
-                    value=balance.QuantityBaseScaled==Math.Abs(baseQuantity)?-balance.ValueScaled:
-                        -checked((long)Math.Round((decimal)balance.ValueScaled*Math.Abs(baseQuantity)/balance.QuantityBaseScaled,0,MidpointRounding.AwayFromZero));
-                    unitCost=balance.QuantityBaseScaled==0?0:checked((long)Math.Round((decimal)balance.ValueScaled*1000000m/balance.QuantityBaseScaled,0,MidpointRounding.AwayFromZero));
+                    var planned=await PlanFifoAsync(c,tx,command.WarehouseId,line.VariantId,batchId,Math.Abs(baseQuantity),balance,ct).ConfigureAwait(false);
+                    if(!planned.Succeeded)return Fail<InventoryPostResult>(planned.ErrorCode,planned.ErrorMessage);
+                    costTakes=planned.Value;long takenValue=0;foreach(var take in costTakes)takenValue=checked(takenValue+take.Value);
+                    value=checked(-takenValue);
+                    // An issue spanning layers has no single acquisition unit cost.
+                    unitCost=null;
                 }
                 long lineId;
                 if(draftId.HasValue)
@@ -215,8 +249,16 @@ namespace AlKhayal.Data.Inventory
                         VALUES(@DocumentId,@LineNumber,@VariantId,@BatchId,@Entered,@ProductUnitId,@Numerator,@Denominator,@Base,@Cost,@Expected,@Version)",new{DocumentId=documentId,LineNumber=lineNumber,line.VariantId,BatchId=batchId,Entered=entered,line.ProductUnitId,Numerator=numerator,Denominator=denominator,Base=baseQuantity,Cost=unitCost,Expected=(object)null,Version=line.ExpectedVersion},tx,ct)).ConfigureAwait(false);
                     lineId=await c.ExecuteScalarAsync<long>(Cmd("SELECT last_insert_rowid()",null,tx,ct)).ConfigureAwait(false);
                 }
+                if(baseQuantity>0)
+                {
+                    long enteredCost;InventoryService.TryScale(line.UnitCost,4,out enteredCost);
+                    long enteredSale;var hasSale=InventoryService.TryScale(line.SalePrice,4,out enteredSale);
+                    await c.ExecuteAsync(Cmd("UPDATE InventoryDocumentLines SET EnteredUnitCostScaled=@Cost,EnteredSalePriceScaled=@Sale WHERE Id=@Id",new{Cost=enteredCost,Sale=hasSale?(long?)enteredSale:null,Id=lineId},tx,ct)).ConfigureAwait(false);
+                }
                 if(baseQuantity==0)continue;
                 var movementId=await InsertMovementAsync(c,tx,documentId,lineId,command.WarehouseId,line.VariantId,batchId,baseQuantity,value,unitCost,now,ct).ConfigureAwait(false);
+                if(baseQuantity>0)await AddLayerAsync(c,tx,command.WarehouseId,line.VariantId,batchId,movementId,null,movementId,now,"receipt",baseQuantity,value,unitCost,ct).ConfigureAwait(false);
+                else await ConsumeFifoAsync(c,tx,movementId,costTakes,ct).ConfigureAwait(false);
                 await ApplyBalanceAsync(c,tx,command.WarehouseId,line.VariantId,batchId,baseQuantity,value,now,ct).ConfigureAwait(false);
                 if(variant.SerialTracked)
                 {
@@ -226,6 +268,8 @@ namespace AlKhayal.Data.Inventory
                 if(command.Type=="transfer")
                 {
                     var inbound=await InsertMovementAsync(c,tx,documentId,lineId,command.DestinationWarehouseId.Value,line.VariantId,batchId,-baseQuantity,-value,unitCost,now,ct).ConfigureAwait(false);
+                    foreach(var take in costTakes)
+                        await AddLayerAsync(c,tx,command.DestinationWarehouseId.Value,line.VariantId,batchId,inbound,take.Layer.Id,take.Layer.OriginMovementId,take.Layer.AcquiredUtc,"transfer",take.Quantity,take.Value,take.Layer.UnitCostScaled,ct).ConfigureAwait(false);
                     await ApplyBalanceAsync(c,tx,command.DestinationWarehouseId.Value,line.VariantId,batchId,-baseQuantity,-value,now,ct).ConfigureAwait(false);
                     if(variant.SerialTracked)await c.ExecuteAsync(Cmd("INSERT INTO StockMovementUnits(MovementId,PhysicalUnitId) SELECT @Inbound,PhysicalUnitId FROM StockMovementUnits WHERE MovementId=@Outbound",new{Inbound=inbound,Outbound=movementId},tx,ct)).ConfigureAwait(false);
                 }
@@ -287,8 +331,13 @@ namespace AlKhayal.Data.Inventory
 
         public async Task<IReadOnlyList<InventoryBalanceRecord>> BalancesAsync(long? warehouseId,long? productId,CancellationToken ct)
         {
-            using(var c=Open())return (await c.QueryAsync<InventoryBalanceRecord>(new CommandDefinition(@"SELECT b.WarehouseId,v.ProductId,b.VariantId,p.Name ProductName,v.Name VariantName,b.BatchId,bat.LotNumber,bat.ExpirationDate,b.QuantityBaseScaled,b.ValueScaled,b.Version
-                FROM InventoryBalances b JOIN ProductVariants v ON v.Id=b.VariantId JOIN Products p ON p.Id=v.ProductId LEFT JOIN ProductBatches bat ON bat.Id=b.BatchId
+            using(var c=Open())return (await c.QueryAsync<InventoryBalanceRecord>(new CommandDefinition(@"SELECT b.WarehouseId,v.ProductId,b.VariantId,p.Name ProductName,v.Name VariantName,b.BatchId,bat.LotNumber,bat.ExpirationDate,b.QuantityBaseScaled,b.ValueScaled,b.Version,COALESCE(v.SellPriceOverrideScaled,d.SellPriceScaled) SalePriceScaled,
+                (NOT EXISTS(SELECT 1 FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId AND cl.Basis='unresolved' AND cl.RemainingQuantityScaled>0)
+                 AND b.QuantityBaseScaled=COALESCE((SELECT SUM(cl.RemainingQuantityScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)
+                 AND b.ValueScaled=COALESCE((SELECT SUM(cl.RemainingValueScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)) CostBasisComplete,
+                (SELECT cl.Id FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId AND cl.Basis='unresolved' AND cl.RemainingQuantityScaled>0 LIMIT 1) UnresolvedLayerId,
+                EXISTS(SELECT 1 FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId AND cl.Basis<>'unresolved' AND cl.OriginMovementId IS NULL AND cl.RemainingQuantityScaled>0) HasReconciledCostBasis
+                FROM InventoryBalances b JOIN ProductVariants v ON v.Id=b.VariantId JOIN Products p ON p.Id=v.ProductId JOIN ProductDetails d ON d.ProductId=p.Id LEFT JOIN ProductBatches bat ON bat.Id=b.BatchId
                 WHERE (@WarehouseId IS NULL OR b.WarehouseId=@WarehouseId) AND (@ProductId IS NULL OR v.ProductId=@ProductId)
                 ORDER BY p.Name,v.Name,bat.ExpirationDate,bat.LotNumber",new{WarehouseId=warehouseId,ProductId=productId},cancellationToken:ct)).ConfigureAwait(false)).ToList();
         }
@@ -303,7 +352,9 @@ namespace AlKhayal.Data.Inventory
             using(var c=Open())
             {
                 var count=await c.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*)"+where,args,cancellationToken:ct)).ConfigureAwait(false);
-                var rows=(await c.QueryAsync<InventoryMovementRecord>(new CommandDefinition(@"SELECT m.Id,m.DocumentId,d.DocumentType,m.CreatedUtc,m.WarehouseId,w.Name WarehouseName,v.ProductId,m.VariantId,p.Name ProductName,v.Name VariantName,bat.LotNumber,m.QuantityBaseScaled,m.ValueScaled,d.CreatedByUserId UserId,d.Reason,d.Notes,l.ProductUnitId,l.EnteredQuantityScaled,l.ToBaseNumerator,l.ToBaseDenominator,u.Name UnitName"+where+" ORDER BY m.Id DESC LIMIT @Limit OFFSET @Offset",args,cancellationToken:ct)).ConfigureAwait(false)).ToList();
+                var rows=(await c.QueryAsync<InventoryMovementRecord>(new CommandDefinition(@"SELECT m.Id,m.DocumentId,d.DocumentType,m.CreatedUtc,m.WarehouseId,w.Name WarehouseName,
+                    (SELECT rw.Name FROM Warehouses rw WHERE rw.Id=CASE WHEN m.WarehouseId=d.SourceWarehouseId THEN d.DestinationWarehouseId ELSE d.SourceWarehouseId END) RelatedWarehouseName,
+                    v.ProductId,m.VariantId,p.Name ProductName,v.Name VariantName,bat.LotNumber,m.QuantityBaseScaled,m.ValueScaled,d.CreatedByUserId UserId,d.Reason,d.Notes,l.ProductUnitId,l.EnteredQuantityScaled,l.ToBaseNumerator,l.ToBaseDenominator,u.Name UnitName"+where+" ORDER BY m.Id DESC LIMIT @Limit OFFSET @Offset",args,cancellationToken:ct)).ConfigureAwait(false)).ToList();
                 return new InventoryPage<InventoryMovementRecord>{Items=rows,TotalCount=count,Page=page,PageSize=pageSize};
             }
         }
@@ -312,7 +363,7 @@ namespace AlKhayal.Data.Inventory
         {
             public long Id { get; set; } public long VariantId { get; set; } public long? BatchId { get; set; }
             public string LotNumber { get; set; } public long RecordedQuantityScaled { get; set; } public long CountedQuantityScaled { get; set; } public long BalanceVersion { get; set; } public long ProductUnitId { get; set; }
-            public string ProductName { get; set; } public string VariantName { get; set; }
+            public string ProductName { get; set; } public string VariantName { get; set; } public bool SerialTracked { get; set; } public string ExpirationDate { get; set; }
         }
         public async Task<IReadOnlyList<InventoryCountRecord>> CountsAsync(long warehouseId,CancellationToken ct)
         {
@@ -381,7 +432,7 @@ namespace AlKhayal.Data.Inventory
                     if(!result.Succeeded)return result;tx.Commit();return result;
                 }
             }
-            catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Busy||e.ResultCode==SQLiteErrorCode.Locked){return Fail<InventoryPostResult>("database_busy","المخزون مشغول الآن. أعد المحاولة بمفتاح العملية نفسه.");}
+            catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Busy||e.ResultCode==SQLiteErrorCode.Locked){return Fail<InventoryPostResult>("database_busy","المخزون مشغول الآن. أعد الحفظ دون تغيير البيانات.");}
             catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Constraint){return Fail<InventoryPostResult>("inventory_conflict","تعارضت بيانات الجرد مع المخزون الحالي.");}
             catch(OverflowException){return Fail<InventoryPostResult>("numeric_overflow","الكمية أو القيمة تتجاوز الحد المسموح.");}
         }
@@ -392,9 +443,10 @@ namespace AlKhayal.Data.Inventory
             {
                 var doc=await c.QuerySingleOrDefaultAsync<DocumentState>(new CommandDefinition("SELECT * FROM InventoryDocuments WHERE Id=@Id AND DocumentType='count'",new{Id=countId},cancellationToken:ct)).ConfigureAwait(false);
                 if(doc==null)return Fail<InventoryCountRecord>("not_found","الجرد غير موجود.");
-                var rows=(await c.QueryAsync<CountDraftLine>(new CommandDefinition(@"SELECT l.VariantId,l.BatchId,l.ExpectedBalanceScaled RecordedQuantityScaled,COALESCE(l.CountedQuantityScaled,l.ExpectedBalanceScaled) CountedQuantityScaled,l.ExpectedBalanceVersion BalanceVersion,p.Name ProductName,v.Name VariantName
-                    FROM InventoryDocumentLines l JOIN ProductVariants v ON v.Id=l.VariantId JOIN Products p ON p.Id=v.ProductId WHERE l.DocumentId=@Id ORDER BY l.LineNumber",new{Id=countId},cancellationToken:ct)).ConfigureAwait(false)).ToList();
-                return InventoryResult<InventoryCountRecord>.Ok(new InventoryCountRecord{Id=doc.Id,WarehouseId=doc.SourceWarehouseId,Status=doc.Status,Lines=rows.Select(x=>new InventoryCountLine{VariantId=x.VariantId,BatchId=x.BatchId,ProductName=x.ProductName,VariantName=x.VariantName,RecordedQuantityScaled=x.RecordedQuantityScaled,CountedQuantityScaled=x.CountedQuantityScaled,BalanceVersion=x.BalanceVersion}).ToList()});
+                var rows=(await c.QueryAsync<CountDraftLine>(new CommandDefinition(@"SELECT l.VariantId,l.BatchId,bat.LotNumber,bat.ExpirationDate,l.ExpectedBalanceScaled RecordedQuantityScaled,COALESCE(l.CountedQuantityScaled,l.ExpectedBalanceScaled) CountedQuantityScaled,l.ExpectedBalanceVersion BalanceVersion,p.Name ProductName,v.Name VariantName,
+                    EXISTS(SELECT 1 FROM ProductCapabilityAssignments a WHERE a.ProductId=v.ProductId AND a.CapabilityKey='serial-numbers' AND a.IsEnabled=1) SerialTracked
+                    FROM InventoryDocumentLines l JOIN ProductVariants v ON v.Id=l.VariantId JOIN Products p ON p.Id=v.ProductId LEFT JOIN ProductBatches bat ON bat.Id=l.BatchId WHERE l.DocumentId=@Id ORDER BY l.LineNumber",new{Id=countId},cancellationToken:ct)).ConfigureAwait(false)).ToList();
+                return InventoryResult<InventoryCountRecord>.Ok(new InventoryCountRecord{Id=doc.Id,WarehouseId=doc.SourceWarehouseId,Status=doc.Status,Lines=rows.Select(x=>new InventoryCountLine{VariantId=x.VariantId,BatchId=x.BatchId,LotNumber=x.LotNumber,ExpirationDate=x.ExpirationDate,ProductName=x.ProductName,VariantName=x.VariantName,RecordedQuantityScaled=x.RecordedQuantityScaled,CountedQuantityScaled=x.CountedQuantityScaled,BalanceVersion=x.BalanceVersion,SerialTracked=x.SerialTracked}).ToList()});
             }
         }
 
@@ -463,7 +515,10 @@ namespace AlKhayal.Data.Inventory
                     COALESCE((SELECT SUM(m.ValueScaled) FROM StockMovements m WHERE m.WarehouseId=b.WarehouseId AND m.VariantId=b.VariantId AND ((m.BatchId IS NULL AND b.BatchId IS NULL) OR m.BatchId=b.BatchId)),0) LedgerValue
                     FROM InventoryBalances b) x WHERE x.QuantityBaseScaled<>x.LedgerQuantity OR x.ValueScaled<>x.LedgerValue",cancellationToken:ct)).ConfigureAwait(false);
                 var missing=await c.ExecuteScalarAsync<long>(new CommandDefinition(@"SELECT COUNT(*) FROM StockMovements m WHERE NOT EXISTS(SELECT 1 FROM InventoryBalances b WHERE b.WarehouseId=m.WarehouseId AND b.VariantId=m.VariantId AND ((b.BatchId IS NULL AND m.BatchId IS NULL) OR b.BatchId=m.BatchId))",cancellationToken:ct)).ConfigureAwait(false);
-                return bad==0&&missing==0;
+                var fifoBad=await c.ExecuteScalarAsync<long>(new CommandDefinition(@"SELECT COUNT(*) FROM InventoryBalances b
+                    WHERE b.QuantityBaseScaled<>COALESCE((SELECT SUM(RemainingQuantityScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)
+                    OR b.ValueScaled<>COALESCE((SELECT SUM(RemainingValueScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)",cancellationToken:ct)).ConfigureAwait(false);
+                return bad==0&&missing==0&&fifoBad==0;
             }
         }
 
@@ -509,6 +564,9 @@ namespace AlKhayal.Data.Inventory
                         var remaining=await source.ExecuteScalarAsync<long>(Cmd(@"SELECT COUNT(*) FROM InventoryBalances b WHERE b.QuantityBaseScaled<>COALESCE((SELECT SUM(m.QuantityBaseScaled) FROM StockMovements m WHERE m.WarehouseId=b.WarehouseId AND m.VariantId=b.VariantId AND ((m.BatchId IS NULL AND b.BatchId IS NULL) OR m.BatchId=b.BatchId)),0)
                             OR b.ValueScaled<>COALESCE((SELECT SUM(m.ValueScaled) FROM StockMovements m WHERE m.WarehouseId=b.WarehouseId AND m.VariantId=b.VariantId AND ((m.BatchId IS NULL AND b.BatchId IS NULL) OR m.BatchId=b.BatchId)),0)",null,tx,ct)).ConfigureAwait(false);
                         if(remaining>0)return Fail<InventoryRebuildResult>("rebuild_failed","فشل التحقق من إسقاط الأرصدة؛ لم تُحفظ تغييرات.");
+                        var fifoMismatch=await source.ExecuteScalarAsync<long>(Cmd(@"SELECT COUNT(*) FROM InventoryBalances b WHERE b.QuantityBaseScaled<>COALESCE((SELECT SUM(RemainingQuantityScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)
+                            OR b.ValueScaled<>COALESCE((SELECT SUM(RemainingValueScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)",null,tx,ct)).ConfigureAwait(false);
+                        if(fifoMismatch>0)return Fail<InventoryRebuildResult>("fifo_integrity","طبقات التكلفة لا تطابق دفتر الحركات. لم تُحفظ تغييرات؛ يلزم فحص السجل.");
                         var defaultId=await source.ExecuteScalarAsync<long>(Cmd("SELECT Id FROM Warehouses WHERE IsDefault=1 LIMIT 1",null,tx,ct)).ConfigureAwait(false);
                         var operationKey="rebuild-"+Guid.NewGuid().ToString("N");
                         await source.ExecuteAsync(Cmd("INSERT INTO InventoryDocuments(DocumentType,Status,SourceWarehouseId,Reason,Notes,CreatedByUserId,CreatedUtc,PostedUtc,OperationKey,RequestHash) VALUES('projection_rebuild','draft',@WarehouseId,'إعادة بناء إسقاط الأرصدة',@BackupPath,@UserId,@Now,NULL,@OperationKey,@OperationKey)",new{WarehouseId=defaultId,BackupPath=backupPath,UserId=userId,Now=now,OperationKey=operationKey},tx,ct)).ConfigureAwait(false);

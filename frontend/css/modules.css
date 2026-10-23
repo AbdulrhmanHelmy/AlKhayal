@@ -115,6 +115,8 @@
 .inventory-line { margin-block: 12px; }
 .inventory-operation .form-grid, .inventory-line .form-grid { min-width: 0; }
 .inventory-operation textarea { min-height: 64px; }
+/* A recent warehouse success toast must not cover the next operation's Save. */
+#modalLayer:has(.inventory-operation):not([hidden]) + .toast-stack { z-index: 90; pointer-events: none; }
 .inventory-history-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; min-width: 0; }
 .inventory-history-filters .field { min-width: min(100%, 150px); flex: 1 1 150px; }
 .inventory-history-filters [data-history-search] { margin-bottom: 6px; }

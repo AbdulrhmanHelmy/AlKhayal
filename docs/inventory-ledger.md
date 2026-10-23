@@ -13,8 +13,8 @@ The transaction validates active warehouses, stock variants, exact product-unit 
 - Money and unit cost are signed 64-bit integers at scale 4. Quantity is signed 64-bit at scale 6. JavaScript submits decimal strings; the server parses invariant decimal text and rejects excess quantity precision or overflow.
 - Product-unit conversion snapshots the entered quantity, `ProductUnitId`, numerator, denominator, and exact base quantity on each document line. A conversion that cannot produce an integral scale-6 base quantity is rejected.
 - Receipts require an **actual acquisition cost** as a scale-4 decimal string. No catalog reference purchase price is substituted. When historical cost is unknown, the operator must obtain/approve an estimate and enter it explicitly; the UI cannot post an unknown-cost receipt. The source document retains that supplied cost.
-- Inbound value is `round_away_from_zero(unit_cost_scaled × base_quantity_scaled / 1,000,000)` to the nearest scale-4 integer. The multiplication and division use C# `decimal`; conversion to `long` is checked.
-- Outbound value uses the current warehouse/variant/batch weighted-average valuation: `round_away_from_zero(balance_value × issued_quantity / balance_quantity)`. Removing the final quantity removes the entire remaining value. Transfers carry that exact value into the destination. Reference purchase-price edits never rewrite ledger value.
+- Inbound value is `round_away_from_zero(entered_unit_cost_scaled × entered_quantity_scaled / 1,000,000)` to the nearest scale-4 integer. The multiplication and division use C# `decimal`; conversion to `long` is checked.
+- Migration 016 replaces outbound weighted-average costing with durable FIFO layers and movement allocations. Transfers carry each consumed layer fragment and its original ordering into the destination. Reference purchase-price edits never rewrite cost layers. Existing pre-FIFO balances remain unresolved until their opening cost basis is documented; see [inventory-fifo.md](inventory-fifo.md).
 - Negative quantities or values in the projection are rejected. There is no production negative-stock switch in this phase. Physically tracked units cannot become negative.
 
 ## Physical tracking
@@ -33,7 +33,7 @@ Posted movements are never edited. The current automatic reversal supports a pos
 
 ## Schema
 
-Migration 011 adds `Warehouses`, `ProductBatches`, `InventoryDocuments`, `InventoryDocumentLines`, `StockMovements`, `InventoryBalances`, `InventoryPhysicalUnits`, `InventoryIdentifiers`, `StockMovementUnits`, and `InventoryAudit`. A single active default warehouse named `المخزن الرئيسي` is created during migration; no existing product, user, variant, unit, or capability row is changed. Unique indexes cover warehouse code/default, lot identity, operation key, one reversal per original, balance identities including null batch, and global physical identifiers. FK and immutability triggers protect history. Local timestamps are UTC ISO text; expiration is a `YYYY-MM-DD` business date.
+Migration 016 adds FIFO and entered-price snapshots as described in [inventory-fifo.md](inventory-fifo.md). Migration 011 adds `Warehouses`, `ProductBatches`, `InventoryDocuments`, `InventoryDocumentLines`, `StockMovements`, `InventoryBalances`, `InventoryPhysicalUnits`, `InventoryIdentifiers`, `StockMovementUnits`, and `InventoryAudit`. A single active default warehouse named `المخزن الرئيسي` is created during migration; no existing product, user, variant, unit, or capability row is changed. Unique indexes cover warehouse code/default, lot identity, operation key, one reversal per original, balance identities including null batch, and global physical identifiers. FK and immutability triggers protect history. Local timestamps are UTC ISO text; expiration is a `YYYY-MM-DD` business date.
 
 ## Idempotency and request hash policy
 

@@ -4,6 +4,13 @@
     UI = global.AlKhayalUI,
     S = global.AlKhayalServices,
     C = global.AlKhayalCalculations;
+  function friendlyReference(reference) {
+    var value = String(reference || "");
+    if (!value || value === "OPEN") return "رصيد افتتاحي";
+    var match = /^(CP|SI|SP)-(\d+)$/.exec(value);
+    if (!match) return value;
+    return (match[1] === "CP" ? "تحصيل رقم " : match[1] === "SI" ? "فاتورة رقم " : "سداد رقم ") + match[2];
+  }
   var schemas = {
     customers: {
       columns: [
@@ -576,7 +583,9 @@
       UI.pageHeader(
         screen,
         (canAdd
-          ? '<button class="button primary" data-list-add>+ إضافة</button>'
+          ? '<button class="button primary" data-list-add>+ إضافة' +
+            (info ? " " + info.singular.replace(/^ال/, "") : "") +
+            "</button>"
           : "") + '<button class="button" data-list-export>تصدير CSV</button>',
       ) +
       (info
@@ -612,6 +621,8 @@
       var sort = event.target.closest("[data-sort]"),
         page = event.target.closest("[data-page]"),
         action = event.target.closest("[data-row-action]");
+      var rowTarget=event.target.closest("tr[data-row-id]");
+      if(entity==="customers"&&rowTarget&&!action){localStorage.setItem("alkhayal_customer_statement",rowTarget.getAttribute("data-row-id"));context.navigate("customer-statement");return;}
       if (sort) {
         var key = sort.getAttribute("data-sort");
         state.sortDirection =
@@ -980,7 +991,7 @@
     };
   }
   function customerStatement(screen, container) {
-    var state = { id: null, from: "", to: "" },
+    var state = { id: Number(localStorage.getItem("alkhayal_customer_statement")) || null, from: "", to: "" },
       seq = 0;
     var columns = [
       { key: "date", label: "التاريخ", date: true },
@@ -1002,7 +1013,7 @@
       container.innerHTML =
         UI.pageHeader(
           screen,
-          '<button class="button" data-print-preview>معاينة الطباعة</button>',
+          '<button class="button" data-customer-invoices>فواتير العميل</button><button class="button" data-print-preview>معاينة الطباعة</button>',
         ) +
         '<div class="filter-bar"><div class="field grow"><label for="statementCustomer">العميل</label><select class="select" id="statementCustomer">' +
         customers
@@ -1043,6 +1054,7 @@
         load();
       };
       container.onclick = function (event) {
+        if(event.target.closest("[data-customer-invoices]")){UI.toast("فواتير العميل قيد الإنشاء؛ لا توجد فواتير مبيعات محفوظة بعد.","info");return;}
         if (event.target.closest("[data-print-preview]"))
           UI.toast("معاينة فقط؛ لم يُرسل شيء إلى طابعة.", "warning");
       };
@@ -1063,20 +1075,20 @@
         return {
           id: index,
           date: isOpening && !data.from ? "—" : item.date,
-          reference: item.reference,
+          reference: "",
           description:
-            isOpening && !data.from ? "الرصيد قبل التحصيلات" : item.description,
+            item.description,
           debit: item.debit,
           credit: item.credit,
           balance: item.balance,
         };
       });
       host.innerHTML =
-        '<div class="stats-grid"><article class="card stat-card"><span class="stat-label">الإجمالي</span><strong class="stat-value">' +
+        '<div class="stats-grid"><article class="card stat-card"><span class="stat-label">رصيد افتتاحي</span><strong class="stat-value">' +
         U.money(data.openingBalance) +
-        '</strong></article><article class="card stat-card"><span class="stat-label">المبلغ المدفوع</span><strong class="stat-value">' +
+        '</strong></article><article class="card stat-card"><span class="stat-label">مبلغ اتدفع أو اتخصم</span><strong class="stat-value">' +
         U.money(data.totalCredit) +
-        '</strong></article><article class="card stat-card"><span class="stat-label">المبلغ المستحق</span><strong class="stat-value">' +
+        '</strong></article><article class="card stat-card"><span class="stat-label">الرصيد بعد العملية</span><strong class="stat-value">' +
         U.money(data.closingBalance) +
         "</strong></article></div>" +
         rowsTable(columns, rows, false) +
@@ -1123,7 +1135,7 @@
             '<section class="card"><div class="card-body">لا يوجد عملاء. أضف عميلًا أولًا ثم افتح كشف الحساب.</div></section>';
           return;
         }
-        state.id = Number(customers[0].id);
+        state.id = customers.some(function(x){return Number(x.id)===state.id;})?state.id:Number(customers[0].id);
         shell(customers);
         load();
       })
@@ -1499,7 +1511,7 @@
           return {
             id: index,
             date: isOpening && !data.from ? "—" : item.date,
-            reference: item.reference,
+            reference: friendlyReference(item.reference),
             description:
               isOpening && !data.from
                 ? "الرصيد الافتتاحي قبل الفواتير"
@@ -1799,7 +1811,7 @@
       var today = new Date().toISOString().slice(0, 10);
       container.innerHTML =
         UI.pageHeader(screen) +
-        '<section class="card"><div class="card-head"><h2>تسجيل تحصيل من العميل</h2></div><div class="card-body"><form id="paymentForm" class="form-grid"><div class="field"><label for="paymentParty">العميل</label><select class="select" id="paymentParty" required>' +
+        '<section class="card"><div class="card-head"><h2>المعاملات المالية للعميل</h2></div><div class="card-body"><p class="muted">تُسجّل كل عملية في كشف الحساب ولا يمكن تعديلها لاحقًا.</p><form id="paymentForm" class="form-grid"><div class="field"><label for="paymentParty">العميل</label><select class="select" id="paymentParty" required>' +
         rows
           .map(function (row) {
             return (
@@ -1814,10 +1826,11 @@
           })
           .join("") +
         "</select></div>" +
+        UI.field({id:"transactionType",label:"العملية",type:"select",options:["إضافة مبلغ على العميل","تسجيل تحصيل","تخفيض الرصيد"],required:true},"تسجيل تحصيل") +
         UI.field(
           {
             id: "amount",
-            label: "قيمة التحصيل",
+            label: "المبلغ",
             type: "number",
             min: 0.01,
             step: "0.01",
@@ -1828,37 +1841,17 @@
         UI.field(
           {
             id: "paymentDate",
-            label: "تاريخ التحصيل",
+            label: "التاريخ",
             type: "date",
             required: true,
           },
           today,
         ) +
         UI.field(
-          {
-            id: "account",
-            label: "حساب السداد",
-            type: "select",
-            options: ["الخزنة الرئيسية", "بنك مصر — حساب جاري"],
-            required: true,
-          },
-          "الخزنة الرئيسية",
-        ) +
-        UI.field(
-          {
-            id: "method",
-            label: "طريقة السداد",
-            type: "select",
-            options: ["نقدي", "تحويل", "بطاقة"],
-            required: true,
-          },
-          "نقدي",
-        ) +
-        UI.field(
           { id: "notes", label: "ملاحظات", type: "textarea", span: true },
           "",
         ) +
-        '<div class="span-2"><button class="button primary" type="submit">حفظ التحصيل في قاعدة البيانات</button></div></form><div id="paymentResult" class="muted" style="margin-top:12px">سيتم حفظ التحصيل وتحديث مديونية العميل عند نجاح العملية.</div></div></section>';
+        '<div class="span-2"><button class="button primary" type="submit">حفظ العملية</button></div></form><div id="paymentResult" class="muted" style="margin-top:12px">التحصيل دفع حقيقي، أما التخفيض فهو تسوية غير نقدية ظاهرة في كشف الحساب.</div></div></section>';
       var form = container.querySelector("#paymentForm");
       form.onsubmit = async function (event) {
         event.preventDefault();
@@ -1869,7 +1862,7 @@
           return Number(row.id) === customerId;
         });
         if (!(amount > 0)) {
-          UI.toast("أدخل قيمة تحصيل أكبر من صفر.", "danger");
+          UI.toast("أدخل مبلغًا أكبر من صفر.", "danger");
           return;
         }
         if (customer && amount > Number(customer.balance || 0)) {
@@ -1880,14 +1873,14 @@
         button.textContent = "جارٍ الحفظ...";
         try {
           var saved = await AlKhayalApi.request(
-            "/api/customers/" + encodeURIComponent(customerId) + "/payments",
+            "/api/customers/" + encodeURIComponent(customerId) + "/transactions",
             {
               method: "POST",
               body: JSON.stringify({
                 amount: amount,
-                paymentDate: form.querySelector("#paymentDate").value,
-                method: form.querySelector("#method").value,
-                account: form.querySelector("#account").value,
+                type:({"إضافة مبلغ على العميل":"increase","تسجيل تحصيل":"collection","تخفيض الرصيد":"reduction"})[form.querySelector("#transactionType").value],
+                occurredOn: form.querySelector("#paymentDate").value,
+                operationKey:(global.crypto&&global.crypto.randomUUID?global.crypto.randomUUID():String(Date.now())+Math.random()),
                 notes: form.querySelector("#notes").value,
               }),
             },
@@ -1895,17 +1888,17 @@
           var updatedRows = await AlKhayalApi.request("/api/customers");
           S.store.replace("customers", updatedRows);
           UI.toast(
-            "تم حفظ التحصيل في قاعدة البيانات وتحديث رصيد العميل.",
+            "تم حفظ العملية وتحديث رصيد العميل.",
             "success",
           );
           render(updatedRows);
           var result = container.querySelector("#paymentResult");
           if (result && saved)
             result.textContent =
-              "رقم مرجع التحصيل: " + (saved.reference || "تم الحفظ");
+              "تم حفظ العملية في كشف الحساب.";
         } catch (error) {
           button.disabled = false;
-          button.textContent = "حفظ التحصيل في قاعدة البيانات";
+          button.textContent = "حفظ العملية";
           UI.toast(
             error.message ||
               "تعذر حفظ التحصيل. تأكد من تسجيل الدخول واتصال الخادم.",
@@ -2981,6 +2974,11 @@
         );
     };
   }
+  function underConstruction(screen, container) {
+    container.innerHTML =
+      UI.pageHeader(screen) +
+      '<section class="card"><div class="empty-state under-construction" role="status"><strong>هذه الشاشة قيد الإنشاء</strong><span>ستتوفر هذه الوظيفة في تحديث لاحق. لم يتم تنفيذ أي عملية أو تغيير أي بيانات.</span></div></section>';
+  }
   global.AlKhayalRenderers = {
     schemas: schemas,
     "entity-list": entityList,
@@ -3013,5 +3011,6 @@
     "maintenance-intake": maintenanceIntake,
     "maintenance-tracking": maintenanceTracking,
     "cash-services": cashServices,
+    "under-construction": underConstruction,
   };
 })(window);

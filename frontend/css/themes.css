@@ -7,5 +7,7 @@
   --warning: #f0bd4f; --warning-soft: #463714; --danger: #ff7d7d; --danger-soft: #472129;
   --info-soft: #163551; --focus: #7cc7ff; --focus-ring: rgba(124, 199, 255, .24); --overlay: rgba(0, 0, 0, .72);
   --gold-border: #725b37; --danger-border: #78414a; --warning-border: #725d24; --chart-end: #6d6c77;
+  --sidebar-bg: #06132f; --sidebar-surface: #0c2048; --sidebar-hover: #122b59; --sidebar-active: #193663;
+  --sidebar-border: #29436f; --sidebar-text: #edf3ff; --sidebar-text-muted: #aebbd3; --sidebar-icon: #d9e6ff;
   --shadow-1: 0 2px 8px rgba(0, 0, 0, .2); --shadow-2: 0 14px 36px rgba(0, 0, 0, .38);
 }

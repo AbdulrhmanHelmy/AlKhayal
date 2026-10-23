@@ -23,10 +23,19 @@ namespace AlKhayal.Application.Inventory
         public Task<bool> VerifyProjectionAsync(CancellationToken ct) { return _store.VerifyProjectionAsync(ct); }
         public Task<InventoryResult<InventoryRebuildResult>> RebuildProjectionAsync(long userId,CancellationToken ct) { return _store.RebuildProjectionAsync(userId,ct); }
 
+        public Task<InventoryResult<long>> ReconcileCostAsync(InventoryCostReconciliationCommand command,CancellationToken ct)
+        {
+            long cost;
+            if(command==null||string.IsNullOrWhiteSpace(command.OperationKey)||command.OperationKey.Length>120||command.LayerId<=0||command.UserId<=0||!TryScale(command.UnitCost,4,out cost)||string.IsNullOrWhiteSpace(command.Evidence)||command.Evidence.Length>2000)
+                return Task.FromResult(InventoryResult<long>.Fail("invalid_cost_basis","أدخل تكلفة موثقة ومصدر إثبات التكلفة."));
+            var sb=new StringBuilder("reconcile|");AppendCanonical(sb,command.LayerId);AppendCanonical(sb,command.ExpectedVersion);AppendCanonical(sb,command.UnitCost);AppendCanonical(sb,command.Evidence);AppendCanonical(sb,command.UserId);
+            return _store.ReconcileCostAsync(command,"v2:"+Hash(sb.ToString()),ct);
+        }
+
         public async Task<InventoryResult<WarehouseRecord>> SaveWarehouseAsync(WarehouseCommand command,CancellationToken ct)
         {
-            if(command==null||string.IsNullOrWhiteSpace(command.Code)||string.IsNullOrWhiteSpace(command.Name)||command.Code.Trim().Length>32||command.Name.Trim().Length>120)
-                return InventoryResult<WarehouseRecord>.Fail("invalid_warehouse","أدخل كود المخزن واسمه بشكل صحيح.");
+            if(command==null||string.IsNullOrWhiteSpace(command.Name)||command.Name.Trim().Length>120||(!string.IsNullOrWhiteSpace(command.Code)&&command.Code.Trim().Length>32))
+                return InventoryResult<WarehouseRecord>.Fail("invalid_warehouse","أدخل اسم مخزن صحيحًا.");
             var enabled=await MultipleWarehousesAsync(ct).ConfigureAwait(false);
             return await _store.SaveWarehouseAsync(command,enabled,ct).ConfigureAwait(false);
         }
@@ -46,8 +55,9 @@ namespace AlKhayal.Application.Inventory
         public Task<IReadOnlyList<InventoryCountRecord>> CountsAsync(long warehouseId,CancellationToken ct) { return _store.CountsAsync(warehouseId,ct); }
         public Task<InventoryResult<InventoryPostResult>> PostCountAsync(long countId,InventoryCountPostCommand command,CancellationToken ct)
         {
-            if(command==null||string.IsNullOrWhiteSpace(command.OperationKey)||string.IsNullOrWhiteSpace(command.Reason)||command.Lines==null)
-                return Task.FromResult(InventoryResult<InventoryPostResult>.Fail("invalid_count","أدخل الكميات وسبب الجرد ومفتاح العملية."));
+            if(command==null||string.IsNullOrWhiteSpace(command.OperationKey)||command.Lines==null||command.Lines.Any(x=>x==null))
+                return Task.FromResult(InventoryResult<InventoryPostResult>.Fail("invalid_count","راجع كميات الجرد ثم أعد الحفظ."));
+            if(string.IsNullOrWhiteSpace(command.Reason))command.Reason="جرد المخزون";
             return _store.PostCountAsync(countId,command,CanonicalHashCount(countId,command),ct);
         }
         public Task<InventoryResult<InventoryCountRecord>> GetCountAsync(long countId,CancellationToken ct) { return _store.GetCountAsync(countId,ct); }
@@ -70,15 +80,12 @@ namespace AlKhayal.Application.Inventory
         private static InventoryResult<InventoryPostResult> ValidatePost(InventoryPostCommand command)
         {
             if(command==null||string.IsNullOrWhiteSpace(command.OperationKey)||command.OperationKey.Length>120||command.WarehouseId<=0||command.UserId<=0||command.Lines==null||command.Lines.Count==0||command.Lines.Count>100)
-                return InventoryResult<InventoryPostResult>.Fail("invalid_operation","أكمل بيانات الحركة ومفتاح العملية.");
+                return InventoryResult<InventoryPostResult>.Fail("invalid_operation","أكمل بيانات الحركة ثم أعد الحفظ.");
             if(!new[]{"opening","manual_receipt","manual_issue","adjustment","transfer"}.Contains(command.Type))
                 return InventoryResult<InventoryPostResult>.Fail("invalid_type","نوع حركة المخزون غير صالح.");
             if(command.Type=="transfer"&&(!command.DestinationWarehouseId.HasValue||command.DestinationWarehouseId==command.WarehouseId))
                 return InventoryResult<InventoryPostResult>.Fail("invalid_destination","اختر مخزنًا آخر للوجهة.");
-            if(command.Type!="opening"&&string.IsNullOrWhiteSpace(command.Reason))
-                return InventoryResult<InventoryPostResult>.Fail("reason_required","أدخل سبب الحركة.");
-            if(string.Equals(command.Reason,"أخرى",StringComparison.Ordinal)&&string.IsNullOrWhiteSpace(command.Notes))
-                return InventoryResult<InventoryPostResult>.Fail("reason_required","اشرح سبب الحركة في الملاحظات.");
+            if(string.IsNullOrWhiteSpace(command.Reason))command.Reason=command.Type=="manual_receipt"?"إضافة بضاعة":command.Type=="manual_issue"?"إخراج بضاعة":command.Type=="transfer"?"نقل بضاعة":command.Type=="adjustment"?"تسوية المخزون":"رصيد افتتاحي";
             foreach(var line in command.Lines)
             {
                 long quantity;
@@ -86,7 +93,9 @@ namespace AlKhayal.Application.Inventory
                     return InventoryResult<InventoryPostResult>.Fail("invalid_quantity","أدخل كمية صحيحة بدقة لا تتجاوز ست خانات عشرية.");
                 if(command.Type!="adjustment"&&quantity<0)return InventoryResult<InventoryPostResult>.Fail("invalid_quantity","يجب أن تكون الكمية موجبة.");
                 if(line.UnitCost!=null&&!TryScale(line.UnitCost,4,out _))return InventoryResult<InventoryPostResult>.Fail("invalid_cost","تكلفة الوحدة غير صالحة.");
-                if(line.UnitCost==null&&(command.Type=="opening"||command.Type=="manual_receipt"))return InventoryResult<InventoryPostResult>.Fail("cost_required","أدخل تكلفة اقتناء فعلية؛ سعر المرجع لا يمثل تكلفة مخزون مؤكدة.");
+                if(line.UnitCost==null&&(command.Type=="opening"||command.Type=="manual_receipt"||command.Type=="adjustment"&&quantity>0))return InventoryResult<InventoryPostResult>.Fail("cost_required","أدخل سعر الشراء الفعلي للبضاعة المضافة.");
+                if(command.Type=="manual_receipt"&&!TryScale(line.SalePrice,4,out _))return InventoryResult<InventoryPostResult>.Fail("sale_price_required","أدخل سعر البيع الجديد بدقة لا تتجاوز أربع خانات عشرية.");
+                if(line.PhysicalUnits!=null&&line.PhysicalUnits.Any(x=>x==null))return InventoryResult<InventoryPostResult>.Fail("invalid_identifier","بيانات الأرقام الفعلية غير صالحة.");
             }
             return null;
         }
@@ -150,6 +159,9 @@ namespace AlKhayal.Application.Inventory
             {
                 sb.Append("L|").Append(l.VariantId.ToString(CultureInfo.InvariantCulture)).Append("|").Append(l.ProductUnitId.ToString(CultureInfo.InvariantCulture)).Append("|");
                 AppendCanonical(sb,l.Quantity);AppendCanonical(sb,l.UnitCost);AppendCanonical(sb,l.LotNumber);AppendCanonical(sb,l.ExpirationDate);
+                // Preserve v2 hashes of older non-retail operations. A supplied retail price
+                // is an explicit extension and is always part of the receipt identity.
+                if(l.SalePrice!=null){sb.Append("sale|");AppendCanonical(sb,l.SalePrice);}
                 AppendCanonical(sb,l.ExpectedVersion);AppendCanonical(sb,l.ExpectedQuantity);
                 AppendCanonical(sb,(l.PhysicalUnits?.Count??0).ToString(CultureInfo.InvariantCulture));
                 foreach(var u in l.PhysicalUnits??new InventoryUnitInput[0])

@@ -8,12 +8,9 @@
       "icon": "ع",
       "items": [
         "customers-list",
-        "customer-add",
-        "customer-edit",
         "customer-statement",
         "customer-credit-payment",
-        "customers-export",
-        "customer-subscriptions"
+        "customers-export"
       ]
     },
     {
@@ -172,7 +169,7 @@
       "route": "dashboard",
       "module": "الرئيسية",
       "title": "الرئيسية",
-      "description": "ملخص تشغيلي متسق مع بيانات العرض التجريبية.",
+      "description": "وصول مباشر إلى أقسام العمل التي تحفظ بيانات فعلية.",
       "renderer": "dashboard",
       "verified": "automated"
     },
@@ -288,6 +285,42 @@
     },
 
     {
+      "route": "customer-add",
+      "module": "العملاء",
+      "title": "إضافة عميل",
+      "description": "إضافة عميل وحفظ بياناته في قاعدة البيانات.",
+      "renderer": "entity-form",
+      "data": "customers",
+      "mode": "add",
+      "navigationHidden": true
+    },
+    {
+      "route": "customer-edit",
+      "module": "العملاء",
+      "title": "تعديل بيانات عميل",
+      "description": "اختيار عميل وتعديل بياناته في قاعدة البيانات.",
+      "renderer": "entity-form",
+      "data": "customers",
+      "mode": "edit",
+      "navigationHidden": true
+    },
+    {
+      "route": "customers-export",
+      "module": "العملاء",
+      "title": "تصدير بيانات العملاء",
+      "description": "هذه الشاشة قيد الإنشاء.",
+      "renderer": "under-construction"
+    },
+    {
+      "route": "customer-subscriptions",
+      "module": "العملاء",
+      "title": "اشتراكات العملاء",
+      "description": "هذه الشاشة قيد الإنشاء.",
+      "renderer": "under-construction",
+      "navigationHidden": true
+    },
+
+    {
       "route": "customer-statement",
       "module": "العملاء",
       "title": "كشف حساب العميل",
@@ -377,6 +410,23 @@
     },
 
     {
+      "route": "supplier-purchases",
+      "module": "الموردين",
+      "title": "مشتريات الموردين",
+      "description": "هذه الشاشة قيد الإنشاء.",
+      "renderer": "under-construction"
+    },
+    {
+      "route": "supplier-balance",
+      "module": "الموردين",
+      "title": "أرصدة الموردين",
+      "description": "اختر موردًا لمراجعة كشف حسابه المحفوظ.",
+      "renderer": "statement",
+      "data": "suppliers",
+      "party": "supplier"
+    },
+
+    {
       "route": "supplier-payment",
       "module": "الموردين",
       "title": "سداد حساب المورد",
@@ -384,6 +434,27 @@
       "renderer": "payment",
       "data": "suppliers",
       "party": "supplier"
+    },
+    {
+      "route": "supplier-payment-confirm",
+      "module": "الموردين",
+      "title": "مراجعة سداد الموردين",
+      "description": "هذه الشاشة قيد الإنشاء.",
+      "renderer": "under-construction"
+    },
+    {
+      "route": "supplier-reports",
+      "module": "الموردين",
+      "title": "تقارير الموردين",
+      "description": "هذه الشاشة قيد الإنشاء.",
+      "renderer": "under-construction"
+    },
+    {
+      "route": "supplier-paid-report",
+      "module": "الموردين",
+      "title": "تقرير مدفوعات الموردين",
+      "description": "هذه الشاشة قيد الإنشاء.",
+      "renderer": "under-construction"
     },
    
     {

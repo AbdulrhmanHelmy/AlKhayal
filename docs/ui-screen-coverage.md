@@ -1,10 +1,13 @@
 # UI screen coverage
 
-Generated from `frontend/data/screens.json` by `node tools/generate-ui-coverage.js` on 2026-10-20.
+Originally generated from `frontend/data/screens.json` on 2026-10-20. Batch 1 added the nine missing navigation records, bringing the registry to 99 routes.
 
 - **Browser smoke**: the route was opened and its primary UI behavior was exercised in the local browser.
 - **Registry verified**: automated tests confirmed unique routing, navigation references, renderer support, and required metadata.
-- Business data/actions are session-only demonstrations unless the API documentation explicitly says otherwise.
+- The implementation details in the historical rows below describe the preserved future entry points. At runtime, routes outside the implemented customer, supplier, catalog, inventory, administration, and settings slices now display `هذه الشاشة قيد الإنشاء` and perform no session-only mutation.
+- The dashboard is navigation-only and contains no sample totals, dates, alerts, or activity.
+- Product creation and editing show only expiration tracking, colors, sizes, and a manual/generated barcode. Legacy batch, serial, IMEI, SKU, and product-type data remain preserved by the aggregate API but are not staff-facing controls.
+- The customer sidebar exposes `إدارة العملاء`, `كشف حساب العميل`, `المعاملات المالية للعميل`, and `تصدير بيانات العملاء` only. `customer-add`, `customer-edit`, and `customer-subscriptions` stay registered but are hidden from navigation and search; creation and editing are reached from `إدارة العملاء` through the Arabic `+ إضافة عميل` and per-row `تعديل` actions.
 
 | Module | Arabic screen | Route | Implementation | Layout/renderer | Mock source | Main interactions | Verification |
 |---|---|---|---|---|---|---|---|
@@ -19,13 +22,13 @@ Generated from `frontend/data/screens.json` by `node tools/generate-ui-coverage.
 | الإعدادات | إعدادات الفاتورة | `settings-invoice` | `frontend/js/modules/renderers.js` | settings | UI/session state | Edit settings and save in session | Registry verified |
 | الإعدادات | إعدادات الطابعات | `settings-printers` | `frontend/js/modules/renderers.js` | printer | UI/session state | Configuration and print preview only | Registry verified |
 | الإعدادات | البيانات والصيانة | `settings-backup` | `frontend/js/modules/general-settings.js` | database-settings | SQLite/API read | Inspect database status; backup/restore explicitly unavailable | Automated integration |
-| العملاء | إدارة العملاء | `customers-list` | `frontend/js/modules/renderers.js` | entity-list | customers | Search, filter, sort, paginate, inspect and session actions | Browser smoke |
-| العملاء | إضافة عميل | `customer-add` | `frontend/js/modules/renderers.js` | entity-form | customers | Validate and save to the session store | Registry verified |
-| العملاء | تعديل بيانات عميل | `customer-edit` | `frontend/js/modules/renderers.js` | entity-form | customers | Validate and save to the session store | Registry verified |
+| العملاء | إدارة العملاء | `customers-list` | `frontend/js/modules/renderers.js` | entity-list | customers | Search, filter, sort, paginate, inspect, add, and edit persisted customers | Browser smoke |
+| العملاء | إضافة عميل | `customer-add` | `frontend/js/modules/renderers.js` | entity-form | customers | Hidden contextual route; validate and save to SQLite | Registry verified |
+| العملاء | تعديل بيانات عميل | `customer-edit` | `frontend/js/modules/renderers.js` | entity-form | customers | Hidden contextual route; pick a customer and save to SQLite | Registry verified |
 | العملاء | كشف حساب العميل | `customer-statement` | `frontend/js/modules/renderers.js` | statement | customers | Party selection and running-balance review | Registry verified |
-| العملاء | دفع آجل للعميل | `customer-credit-payment` | `frontend/js/modules/renderers.js` | payment | customers | Validate and simulate a party payment | Registry verified |
+| العملاء | دفع آجل للعميل | `customer-credit-payment` | `frontend/js/modules/renderers.js` | payment | customers | Validate and simulate a party payment (المعاملات المالية للعميل) | Registry verified |
 | العملاء | تصدير بيانات العملاء | `customers-export` | `frontend/js/modules/renderers.js` | export | customers | Generate a UTF-8 CSV download | Registry verified |
-| العملاء | تقرير الشركات واشتراكات العملاء | `customer-subscriptions` | `frontend/js/modules/renderers.js` | report | customers | Date/branch filters, summary, chart, CSV/print preview | Registry verified |
+| العملاء | اشتراكات العملاء | `customer-subscriptions` | `frontend/js/modules/renderers.js` | under-construction | customers | Hidden placeholder; no session-only mutation | Registry verified |
 | المبيعات | نقطة بيع سريعة | `pos` | `frontend/js/modules/pos.js` | pos | products | Product search, cart, totals, keyboard shortcuts and mock checkout | Browser smoke |
 | المبيعات | إدارة المبيعات | `sales-management` | `frontend/js/modules/renderers.js` | entity-list | sales | Search, filter, sort, paginate, inspect and session actions | Browser smoke |
 | المبيعات | البحث السريع برقم الفاتورة للتعديل | `invoice-lookup` | `frontend/js/modules/renderers.js` | invoice-lookup | sales | Interactive session workflow or preview | Registry verified |
@@ -105,4 +108,4 @@ Generated from `frontend/data/screens.json` by `node tools/generate-ui-coverage.
 | الصيانة والفروع | حركة مالية للفروع | `branch-finance` | `frontend/js/modules/renderers.js` | workflow | branches | Review and simulated confirmation | Registry verified |
 | الصيانة والفروع | خدمات كاش | `cash-services` | `frontend/js/modules/renderers.js` | cash-services | UI/session state | Interactive session workflow or preview | Registry verified |
 
-Total distinct screens: **96**.
+Total distinct screens: **99**.

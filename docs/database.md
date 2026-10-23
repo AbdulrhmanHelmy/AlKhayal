@@ -41,6 +41,14 @@ Products, categories, units, and optional reference purchase costs are persisted
 
 # Phase 2 / Task 2.4 inventory migration
 
+## Migration 015 — customer transaction ledger
+
+Migration 015 is additive: it leaves `Customers`, `CustomerPayments`, balances, and all historical rows untouched. It creates immutable customer transaction entries and imports a reconciled opening entry plus the recorded historical collections, so the new statement derives the same current balance rather than rewriting it. The migration preflight rejects a legacy balance or payment that cannot be represented exactly at scale 4; it never rounds a historical monetary value. New monetary entries are validated at scale 4 and use a unique operation key for retry safety.
+
 Migration `011_inventory_ledger.sql` is additive to the Task 2.3 catalog schema. It creates the default warehouse, inventory documents/lines, immutable stock movements, batch and physical-unit identities, movement links, balance projection, and inventory audit. Partial unique balance indexes distinguish null batch from a real batch. Projection triggers compare each inserted/updated row with its ledger aggregate; posted documents, lines, movements, and audit rows are protected against edits. See [inventory-ledger.md](inventory-ledger.md) for the complete table list, scale policy, restore/rebuild process, and tracking limits.
 
 Warehouse rows are created and edited transactionally by `SqliteInventoryStore.SaveWarehouseAsync`. `Warehouses.NormalizedCode` is the trimmed, Unicode-normalized, upper-cased code and carries a unique constraint, so codes that differ only by case or spacing are rejected as duplicates on both create and edit. The active default and a warehouse that still holds stock cannot be deactivated, only an empty nondefault warehouse can, and reactivating it is an ordinary edit of the same row. Creating a second warehouse still requires the effective `multiple-warehouses` module; editing, deactivating, or reactivating an existing warehouse does not. See [warehouse-management.md](warehouse-management.md) for the directory workflow.
+
+## Migration 016 — FIFO cost layers
+
+Adds persistent receipt/transfer layers, immutable movement allocations and documented opening-cost reconciliations, plus nullable selected-unit acquisition/retail-price snapshots on document lines. Existing stock becomes quantity-preserving unresolved layers; historical movements and valuations are not rewritten. Cost-sensitive withdrawals are blocked until an evidenced opening basis is established. The conservative reconciliation cannot alter retained historical value; a mismatch stays blocked for a dedicated valuation correction. See [inventory-fifo.md](inventory-fifo.md).

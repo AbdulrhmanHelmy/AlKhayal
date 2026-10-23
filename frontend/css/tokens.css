@@ -8,6 +8,8 @@
   --danger: #d64545; --danger-soft: #fdecec; --info-soft: #e9f4fb; --focus: #1877c9; --focus-ring: rgba(24, 119, 201, .24);
   --gold-border: #d6bd95; --danger-border: #e6aaaa; --warning-border: #e7cb80; --chart-end: #6c5a59;
   --overlay: rgba(2, 10, 32, .58); --shadow-1: 0 2px 8px rgba(2, 21, 66, .07); --shadow-2: 0 12px 30px rgba(2, 21, 66, .14);
+  --sidebar-bg: #eef3f9; --sidebar-surface: #ffffff; --sidebar-hover: #dfe8f3; --sidebar-active: #d3dfed;
+  --sidebar-border: #c7d3e2; --sidebar-text: #102650; --sidebar-text-muted: #53627e; --sidebar-icon: #183b70;
   --radius-sm: 6px; --radius: 8px; --radius-lg: 12px;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
   --topbar-height: 52px; --quickbar-height: 82px; --tabs-height: 42px; --status-height: 30px;

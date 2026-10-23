@@ -21,7 +21,7 @@ using Xunit;
 
 namespace AlKhayal.IntegrationTests
 {
-    public sealed class InventoryPersistenceTests
+    public sealed partial class InventoryPersistenceTests
     {
         private sealed class Fixture : IDisposable
         {
@@ -30,9 +30,24 @@ namespace AlKhayal.IntegrationTests
             public readonly SqliteInventoryStore Store;
             public readonly InventoryService InventoryService;
             public long ProductId,VariantId,UnitId;
-            public Fixture()
+            public Fixture(bool includeFifo=true)
             {
-                Cs=Db.ConnectionStringFor(Path);Migrator.Run(Cs);Store=new SqliteInventoryStore(Cs);
+                Cs=Db.ConnectionStringFor(Path);
+                if(includeFifo)Migrator.Run(Cs);
+                else
+                {
+                    using(var c=new SQLiteConnection(Cs))
+                    {
+                        c.Open();c.Execute("PRAGMA foreign_keys=ON; CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL)");
+                        var assembly=typeof(Migrator).Assembly;
+                        foreach(var resource in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql")&&!x.EndsWith("016_inventory_fifo.sql")).OrderBy(x=>x,StringComparer.Ordinal))
+                        {
+                            using(var stream=assembly.GetManifestResourceStream(resource))using(var reader=new StreamReader(stream))c.Execute(reader.ReadToEnd());
+                            c.Execute("INSERT INTO SchemaVersion(Name,AppliedAt) VALUES(@Name,'2026-01-01')",new{Name=resource});
+                        }
+                    }
+                }
+                Store=new SqliteInventoryStore(Cs);
                 InventoryService=new InventoryService(Store,new FeatureService(new SqliteFeatureStore(Cs),new SqliteBusinessActivityStore(Cs)));
                 using(var c=new SQLiteConnection(Cs)){c.Open();c.Execute("INSERT INTO Users(Username,PasswordHash,CreatedUtc) VALUES('inventory-admin','test-only','2026-01-01T00:00:00Z')");}
                 var catalog=new CatalogService(new SqliteCatalogStore(Cs));
@@ -41,7 +56,7 @@ namespace AlKhayal.IntegrationTests
                 using(var c=new SQLiteConnection(Cs)){c.Open();VariantId=c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=@Id",new{Id=ProductId});UnitId=c.ExecuteScalar<long>("SELECT Id FROM ProductUnits WHERE ProductId=@Id AND IsBase=1",new{Id=ProductId});}
             }
             public InventoryPostCommand Command(string type,string key,string qty,long warehouse=1,long? destination=null,string cost="2")
-            {return new InventoryPostCommand{Type=type,OperationKey=key,WarehouseId=warehouse,DestinationWarehouseId=destination,UserId=1,Reason="تصحيح موثق",Lines=new[]{new InventoryLineInput{VariantId=VariantId,ProductUnitId=UnitId,Quantity=qty,UnitCost=cost}}};}
+            {return new InventoryPostCommand{Type=type,OperationKey=key,WarehouseId=warehouse,DestinationWarehouseId=destination,UserId=1,Reason="تصحيح موثق",Lines=new[]{new InventoryLineInput{VariantId=VariantId,ProductUnitId=UnitId,Quantity=qty,UnitCost=cost,SalePrice="12"}}};}
             public void Dispose(){SQLiteConnection.ClearAllPools();if(File.Exists(Path))File.Delete(Path);}
         }
 
@@ -69,11 +84,32 @@ namespace AlKhayal.IntegrationTests
         }
 
         [Fact]
+        public async Task Receipt_requires_actual_purchase_and_sale_prices_and_never_mutates_the_request()
+        {
+            using(var f=new Fixture())
+            {
+                var cmd=f.Command("manual_receipt","actual-cost","4",cost:null);
+                Assert.Equal("cost_required",(await f.InventoryService.PostAsync(cmd,CancellationToken.None)).ErrorCode);
+                cmd.Lines[0].UnitCost="100";cmd.Lines[0].SalePrice=null;
+                Assert.Equal("sale_price_required",(await f.InventoryService.PostAsync(cmd,CancellationToken.None)).ErrorCode);
+                cmd.Lines[0].SalePrice="150";
+                var posted=await f.InventoryService.PostAsync(cmd,CancellationToken.None);Assert.True(posted.Succeeded,posted.ErrorMessage);
+                Assert.Equal("100",cmd.Lines[0].UnitCost);
+                var replay=await f.InventoryService.PostAsync(cmd,CancellationToken.None);Assert.True(replay.Value.Replayed);
+                Assert.Equal(posted.Value.DocumentId,replay.Value.DocumentId);
+                cmd.Lines[0].SalePrice="151";
+                Assert.Equal("operation_key_conflict",(await f.InventoryService.PostAsync(cmd,CancellationToken.None)).ErrorCode);
+                using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryCostLayers"));Assert.Equal(4000000,c.ExecuteScalar<long>("SELECT ValueScaled FROM StockMovements"));Assert.Equal(1500000,c.ExecuteScalar<long>("SELECT SellPriceOverrideScaled FROM ProductVariants WHERE Id=@Id",new{Id=f.VariantId}));Assert.Equal(90000,c.ExecuteScalar<long>("SELECT PurchasePriceScaled FROM ProductDetails WHERE ProductId=@Id",new{Id=f.ProductId}));Assert.Equal(1500000,c.ExecuteScalar<long>("SELECT SellPriceScaled FROM ProductDetails WHERE ProductId=@Id",new{Id=f.ProductId}));}
+                Assert.True(await f.Store.VerifyProjectionAsync(CancellationToken.None));
+            }
+        }
+
+        [Fact]
         public async Task Failed_multiline_post_rolls_back_every_effect()
         {
             using(var f=new Fixture())
             {
-                var command=f.Command("manual_receipt","bad-lines","2");command.Lines=new[]{command.Lines[0],new InventoryLineInput{VariantId=9999,ProductUnitId=f.UnitId,Quantity="1",UnitCost="2"}};
+                var command=f.Command("manual_receipt","bad-lines","2");command.Lines=new[]{command.Lines[0],new InventoryLineInput{VariantId=9999,ProductUnitId=f.UnitId,Quantity="1",UnitCost="2",SalePrice="12"}};
                 var result=await f.Store.PostAsync(command,"hash",CancellationToken.None);Assert.Equal("invalid_variant",result.ErrorCode);
                 using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(0,c.ExecuteScalar<long>("SELECT COUNT(*) FROM StockMovements"));Assert.Equal(0,c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryDocuments"));}
             }
@@ -84,7 +120,7 @@ namespace AlKhayal.IntegrationTests
         {
             using(var f=new Fixture())
             {
-                using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(11,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(0,c.ExecuteScalar<long>("PRAGMA foreign_key_check"));}
+                using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(16,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(0,c.ExecuteScalar<long>("PRAGMA foreign_key_check"));}
                 var receipt=await f.Store.PostAsync(f.Command("opening","open","1"),"hash",CancellationToken.None);Assert.True(receipt.Succeeded,receipt.ErrorMessage);
                 using(var c=new SQLiteConnection(f.Cs))
                 {
@@ -110,7 +146,7 @@ namespace AlKhayal.IntegrationTests
                 }
                 var second=await f.Store.SaveWarehouseAsync(new WarehouseCommand{Code="W2",Name="ثان",IsActive=true},true,CancellationToken.None);
                 var receipt=f.Command("manual_receipt","tracked-in","1");
-                receipt.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",UnitCost="50",LotNumber="B-1",ExpirationDate=DateTime.Today.AddDays(10).ToString("yyyy-MM-dd"),PhysicalUnits=new[]{new InventoryUnitInput{Serial="SN-1",Imeis=new[]{"490154203237518","356938035643809"}}}}};
+                receipt.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",UnitCost="50",SalePrice="12",LotNumber="B-1",ExpirationDate=DateTime.Today.AddDays(10).ToString("yyyy-MM-dd"),PhysicalUnits=new[]{new InventoryUnitInput{Serial="SN-1",Imeis=new[]{"490154203237518","356938035643809"}}}}};
                 var posted=await f.Store.PostAsync(receipt,"in-hash",CancellationToken.None);Assert.True(posted.Succeeded,posted.ErrorMessage);
                 var duplicate=f.Command("manual_receipt","tracked-duplicate","1");duplicate.Lines=receipt.Lines;
                 Assert.Equal("inventory_conflict",(await f.Store.PostAsync(duplicate,"dup-hash",CancellationToken.None)).ErrorCode);
@@ -200,7 +236,7 @@ namespace AlKhayal.IntegrationTests
                 {
                     c.Open();c.Execute("CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL)");
                     var assembly=typeof(Migrator).Assembly;
-                    foreach(var resource in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql")&&!x.EndsWith("011_inventory_ledger.sql")).OrderBy(x=>x,StringComparer.Ordinal))
+                    foreach(var resource in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql")&&!x.EndsWith("011_inventory_ledger.sql")&&!x.EndsWith("016_inventory_fifo.sql")).OrderBy(x=>x,StringComparer.Ordinal))
                     {
                         using(var reader=new StreamReader(assembly.GetManifestResourceStream(resource)))c.Execute(reader.ReadToEnd());
                         c.Execute("INSERT INTO SchemaVersion(Name,AppliedAt) VALUES(@Name,'2026-01-01T00:00:00Z')",new{Name=resource});
@@ -212,7 +248,7 @@ namespace AlKhayal.IntegrationTests
                     c.Execute("INSERT INTO ProductUnits(ProductId,UnitId,ToBaseNumerator,ToBaseDenominator,IsBase,IsSaleUnit,IsPurchaseUnit,IsActive,CreatedUtc,UpdatedUtc) VALUES(77,1,1,1,1,1,1,1,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')");
                 }
                 Migrator.Run(cs);Migrator.Run(cs);
-                using(var c=new SQLiteConnection(cs)){c.Open();Assert.Equal(11,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(77,c.ExecuteScalar<long>("SELECT ProductId FROM ProductDetails WHERE ProductId=77"));Assert.Equal(88,c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=77"));Assert.Equal(33,c.ExecuteScalar<long>("SELECT Id FROM Users WHERE Id=33"));Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM Warehouses WHERE IsDefault=1"));}
+                using(var c=new SQLiteConnection(cs)){c.Open();Assert.Equal(16,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(77,c.ExecuteScalar<long>("SELECT ProductId FROM ProductDetails WHERE ProductId=77"));Assert.Equal(88,c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=77"));Assert.Equal(33,c.ExecuteScalar<long>("SELECT Id FROM Users WHERE Id=33"));Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM Warehouses WHERE IsDefault=1"));}
             }
             finally{SQLiteConnection.ClearAllPools();if(File.Exists(path))File.Delete(path);}
         }
@@ -353,18 +389,18 @@ namespace AlKhayal.IntegrationTests
                     unitId=c.ExecuteScalar<long>("SELECT last_insert_rowid()");
                     c.Execute("INSERT INTO ProductUnits(ProductId,UnitId,ToBaseNumerator,ToBaseDenominator,IsBase,CreatedUtc,UpdatedUtc) VALUES(@Id,@UnitId,1,3,0,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",new{Id=f.ProductId,UnitId=unitId});thirdUnit=c.ExecuteScalar<long>("SELECT last_insert_rowid()");
                 }
-                var exact=f.Command("manual_receipt","exact-1","2.5");exact.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=boxUnit,Quantity="2.5",UnitCost="4"}};
+                var exact=f.Command("manual_receipt","exact-1","2.5");exact.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=boxUnit,Quantity="2.5",UnitCost="4",SalePrice="12"}};
                 Assert.True((await f.Store.PostAsync(exact,"exact-hash",CancellationToken.None)).Succeeded);
                 Assert.Equal(3750000L,(await f.Store.BalancesAsync(1,null,CancellationToken.None)).Single().QuantityBaseScaled);
-                var precision=f.Command("manual_receipt","precision-1","1");precision.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=thirdUnit,Quantity="1",UnitCost="4"}};
+                var precision=f.Command("manual_receipt","precision-1","1");precision.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=thirdUnit,Quantity="1",UnitCost="4",SalePrice="12"}};
                 Assert.Equal("invalid_quantity_precision",(await f.Store.PostAsync(precision,"precision-hash",CancellationToken.None)).ErrorCode);
-                var overflow=f.Command("manual_receipt","overflow-1","2");overflow.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="2",UnitCost="922337203685477.5807"}};
+                var overflow=f.Command("manual_receipt","overflow-1","2");overflow.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="2",UnitCost="922337203685477.5807",SalePrice="12"}};
                 Assert.Equal("numeric_overflow",(await f.Store.PostAsync(overflow,"overflow-hash",CancellationToken.None)).ErrorCode);
                 using(var c=new SQLiteConnection(f.Cs))
                 {
-                    c.Open();Assert.Equal(40000L,c.ExecuteScalar<long>("SELECT UnitCostScaled FROM StockMovements LIMIT 1"));
+                    c.Open();Assert.Equal(26667L,c.ExecuteScalar<long>("SELECT UnitCostScaled FROM StockMovements LIMIT 1"));Assert.Equal(40000L,c.ExecuteScalar<long>("SELECT EnteredUnitCostScaled FROM InventoryDocumentLines LIMIT 1"));
                     c.Execute("UPDATE ProductDetails SET PurchasePriceScaled=999999 WHERE ProductId=@Id",new{Id=f.ProductId});
-                    Assert.Equal(40000L,c.ExecuteScalar<long>("SELECT UnitCostScaled FROM StockMovements LIMIT 1"));
+                    Assert.Equal(26667L,c.ExecuteScalar<long>("SELECT UnitCostScaled FROM StockMovements LIMIT 1"));Assert.Equal(40000L,c.ExecuteScalar<long>("SELECT EnteredUnitCostScaled FROM InventoryDocumentLines LIMIT 1"));
                 }
                 Assert.True(await f.Store.VerifyProjectionAsync(CancellationToken.None));
             }
@@ -377,7 +413,7 @@ namespace AlKhayal.IntegrationTests
             {
                 var svc=f.InventoryService;
                 var key="delimiter-newline-key";
-                var line=new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",UnitCost="2"};
+                var line=new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",UnitCost="2",SalePrice="12"};
                 var first=new InventoryPostCommand{Type="manual_receipt",OperationKey=key,WarehouseId=1,UserId=1,Reason="a|b\nc",Notes="d",Lines=new[]{line}};
                 var changed=new InventoryPostCommand{Type="manual_receipt",OperationKey=key,WarehouseId=1,UserId=1,Reason="a",Notes="b\nc|d",Lines=new[]{line}};
                 Assert.NotEqual(first.Reason,changed.Reason);
@@ -540,13 +576,13 @@ namespace AlKhayal.IntegrationTests
                 var second=await f.Store.SaveWarehouseAsync(new WarehouseCommand{Code="W2",Name="ثان",IsActive=true},true,CancellationToken.None);Assert.True(second.Succeeded,second.ErrorMessage);
                 var yesterday=DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
                 var today=DateTime.Today.ToString("yyyy-MM-dd");
-                var receiptExpired=f.Command("manual_receipt","expired-in","1");receiptExpired.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",UnitCost="10",LotNumber="LOT-Y",ExpirationDate=yesterday}};
+                var receiptExpired=f.Command("manual_receipt","expired-in","1");receiptExpired.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",UnitCost="10",SalePrice="12",LotNumber="LOT-Y",ExpirationDate=yesterday}};
                 Assert.True((await f.Store.PostAsync(receiptExpired,"expired-hash",CancellationToken.None)).Succeeded);
                 var issueExpired=f.Command("manual_issue","expired-issue","1",cost:null);issueExpired.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",LotNumber="LOT-Y"}};
                 Assert.Equal("expired_batch",(await f.Store.PostAsync(issueExpired,"expired-issue-hash",CancellationToken.None)).ErrorCode);
                 var transferExpired=f.Command("transfer","expired-transfer","1",1,second.Value.Id,null);transferExpired.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",LotNumber="LOT-Y"}};
                 Assert.Equal("expired_batch",(await f.Store.PostAsync(transferExpired,"expired-transfer-hash",CancellationToken.None)).ErrorCode);
-                var receiptToday=f.Command("manual_receipt","today-in","2");receiptToday.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="2",UnitCost="10",LotNumber="LOT-T",ExpirationDate=today}};
+                var receiptToday=f.Command("manual_receipt","today-in","2");receiptToday.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="2",UnitCost="10",SalePrice="12",LotNumber="LOT-T",ExpirationDate=today}};
                 Assert.True((await f.Store.PostAsync(receiptToday,"today-hash",CancellationToken.None)).Succeeded);
                 var issueToday=f.Command("manual_issue","today-issue","1",cost:null);issueToday.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="1",LotNumber="LOT-T"}};
                 var issueResult=await f.Store.PostAsync(issueToday,"today-issue-hash",CancellationToken.None);Assert.True(issueResult.Succeeded,issueResult.ErrorMessage);
@@ -565,7 +601,7 @@ namespace AlKhayal.IntegrationTests
                 {
                     c.Open();c.Execute("INSERT INTO ProductVariants(ProductId,Name,NormalizedName,IsDefault,IsActive,CreatedUtc,UpdatedUtc) VALUES(@Id,'M / أسود','M / أسود',0,1,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",new{Id=f.ProductId});other=c.ExecuteScalar<long>("SELECT last_insert_rowid()");
                 }
-                var command=f.Command("manual_receipt","variant-1","5");command.Lines=new[]{new InventoryLineInput{VariantId=other,ProductUnitId=f.UnitId,Quantity="5",UnitCost="8"}};
+                var command=f.Command("manual_receipt","variant-1","5");command.Lines=new[]{new InventoryLineInput{VariantId=other,ProductUnitId=f.UnitId,Quantity="5",UnitCost="8",SalePrice="12"}};
                 Assert.True((await f.Store.PostAsync(command,"variant-hash",CancellationToken.None)).Succeeded);
                 var balances=await f.Store.BalancesAsync(1,f.ProductId,CancellationToken.None);
                 Assert.Single(balances);Assert.Equal(other,balances[0].VariantId);Assert.Equal(5000000L,balances[0].QuantityBaseScaled);

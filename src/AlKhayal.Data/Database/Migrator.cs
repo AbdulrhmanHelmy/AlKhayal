@@ -51,6 +51,8 @@ namespace AlKhayal.Data.Database
                     {
                         if (script.EndsWith("010_product_variants_and_identifiers.sql", StringComparison.Ordinal))
                             CatalogTask22Preflight.Run(conn, tx);
+                        if (script.EndsWith("015_customer_transactions.sql", StringComparison.Ordinal))
+                            CustomerLedgerMigrationPreflight.Run(conn, tx);
 
                         Execute(conn, tx, sql);
 

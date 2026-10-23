@@ -1,14 +1,18 @@
 (function (global) {
   "use strict";
-  var U = global.AlKhayalUtils, UI = global.AlKhayalUI, S = global.AlKhayalServices;
+  var U = global.AlKhayalUtils, UI = global.AlKhayalUI;
   function dashboard(screen, container, context) {
-    var summary = S.dashboard();
-    container.innerHTML = UI.pageHeader(screen, '<button class="button primary" data-dashboard-route="pos">فتح نقطة البيع</button><button class="button" data-dashboard-route="sales-reports">تقرير المبيعات</button>') + UI.mockBanner() +
-      '<section class="stats-grid"><article class="card stat-card"><span class="stat-accent"></span><span class="stat-label">مبيعات اليوم</span><strong class="stat-value">' + U.money(summary.revenue) + '</strong><div class="stat-meta">من بيانات المبيعات التجريبية</div></article><article class="card stat-card"><span class="stat-accent"></span><span class="stat-label">عدد الفواتير</span><strong class="stat-value">' + U.number(summary.invoiceCount) + '</strong><div class="stat-meta">فاتورة اليوم</div></article><article class="card stat-card"><span class="stat-accent"></span><span class="stat-label">المصروفات</span><strong class="stat-value">' + U.money(summary.expenses) + '</strong><div class="stat-meta muted">3 سندات اليوم</div></article><article class="card stat-card"><span class="stat-accent"></span><span class="stat-label">صافي الربح</span><strong class="stat-value">' + U.money(summary.profit) + '</strong><div class="stat-meta">الإيراد − التكلفة − المصروف</div></article></section>' +
-      '<div class="content-grid"><section class="card"><div class="card-head"><h2>مبيعات آخر سبعة أيام</h2><span class="badge info">ج.م</span></div><div class="card-body">' + UI.chart(summary.week) + '</div></section><aside class="card"><div class="card-head"><h2>تنبيهات النواقص</h2><button class="table-action" data-dashboard-route="low-stock">عرض الكل</button></div><div class="card-body list">' + summary.lowStock.slice(0, 5).map(function (product) { return '<div class="list-item"><div><strong>' + U.escape(product.name) + '</strong><div class="muted" style="font-size:10px;margin-top:4px">حد الطلب: ' + U.number(product.minimum) + '</div></div><span class="badge danger">متبقي ' + U.number(product.stock) + '</span></div>'; }).join("") + '</div></aside></div>' +
-      '<div class="dashboard-activity"><section class="card"><div class="card-head"><h2>أحدث فواتير المبيعات</h2><button class="table-action" data-dashboard-route="sales-list">قائمة المبيعات</button></div><div class="card-body"><div class="table-wrap"><table class="data-table"><thead><tr><th>الفاتورة</th><th>العميل</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>' + summary.latestSales.map(function (sale) { return '<tr><td class="ltr">' + U.escape(sale.invoice) + '</td><td>' + U.escape(sale.customer) + '</td><td class="ltr">' + U.money(sale.total) + '</td><td>' + UI.badge(sale.status) + '</td></tr>'; }).join("") + '</tbody></table></div></div></section><section class="card"><div class="card-head"><h2>النشاط الأخير</h2><button class="table-action" data-dashboard-route="financial-movement">الحركة المالية</button></div><div class="card-body list">' + summary.activities.map(function (activity) { return '<div class="list-item"><div><strong>' + U.escape(activity.text) + '</strong><div class="muted" style="font-size:10px;margin-top:4px">' + U.dateTime(activity.date) + '</div></div>' + UI.badge(activity.type) + '</div>'; }).join("") + '</div></section></div>';
-    container.querySelectorAll("[data-dashboard-route]").forEach(function(button){if(context.canNavigate&&!context.canNavigate(button.getAttribute("data-dashboard-route")))button.remove();});
-    container.onclick = function (event) { var route = event.target.closest("[data-dashboard-route]"); if (route) context.navigate(route.getAttribute("data-dashboard-route")); };
+    var destinations = [
+      { route: "customers-list", title: "العملاء", text: "إدارة بيانات العملاء وأرصدتهم المحفوظة." },
+      { route: "suppliers-list", title: "الموردون", text: "إدارة الموردين وفواتيرهم ومدفوعاتهم المحفوظة." },
+      { route: "products-list", title: "المنتجات", text: "مراجعة دليل المنتجات والتصنيفات ووحدات القياس." },
+      { route: "warehouses-list", title: "المخازن", text: "مراجعة المخازن والأرصدة والحركات الفعلية." }
+    ].filter(function (item) { return !context.canNavigate || context.canNavigate(item.route); });
+    container.innerHTML = UI.pageHeader(screen) +
+      '<section class="card"><div class="card-head"><h2>ابدأ من هنا</h2></div><div class="card-body"><p>اختر قسمًا للعمل على البيانات المحفوظة. الشاشات غير المكتملة تعرض حالة واضحة ولا تنفذ عمليات تجريبية.</p><div class="stats-grid dashboard-destinations">' +
+      destinations.map(function (item) { return '<button class="card stat-card" type="button" data-dashboard-route="' + U.escape(item.route) + '"><strong class="stat-value">' + U.escape(item.title) + '</strong><span class="stat-meta">' + U.escape(item.text) + '</span></button>'; }).join("") +
+      '</div></div></section>';
+    container.onclick = function (event) { var target = event.target.closest("[data-dashboard-route]"); if (target) context.navigate(target.getAttribute("data-dashboard-route")); };
   }
   global.AlKhayalRenderers.dashboard = dashboard;
 }(window));

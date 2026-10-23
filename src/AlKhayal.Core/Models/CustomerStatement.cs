@@ -22,5 +22,6 @@ namespace AlKhayal.Core.Models
         public decimal Debit { get; set; }
         public decimal Credit { get; set; }
         public decimal Balance { get; set; }
+        public string Kind { get; set; }
     }
 }

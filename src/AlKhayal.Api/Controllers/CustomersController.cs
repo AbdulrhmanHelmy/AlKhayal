@@ -82,6 +82,16 @@ namespace AlKhayal.Api.Controllers
             catch (System.Collections.Generic.KeyNotFoundException ex) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", ex.Message)); }
         }
 
+        [HttpPost, Route("{id:long}/transactions")]
+        public async Task<IHttpActionResult> PostTransaction(long id, CustomerTransactionRequest request, CancellationToken ct)
+        {
+            if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            if (!await HasValidCsrf(ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("invalid_csrf", "تعذر التحقق من الطلب. حدّث الصفحة وحاول مرة أخرى."));
+            try { return Content(HttpStatusCode.Created, ApiEnvelope<CustomerStatementTransaction>.Ok(_accounts.PostTransaction(id,request == null ? null : request.Type,request == null ? 0 : request.Amount,request == null ? null : request.OccurredOn,request == null ? null : request.Notes,request == null ? null : request.OperationKey))); }
+            catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
+            catch (System.Collections.Generic.KeyNotFoundException ex) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", ex.Message)); }
+        }
+
         private async Task<bool> IsAuthenticated(CancellationToken ct) { var token = ReadCookie(); return await _auth.GetCurrentUserAsync(token, ct) != null; }
         private async Task<bool> HasValidCsrf(CancellationToken ct) { return await _auth.ValidateCsrfAsync(ReadCookie(), ReadCsrf(), ct); }
         private IHttpActionResult UnauthorizedResult() { return Content(HttpStatusCode.Unauthorized, ApiEnvelope<object>.Fail("unauthorized", "يرجى تسجيل الدخول أولاً.")); }

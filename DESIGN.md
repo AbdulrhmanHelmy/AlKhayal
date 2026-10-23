@@ -28,3 +28,7 @@ The real product catalog preserves the existing card, toolbar, table, modal, for
 # Task 2.4 warehouse implementation
 
 Warehouse Directory now hosts the persisted inventory workflows inside the approved RTL shell. Keep the Inventory sidebar limited to Product Catalog and Warehouse Directory. Use the existing compact forms, modal focus behavior, navy/gold tokens, and light/dark/system themes. Stock values shown here come from the inventory API only. Implementation details and operator flows are in [docs/warehouse-management.md](docs/warehouse-management.md).
+
+# Customer navigation boundary
+
+The customer sidebar exposes only `إدارة العملاء`, `كشف حساب العميل`, `المعاملات المالية للعميل`, and `تصدير بيانات العملاء`. `إضافة عميل`, `تعديل بيانات عميل`, and `اشتراكات العملاء` are not sidebar links. Creation and editing stay reachable from `إدارة العملاء` through the Arabic `+ إضافة عميل` action and the per-row `تعديل` action, and both save through the persisted customer API. `customer-add` and `customer-edit` remain registered as hidden contextual routes, `customer-subscriptions` remains registered and hidden, and customer balances, statements, and collections are unchanged.

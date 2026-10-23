@@ -32,6 +32,8 @@ namespace AlKhayal.Data.Customers
                     var id = connection.ExecuteScalar<long>("SELECT last_insert_rowid()", transaction: tx);
                     var updated = connection.Execute("UPDATE Customers SET Balance=Balance-@Amount, UpdatedAt=@Now WHERE Id=@Id AND Balance>=@Amount", new { Amount = amount, Now = now, Id = customerId }, tx);
                     if (updated != 1) throw new InvalidOperationException("تعذر تحديث رصيد العميل؛ لم يتم اعتماد الدفعة.");
+                    if(connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='CustomerTransactions'",transaction:tx)>0)
+                        connection.Execute("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc) VALUES(@CustomerId,@Reference,@Reference,'collection',@Scaled,@PaymentDate,@Notes,@CreatedAt)",new{CustomerId=customerId,Reference=reference,Scaled=checked((long)(amount*10000m)),PaymentDate=parsed.ToString("yyyy-MM-dd"),Notes=notes??string.Empty,CreatedAt=now},tx);
                     tx.Commit();
                     return new CustomerPayment { Id = id, CustomerId = customerId, CustomerName = customer.Name, Reference = reference, Amount = amount, PaymentDate = parsed.ToString("yyyy-MM-dd"), Method = method, Account = account, Notes = notes ?? string.Empty, CreatedAt = now };
                 }
@@ -44,6 +46,8 @@ namespace AlKhayal.Data.Customers
             {
                 var customer = connection.QuerySingleOrDefault<Customer>("SELECT Id, Name, Balance, CreditLimit FROM Customers WHERE Id=@Id", new { Id = customerId });
                 if (customer == null) return null;
+                if (connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='CustomerTransactions'") > 0)
+                    return GetLedgerStatement(connection, customer, from, to);
                 var payments = GetPaymentsInternal(connection, customerId);
                 var totalPayments = payments.Sum(x => x.Amount);
                 var openingTotal = customer.Balance + totalPayments;
@@ -65,6 +69,48 @@ namespace AlKhayal.Data.Customers
                 return statement;
             }
         }
+
+        public CustomerStatementTransaction PostTransaction(long customerId,string type,decimal amount,string occurredOn,string notes,string operationKey)
+        {
+            using(var connection=new SQLiteConnection(_connectionString))
+            {
+                connection.Open();using(var tx=connection.BeginTransaction())
+                {
+                    var customer=connection.QuerySingleOrDefault<Customer>("SELECT Id,Name,Balance FROM Customers WHERE Id=@Id",new{Id=customerId},tx);
+                    if(customer==null)throw new KeyNotFoundException("العميل غير موجود.");
+                    var existing=connection.QuerySingleOrDefault<CustomerStatementTransaction>("SELECT Id,CustomerId,TransactionType Type,AmountScaled/10000.0 Amount,OccurredOn,Notes FROM CustomerTransactions WHERE OperationKey=@Key",new{Key=operationKey},tx);
+                    if(existing!=null){existing.Replayed=true;tx.Commit();return existing;}
+                    var total=connection.ExecuteScalar<long>("SELECT COALESCE(SUM(CASE WHEN TransactionType IN ('opening','increase') THEN AmountScaled ELSE -AmountScaled END),0) FROM CustomerTransactions WHERE CustomerId=@Id",new{Id=customerId},tx);
+                    var scaled=checked((long)(amount*10000m));
+                    if((type=="collection"||type=="reduction")&&total<scaled)throw new ArgumentException("المبلغ أكبر من رصيد العميل الحالي.");
+                    var now=DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture);
+                    connection.Execute("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc) VALUES(@CustomerId,@OperationKey,@OperationKey,@Type,@Scaled,@OccurredOn,@Notes,@Now)",new{CustomerId=customerId,OperationKey=operationKey,Type=type,Scaled=scaled,OccurredOn=occurredOn,Notes=notes??string.Empty,Now=now},tx);
+                    var id=connection.ExecuteScalar<long>("SELECT last_insert_rowid()",transaction:tx);
+                    var next=type=="increase"?total+scaled:total-scaled;
+                    connection.Execute("UPDATE Customers SET Balance=@Balance,UpdatedAt=@Now WHERE Id=@Id",new{Balance=next/10000m,Now=now,Id=customerId},tx);
+                    tx.Commit();return new CustomerStatementTransaction{Id=id,CustomerId=customerId,Type=type,Amount=amount,OccurredOn=occurredOn,Notes=notes??string.Empty};
+                }
+            }
+        }
+
+        private static CustomerStatement GetLedgerStatement(SQLiteConnection connection,Customer customer,string from,string to)
+        {
+            DateTime fromDate,toDate;var hasFrom=DateTime.TryParseExact(from,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out fromDate);var hasTo=DateTime.TryParseExact(to,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out toDate);
+            var all=connection.Query<LedgerRow>("SELECT Id,TransactionType Type,AmountScaled,OccurredOn,Notes FROM CustomerTransactions WHERE CustomerId=@Id ORDER BY OccurredOn,Id",new{Id=customer.Id}).ToList();
+            var cutoff=hasFrom?fromDate.ToString("yyyy-MM-dd"):null;long running=all.Where(x=>cutoff==null||string.CompareOrdinal(x.OccurredOn,cutoff)<0).Sum(Signed);
+            var statement=new CustomerStatement{CustomerId=customer.Id,CustomerName=customer.Name,From=hasFrom?cutoff:null,To=hasTo?toDate.ToString("yyyy-MM-dd"):null,OpeningBalance=running/10000m,CreditLimit=customer.CreditLimit};
+            statement.Movements.Add(new CustomerStatementMovement{Date=hasFrom?cutoff:"—",Description="رصيد افتتاحي",Balance=statement.OpeningBalance,Kind="opening"});
+            foreach(var row in all.Where(x=>(!hasFrom||string.CompareOrdinal(x.OccurredOn,cutoff)>=0)&&(!hasTo||string.CompareOrdinal(x.OccurredOn,toDate.ToString("yyyy-MM-dd"))<=0)))
+            {
+                var add=row.Type=="opening"||row.Type=="increase";running+=Signed(row);var amount=row.AmountScaled/10000m;
+                if(add)statement.TotalDebit+=amount;else statement.TotalCredit+=amount;
+                statement.Movements.Add(new CustomerStatementMovement{Date=row.OccurredOn,Description=Description(row.Type),Debit=add?amount:0,Credit=add?0:amount,Balance=running/10000m,Kind=row.Type});
+            }
+            statement.ClosingBalance=running/10000m;return statement;
+        }
+        private sealed class LedgerRow{public long Id{get;set;}public string Type{get;set;}public long AmountScaled{get;set;}public string OccurredOn{get;set;}public string Notes{get;set;}}
+        private static long Signed(LedgerRow x){return x.Type=="opening"||x.Type=="increase"?x.AmountScaled:-x.AmountScaled;}
+        private static string Description(string type){return type=="opening"?"رصيد مرحّل من البيانات القديمة":type=="increase"?"مبلغ اتضاف":type=="collection"?"مبلغ اتدفع":type=="reduction"?"تخفيض الرصيد":"رصيد مرحّل من البيانات القديمة";}
         public List<CustomerPayment> GetPayments(long customerId) { using (var c = new SQLiteConnection(_connectionString)) return GetPaymentsInternal(c, customerId); }
         private static List<CustomerPayment> GetPaymentsInternal(SQLiteConnection connection, long customerId)
         {

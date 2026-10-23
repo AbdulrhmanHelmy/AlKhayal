@@ -39,6 +39,23 @@ namespace AlKhayal.UnitTests
         }
 
         [Fact]
+        public async Task Simplified_product_choices_are_accepted_when_legacy_global_capabilities_are_disabled()
+        {
+            var store = new FakeStore();
+            var service = new CatalogService(store, new DisabledFeatureReader());
+            var result = await service.CreateProductAsync(new CreateProductCommand
+            {
+                OperationKey = "simple-properties", Name = "منتج جديد", BaseUnitId = 1, ProductType = "stock", SalePrice = "9", IsActive = true,
+                Configuration = new ProductConfigurationCommand { CapabilityKeys = new[] { "expiry-dates", "sizes", "colors" } }
+            }, CancellationToken.None);
+            Assert.True(result.Succeeded);
+            Assert.Contains("expiry-dates", store.Created.Configuration.CapabilityKeys);
+            Assert.Contains("batch-tracking", store.Created.Configuration.CapabilityKeys);
+            Assert.Contains("sizes", store.Created.Configuration.CapabilityKeys);
+            Assert.Contains("colors", store.Created.Configuration.CapabilityKeys);
+        }
+
+        [Fact]
         public async Task Review_required_legacy_product_cannot_be_activated()
         {
             var store=new FakeStore{Found=new CatalogProductRecord{Id=7,Name="قديم",BaseUnitId=1,BaseUnitName="قطعة",UnitSymbol="قطعة",ProductType="stock",MigrationState="review_required",Version=1}};
@@ -71,6 +88,12 @@ namespace AlKhayal.UnitTests
             public Task<ProductAttributeValueRecord> CreateAttributeValueAsync(CreateAttributeValueRecord record, CancellationToken ct){throw new NotSupportedException();}
             public Task<ProductAttributeValueRecord> UpdateAttributeValueAsync(UpdateAttributeValueRecord record, CancellationToken ct){throw new NotSupportedException();}
             public Task<BarcodeLookupRecord> LookupBarcodeAsync(string normalizedBarcode, CancellationToken ct){throw new NotSupportedException();}
+        }
+
+        private sealed class DisabledFeatureReader : ICatalogFeatureReader
+        {
+            public Task<IReadOnlyDictionary<string, bool>> GetEffectiveFeaturesAsync(CancellationToken ct) { return Task.FromResult<IReadOnlyDictionary<string, bool>>(new Dictionary<string, bool>()); }
+            public Task<bool> IsFeatureEnabledAsync(string featureKey, CancellationToken ct) { return Task.FromResult(false); }
         }
     }
 }

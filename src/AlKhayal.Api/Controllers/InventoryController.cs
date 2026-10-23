@@ -49,6 +49,8 @@ namespace AlKhayal.Api.Controllers
         public async Task<IHttpActionResult> Movements(long? warehouseId=null,long? productId=null,string type=null,string reference=null,string from=null,string to=null,int page=1,int pageSize=25,CancellationToken ct=default(CancellationToken)){var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;return Ok(ApiEnvelope<InventoryPage<InventoryMovementRecord>>.Ok(await _inventory.MovementsAsync(warehouseId,productId,type,reference,from,to,page,pageSize,ct).ConfigureAwait(false)));}
         [HttpPost,Route("post")]
         public async Task<IHttpActionResult> Post(InventoryPostCommand command,CancellationToken ct){var access=await Require(ct,true,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;if(command!=null)command.UserId=access.User.Id;return Result(await _inventory.PostAsync(command,ct).ConfigureAwait(false),HttpStatusCode.Created);}
+        [HttpPost,Route("cost-basis/reconcile")]
+        public async Task<IHttpActionResult> ReconcileCost(InventoryCostReconciliationCommand command,CancellationToken ct){var access=await Require(ct,true,true).ConfigureAwait(false);if(access.Error!=null)return access.Error;if(command!=null)command.UserId=access.User.Id;return Result(await _inventory.ReconcileCostAsync(command,ct).ConfigureAwait(false));}
         [HttpPost,Route("counts")]
         public async Task<IHttpActionResult> CreateCount(CreateCountRequest request,CancellationToken ct){var access=await Require(ct,true,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;if(request==null||request.WarehouseId<=0)return Content(HttpStatusCode.BadRequest,ApiEnvelope<object>.Fail("invalid_count","اختر المخزن."));return Result(await _inventory.CreateCountAsync(request.WarehouseId,access.User.Id,request.VariantIds,ct).ConfigureAwait(false),HttpStatusCode.Created);}
         [HttpGet,Route("counts")]
@@ -84,7 +86,7 @@ namespace AlKhayal.Api.Controllers
         private IHttpActionResult Result<T>(InventoryResult<T> result,HttpStatusCode success=HttpStatusCode.OK)
         {
             if(result.Succeeded)return Content(success,ApiEnvelope<T>.Ok(result.Value));
-            var status=result.ErrorCode=="not_found"?HttpStatusCode.NotFound:result.ErrorCode=="invalid_operation"||result.ErrorCode=="invalid_type"||result.ErrorCode=="invalid_quantity"||result.ErrorCode=="invalid_cost"||result.ErrorCode=="cost_required"||result.ErrorCode=="reason_required"?HttpStatusCode.BadRequest:HttpStatusCode.Conflict;
+            var status=result.ErrorCode=="not_found"?HttpStatusCode.NotFound:result.ErrorCode=="invalid_operation"||result.ErrorCode=="invalid_type"||result.ErrorCode=="invalid_quantity"||result.ErrorCode=="invalid_cost"||result.ErrorCode=="cost_required"||result.ErrorCode=="sale_price_required"||result.ErrorCode=="invalid_cost_basis"||result.ErrorCode=="reason_required"?HttpStatusCode.BadRequest:HttpStatusCode.Conflict;
             return Content(status,ApiEnvelope<object>.Fail(result.ErrorCode,result.ErrorMessage));
         }
         private string ReadToken(){IEnumerable<string> values;if(!Request.Headers.TryGetValues("Cookie",out values))return null;foreach(var header in values)foreach(var part in header.Split(';')){var pair=part.Trim().Split(new[]{'='},2);if(pair.Length==2&&pair[0]=="alkhayal_session")return pair[1];}return null;}

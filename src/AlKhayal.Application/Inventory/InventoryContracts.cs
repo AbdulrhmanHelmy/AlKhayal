@@ -56,6 +56,7 @@ namespace AlKhayal.Application.Inventory
         public long ProductUnitId { get; set; }
         public string Quantity { get; set; }
         public string UnitCost { get; set; }
+        public string SalePrice { get; set; }
         public string LotNumber { get; set; }
         public string ExpirationDate { get; set; }
         public IReadOnlyList<InventoryUnitInput> PhysicalUnits { get; set; }
@@ -96,6 +97,10 @@ namespace AlKhayal.Application.Inventory
         public long QuantityBaseScaled { get; set; }
         public long ValueScaled { get; set; }
         public long Version { get; set; }
+        public long? SalePriceScaled { get; set; }
+        public bool CostBasisComplete { get; set; }
+        public long? UnresolvedLayerId { get; set; }
+        public bool HasReconciledCostBasis { get; set; }
     }
 
     public sealed class InventoryMovementRecord
@@ -106,6 +111,7 @@ namespace AlKhayal.Application.Inventory
         public string CreatedUtc { get; set; }
         public long WarehouseId { get; set; }
         public string WarehouseName { get; set; }
+        public string RelatedWarehouseName { get; set; }
         public long ProductId { get; set; }
         public long VariantId { get; set; }
         public string ProductName { get; set; }
@@ -161,6 +167,8 @@ namespace AlKhayal.Application.Inventory
     {
         public long VariantId { get; set; }
         public long? BatchId { get; set; }
+        public string LotNumber { get; set; }
+        public string ExpirationDate { get; set; }
         public string ProductName { get; set; }
         public string VariantName { get; set; }
         public long RecordedQuantityScaled { get; set; }
@@ -168,6 +176,7 @@ namespace AlKhayal.Application.Inventory
         public string CountedQuantity { get; set; }
         public long BalanceVersion { get; set; }
         public string UnitCost { get; set; }
+        public bool SerialTracked { get; set; }
         public IReadOnlyList<InventoryUnitInput> PhysicalUnits { get; set; }
     }
     public sealed class InventoryCountPostCommand
@@ -179,8 +188,19 @@ namespace AlKhayal.Application.Inventory
         public IReadOnlyList<InventoryCountLine> Lines { get; set; }
     }
 
+    public sealed class InventoryCostReconciliationCommand
+    {
+        public string OperationKey { get; set; }
+        public long LayerId { get; set; }
+        public long ExpectedVersion { get; set; }
+        public string UnitCost { get; set; }
+        public string Evidence { get; set; }
+        public long UserId { get; set; }
+    }
+
     public interface IInventoryStore
     {
+        Task<InventoryResult<long>> ReconcileCostAsync(InventoryCostReconciliationCommand command,string requestHash,CancellationToken ct);
         Task<IReadOnlyList<WarehouseRecord>> WarehousesAsync(CancellationToken ct);
         Task<InventoryResult<WarehouseRecord>> SaveWarehouseAsync(WarehouseCommand command,bool multipleWarehouses,CancellationToken ct);
         Task<InventoryResult<InventoryPostResult>> PostAsync(InventoryPostCommand command,string requestHash,CancellationToken ct);
