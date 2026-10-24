@@ -19,7 +19,8 @@ namespace AlKhayal.Api.Controllers
         private readonly SupplierService _suppliers;
         private readonly AuthService _auth;
         private readonly SupplierAccountService _accounts;
-        public SuppliersController(SupplierService suppliers, AuthService auth, SupplierAccountService accounts) { _suppliers = suppliers; _auth = auth; _accounts = accounts; }
+        private readonly SupplierLedgerService _ledger;
+        public SuppliersController(SupplierService suppliers, AuthService auth, SupplierAccountService accounts, SupplierLedgerService ledger) { _suppliers = suppliers; _auth = auth; _accounts = accounts; _ledger = ledger; }
 
         [HttpGet, Route("")]
         public async Task<IHttpActionResult> GetAll(CancellationToken ct)
@@ -63,10 +64,18 @@ namespace AlKhayal.Api.Controllers
             if (!await IsAuthenticated(ct)) return UnauthorizedResult();
             try
             {
-                var statement = _accounts.GetStatement(id, from, to);
+                var statement = await _ledger.StatementAsync(id, from, to, ct);
                 return statement == null ? NotFoundResult("المورد غير موجود.") : Ok(ApiEnvelope<object>.Ok(statement));
             }
             catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
+        }
+
+        [HttpGet, Route("{id:long}/ledger")]
+        public async Task<IHttpActionResult> GetLedger(long id, CancellationToken ct)
+        {
+            if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            if (_suppliers.GetById(id) == null) return NotFoundResult("المورد غير موجود.");
+            return Ok(ApiEnvelope<object>.Ok(await _ledger.HistoryAsync(id, ct)));
         }
 
         [HttpGet, Route("{id:long}/invoices")]
@@ -98,11 +107,13 @@ namespace AlKhayal.Api.Controllers
             if (!await HasValidCsrf(ct)) return CsrfResult();
             try
             {
-                var payment = _accounts.AddPayment(id, new SupplierPayment { InvoiceId = request == null ? null : request.InvoiceId, Amount = request == null ? 0 : request.Amount, PaymentDate = request == null ? null : request.PaymentDate, Method = request == null ? null : request.Method, Account = request == null ? null : request.Account, Notes = request == null ? null : request.Notes });
-                return Content(HttpStatusCode.Created, ApiEnvelope<SupplierPayment>.Ok(payment));
+                if (request == null) throw new ArgumentException("بيانات الدفع غير مكتملة.");
+                var entry = await _ledger.AddPaymentAsync(id, request.InvoiceId, request.PurchaseInvoiceId, request.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), request.PaymentDate, request.Method, request.Account, request.Notes, request.OperationKey, ct);
+                return Content(HttpStatusCode.Created, ApiEnvelope<SupplierLedgerEntry>.Ok(entry));
             }
             catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
             catch (KeyNotFoundException ex) { return NotFoundResult(ex.Message); }
+            catch (InvalidOperationException ex) { return Content(HttpStatusCode.Conflict, ApiEnvelope<object>.Fail("operation_conflict", ex.Message)); }
         }
 
         private IHttpActionResult NotFoundResult(string message) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", message)); }

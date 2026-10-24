@@ -21,6 +21,7 @@ Last audited: 2026-10-20
 - Sidebar collapse remains persisted in local storage, retains a 64px icon rail, keeps footer actions available, and uses an accessible route modal at compact widths. Navigation and quick-access icons are inline SVGs.
 - Tabs preserve `scrollTop` per route, reveal the active tab, and keep the dashboard as the pinned singleton route.
 - The WinForms host declares Per-Monitor DPI awareness in `src/AlKhayal.UI/app.manifest`, uses DPI scaling in the form, fills WebView2 through docking, sets `ZoomFactor` to `1.0`, disables built-in zoom/pinch controls, and injects desktop-only prevention for Ctrl+wheel/Ctrl+plus/Ctrl+minus/Ctrl+0. Ctrl+F/S/P are not blocked.
+- WebView2 user data defaults to `%LOCALAPPDATA%\AlKhayal\WebView2`. `ALKHAYAL_WEBVIEW2_USER_DATA_FOLDER` may select an explicit absolute profile directory for an isolated test run. Invalid, empty, relative, or overlapping paths fail visibly; they never fall back to the default profile. Test runs must also set `ALKHAYAL_DATABASE_PATH` to their isolated local SQLite file and verify both resolved paths before launch.
 - Mock-data notices are compact and consistently identify the session-only boundary as `وضع تجريبي — البيانات غير محفوظة فعليًا`.
 - Sidebar header toggle placement now uses one adjacent logo/toggle cluster with state-specific RTL panel icons and Arabic tooltips. Collapsed rail controls remove expanded padding/gaps at the layout level, keeping 21px SVG icons centered across the full 64px rail; footer controls use the same centering contract.
 

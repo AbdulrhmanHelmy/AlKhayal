@@ -10,26 +10,41 @@ namespace AlKhayal.Data.Suppliers
 {
     public sealed class SqliteSupplierRepository : ISupplierRepository
     {
-        private const string SelectColumns = "s.Id, s.Code, s.Name, s.Contact, s.Phone, s.Address, s.Payable, s.Status, COALESCE((SELECT SUM(p.Amount) FROM SupplierPayments p WHERE p.SupplierId = s.Id), 0) AS Paid";
+        private const string SelectColumns = "s.Id, s.Code, s.Name, s.Contact, s.Phone, s.Address, s.Payable, s.SupplierCredit, s.Status, COALESCE((SELECT SUM(CASE WHEN l.AmountScaled<0 AND l.EntryType IN ('payment','legacy_payment') THEN -l.AmountScaled ELSE 0 END) FROM SupplierLedgerEntries l WHERE l.SupplierId=s.Id),0) AS PaidScaled";
         private readonly string _connectionString;
         public SqliteSupplierRepository(string connectionString) { _connectionString = connectionString; }
 
         public List<Supplier> GetAll()
         {
             using (var connection = new SQLiteConnection(_connectionString))
-                return connection.Query<Supplier>("SELECT " + SelectColumns + " FROM Suppliers s ORDER BY s.Id DESC").ToList();
+                return connection.Query<SupplierRow>("SELECT " + SelectColumns + " FROM Suppliers s ORDER BY s.Id DESC").Select(ToSupplier).ToList();
         }
 
         public Supplier GetById(long id)
         {
             using (var connection = new SQLiteConnection(_connectionString))
-                return connection.QuerySingleOrDefault<Supplier>("SELECT " + SelectColumns + " FROM Suppliers s WHERE s.Id = @Id", new { Id = id });
+            {
+                var row = connection.QuerySingleOrDefault<SupplierRow>("SELECT " + SelectColumns + " FROM Suppliers s WHERE s.Id = @Id", new { Id = id });
+                return row == null ? null : ToSupplier(row);
+            }
         }
 
         public long Add(Supplier supplier)
         {
             using (var connection = new SQLiteConnection(_connectionString))
-                return connection.ExecuteScalar<long>("INSERT INTO Suppliers (Code, Name, Contact, Phone, Address, Payable, Status, CreatedAt, UpdatedAt) VALUES (@Code, @Name, @Contact, @Phone, @Address, @Payable, @Status, @Now, @Now); SELECT last_insert_rowid();", new { supplier.Code, supplier.Name, supplier.Contact, supplier.Phone, supplier.Address, supplier.Payable, supplier.Status, Now = DateTime.UtcNow.ToString("o") });
+            {
+                connection.Open(); using (var tx = connection.BeginTransaction())
+                {
+                    var now = DateTime.UtcNow.ToString("o");
+                    var id = connection.ExecuteScalar<long>("INSERT INTO Suppliers (Code, Name, Contact, Phone, Address, Payable, Status, CreatedAt, UpdatedAt) VALUES (@Code, @Name, @Contact, @Phone, @Address, @Payable, @Status, @Now, @Now); SELECT last_insert_rowid();", new { supplier.Code, supplier.Name, Contact = supplier.Contact ?? string.Empty, supplier.Phone, Address = supplier.Address ?? string.Empty, supplier.Payable, supplier.Status, Now = now }, tx);
+                    if (connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='SupplierLedgerEntries'", transaction: tx) != 0)
+                    {
+                        var scaled = checked((long)Math.Round(supplier.Payable * 10000m, 0, MidpointRounding.AwayFromZero));
+                        if (scaled > 0) connection.Execute("INSERT INTO SupplierLedgerEntries(SupplierId,EntryType,AmountScaled,OccurredOn,Reference,Notes,CreatedUtc) VALUES(@Id,'opening',@Amount,@Date,@Reference,'رصيد افتتاحي للمورد',@Now)", new { Id = id, Amount = scaled, Date = DateTime.UtcNow.ToString("yyyy-MM-dd"), Reference = "OPEN-" + id, Now = now }, tx);
+                    }
+                    tx.Commit(); return id;
+                }
+            }
         }
 
         public bool Update(Supplier supplier)
@@ -42,6 +57,37 @@ namespace AlKhayal.Data.Suppliers
         {
             using (var connection = new SQLiteConnection(_connectionString))
                 return connection.Execute("DELETE FROM Suppliers WHERE Id=@Id", new { Id = id }) == 1;
+        }
+
+        private static Supplier ToSupplier(SupplierRow row)
+        {
+            return new Supplier
+            {
+                Id = row.Id,
+                Code = row.Code,
+                Name = row.Name,
+                Contact = row.Contact,
+                Phone = row.Phone,
+                Address = row.Address,
+                Payable = row.Payable,
+                SupplierCredit = row.SupplierCredit,
+                Status = row.Status,
+                Paid = row.PaidScaled / 10000m
+            };
+        }
+
+        private sealed class SupplierRow
+        {
+            public long Id { get; set; }
+            public string Code { get; set; }
+            public string Name { get; set; }
+            public string Contact { get; set; }
+            public string Phone { get; set; }
+            public string Address { get; set; }
+            public decimal Payable { get; set; }
+            public decimal SupplierCredit { get; set; }
+            public string Status { get; set; }
+            public long PaidScaled { get; set; }
         }
     }
 }

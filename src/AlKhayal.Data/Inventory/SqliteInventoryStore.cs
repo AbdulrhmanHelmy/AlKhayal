@@ -115,6 +115,11 @@ namespace AlKhayal.Data.Inventory
             catch(OverflowException){return Fail<InventoryPostResult>("numeric_overflow","الكمية أو القيمة تتجاوز الحد المسموح.");}
         }
 
+        // Purchasing composes this existing inventory posting path into its own SQLite
+        // transaction so invoice, ledger, receipt, FIFO layers, and payment commit together.
+        internal Task<InventoryResult<InventoryPostResult>> PostWithinTransactionAsync(SQLiteConnection c,SQLiteTransaction tx,InventoryPostCommand command,string requestHash,CancellationToken ct)
+        { return PostInTransactionAsync(c,tx,command,requestHash,null,ct); }
+
         private static async Task<InventoryResult<InventoryPostResult>> ReplayAsync(SQLiteConnection c,SQLiteTransaction tx,string key,string hash,CancellationToken ct)
         {
             var existing=await c.QuerySingleOrDefaultAsync<DocumentState>(Cmd("SELECT Id,RequestHash FROM InventoryDocuments WHERE OperationKey=@Key",new{Key=key},tx,ct)).ConfigureAwait(false);
@@ -230,7 +235,7 @@ namespace AlKhayal.Data.Inventory
                 }
                 else
                 {
-                    var planned=await PlanFifoAsync(c,tx,command.WarehouseId,line.VariantId,batchId,Math.Abs(baseQuantity),balance,ct).ConfigureAwait(false);
+                    var planned=await PlanFifoAsync(c,tx,command.WarehouseId,line.VariantId,batchId,Math.Abs(baseQuantity),balance,line.RequiredOriginMovementId,ct).ConfigureAwait(false);
                     if(!planned.Succeeded)return Fail<InventoryPostResult>(planned.ErrorCode,planned.ErrorMessage);
                     costTakes=planned.Value;long takenValue=0;foreach(var take in costTakes)takenValue=checked(takenValue+take.Value);
                     value=checked(-takenValue);

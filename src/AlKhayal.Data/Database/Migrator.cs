@@ -53,6 +53,8 @@ namespace AlKhayal.Data.Database
                             CatalogTask22Preflight.Run(conn, tx);
                         if (script.EndsWith("015_customer_transactions.sql", StringComparison.Ordinal))
                             CustomerLedgerMigrationPreflight.Run(conn, tx);
+                        if (script.EndsWith("017_integrated_purchasing.sql", StringComparison.Ordinal))
+                            SupplierLedgerMigrationPreflight.Run(conn, tx);
 
                         Execute(conn, tx, sql);
 

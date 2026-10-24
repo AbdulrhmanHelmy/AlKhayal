@@ -12,6 +12,8 @@ namespace AlKhayal.Api.Contracts
     public sealed class SupplierPaymentRequest
     {
         public long? InvoiceId { get; set; }
+        public long? PurchaseInvoiceId { get; set; }
+        public string OperationKey { get; set; }
         public decimal Amount { get; set; }
         public string PaymentDate { get; set; }
         public string Method { get; set; }

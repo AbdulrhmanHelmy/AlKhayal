@@ -43,15 +43,15 @@ Originally generated from `frontend/data/screens.json` on 2026-10-20. Batch 1 ad
 | الموردين | تأكيد سداد المورد | `supplier-payment-confirm` | `frontend/js/modules/renderers.js` | workflow | suppliers | Review and simulated confirmation | Registry verified |
 | الموردين | تقارير الموردين | `supplier-reports` | `frontend/js/modules/renderers.js` | report | suppliers | Date/branch filters, summary, chart, CSV/print preview | Registry verified |
 | الموردين | تقرير المبالغ المسددة للموردين | `supplier-paid-report` | `frontend/js/modules/renderers.js` | report | suppliers | Date/branch filters, summary, chart, CSV/print preview | Registry verified |
-| المشتريات | إدارة المشتريات | `purchase-management` | `frontend/js/modules/renderers.js` | invoice-editor | purchases | Line items, quantities, dates and calculated totals | Browser smoke |
+| المشتريات | إدارة المشتريات | `purchase-management` | `frontend/js/modules/purchasing.js` | purchase-management | purchases | Persisted drafts, exact scale-4 totals, configured tracking data and atomic invoice/stock posting | Automated API/registry tests; native WebView2 smoke pending |
 | المشتريات | إدارة الموردين أثناء الشراء | `purchase-supplier` | `frontend/js/modules/renderers.js` | picker | suppliers | Interactive session workflow or preview | Registry verified |
-| المشتريات | قائمة المشتريات | `purchases-list` | `frontend/js/modules/renderers.js` | entity-list | purchases | Search, filter, sort, paginate, inspect and session actions | Registry verified |
+| المشتريات | قائمة المشتريات | `purchases-list` | `frontend/js/modules/purchasing.js` | purchase-list | purchases | Persisted invoice list, draft resume and navigation to new invoice | Automated registry tests |
 | المشتريات | تقارير المشتريات | `purchase-reports` | `frontend/js/modules/renderers.js` | report | purchases | Date/branch filters, summary, chart, CSV/print preview | Registry verified |
 | المشتريات | تعيين تاريخ صلاحية المنتجات | `purchase-expiry` | `frontend/js/modules/renderers.js` | workflow | products | Review and simulated confirmation | Registry verified |
 | المشتريات | تأكيد عملية الشراء | `purchase-confirm` | `frontend/js/modules/renderers.js` | workflow | purchases | Review and simulated confirmation | Registry verified |
 | المرتجعات | نظرة عامة على المرتجعات | `returns-overview` | `frontend/js/modules/renderers.js` | entity-list | returns | Search, filter, sort, paginate, inspect and session actions | Registry verified |
 | المرتجعات | إدارة مرتجعات المبيعات | `sales-returns` | `frontend/js/modules/renderers.js` | returns | sales | Interactive session workflow or preview | Registry verified |
-| المرتجعات | إدارة مرتجعات المشتريات | `purchase-returns` | `frontend/js/modules/renderers.js` | returns | purchases | Interactive session workflow or preview | Registry verified |
+| المرتجعات | إدارة مرتجعات المشتريات | `purchase-returns` | `frontend/js/modules/purchasing.js` | purchase-returns | purchases | Select posted invoice/warehouse, return eligible quantities/serials, choose refund or supplier credit and review FIFO variance | Automated API/registry tests; native WebView2 smoke pending |
 | التسطيب والطباعة | تسطيب برنتر الفواتير | `receipt-printer` | `frontend/js/modules/renderers.js` | printer | UI/session state | Configuration and print preview only | Registry verified |
 | التسطيب والطباعة | تسطيب برنتر الباركود | `barcode-printer` | `frontend/js/modules/renderers.js` | printer | UI/session state | Configuration and print preview only | Registry verified |
 | التسطيب والطباعة | تصميم وطباعة الباركود | `barcode-designer` | `frontend/js/modules/renderers.js` | barcode | UI/session state | Interactive label design and print preview | Registry verified |

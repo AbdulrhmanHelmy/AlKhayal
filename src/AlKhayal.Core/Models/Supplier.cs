@@ -10,6 +10,7 @@ namespace AlKhayal.Core.Models
         public string Address { get; set; }
         // Current amount owed to the supplier. Changed only by invoices and payments after creation.
         public decimal Payable { get; set; }
+        public decimal SupplierCredit { get; set; }
         // Sum of all recorded payments (read-only, derived).
         public decimal Paid { get; set; }
         public string Status { get; set; }

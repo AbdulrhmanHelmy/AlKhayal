@@ -62,6 +62,7 @@ namespace AlKhayal.Application.Inventory
         public IReadOnlyList<InventoryUnitInput> PhysicalUnits { get; set; }
         public long? ExpectedVersion { get; set; }
         public string ExpectedQuantity { get; set; }
+        public long? RequiredOriginMovementId { get; set; }
     }
 
     public sealed class InventoryPostCommand

@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AlKhayal.Server.Host;
@@ -48,6 +47,12 @@ namespace AlKhayal.UI
                     throw new InvalidOperationException("لم يتم العثور على WebView2 Runtime.");
                 }
 
+                var localApplicationDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var dataDirectory = WebView2UserDataFolderResolver.Resolve(
+                    Environment.GetEnvironmentVariable("ALKHAYAL_WEBVIEW2_USER_DATA_FOLDER"),
+                    localApplicationDataPath);
+                WebView2UserDataFolderResolver.EnsureDirectory(dataDirectory);
+
                 var url = Environment.GetEnvironmentVariable("ALKHAYAL_SERVER_URL");
                 if (string.IsNullOrWhiteSpace(url))
                 {
@@ -57,12 +62,6 @@ namespace AlKhayal.UI
                 }
 
                 var allowedOrigin = new Uri(url, UriKind.Absolute);
-                var dataDirectory = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "AlKhayal",
-                    "WebView2");
-                Directory.CreateDirectory(dataDirectory);
-
                 var environment = await CoreWebView2Environment.CreateAsync(null, dataDirectory);
                 await _browser.EnsureCoreWebView2Async(environment);
                 // Frontend files and the screen registry must be from the same deployment version.

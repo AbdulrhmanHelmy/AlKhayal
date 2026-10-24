@@ -1,0 +1,110 @@
+{
+  "health": "ok",
+  "supplierId": 4,
+  "productId": 4,
+  "variantId": 4,
+  "warehouseId": 1,
+  "firstInvoiceId": 4,
+  "firstInvoiceTotal": "500",
+  "firstInvoicePaymentMode": "cash",
+  "supplierCreditReturn": {
+    "total": "100",
+    "mode": "supplier_credit"
+  },
+  "secondInvoiceId": 5,
+  "secondInvoiceTotal": "50.25",
+  "cashRefund": {
+    "total": "25.125",
+    "mode": "cash_refund"
+  },
+  "supplierLedgerCount": 6,
+  "supplierStatement": {
+    "supplierId": 4,
+    "supplierName": "مورد اختبار القبول",
+    "openingBalance": 0.0,
+    "totalInvoices": 550.25,
+    "totalPaid": 675.375,
+    "closingBalance": -125.125,
+    "movements": [
+      {
+        "date": "2026-10-24",
+        "reference": "PUR-4",
+        "description": "فاتورة شراء AT-0eadfa16-001",
+        "debit": 0.0,
+        "credit": 500.0,
+        "balance": 500.0
+      },
+      {
+        "date": "2026-10-24",
+        "reference": "PAY-PUR-4",
+        "description": "دفعة للمورد — نقدي - تسوية فاتورة شراء",
+        "debit": 500.0,
+        "credit": 0.0,
+        "balance": 0.0
+      },
+      {
+        "date": "2026-10-24",
+        "reference": "PUR-RET-2",
+        "description": "مرتجع شراء — رصيد لدى المورد",
+        "debit": 100.0,
+        "credit": 0.0,
+        "balance": -100.0
+      },
+      {
+        "date": "2026-10-24",
+        "reference": "PUR-5",
+        "description": "فاتورة شراء AT-0eadfa16-002",
+        "debit": 0.0,
+        "credit": 50.25,
+        "balance": -49.75
+      },
+      {
+        "date": "2026-10-24",
+        "reference": "PAY-PUR-5",
+        "description": "دفعة للمورد — نقدي - تسوية فاتورة شراء",
+        "debit": 50.25,
+        "credit": 0.0,
+        "balance": -100.0
+      },
+      {
+        "date": "2026-10-24",
+        "reference": "PUR-RET-3",
+        "description": "مرتجع شراء — مبلغ مسترد مسجل (دون حركة خزينة)",
+        "debit": 25.125,
+        "credit": 0.0,
+        "balance": -125.125
+      }
+    ]
+  },
+  "inventoryBalances": [
+    {
+      "warehouseId": 1,
+      "productId": 4,
+      "variantId": 4,
+      "productName": "قهوة اختبار 0eadfa16",
+      "variantName": "افتراضي",
+      "quantityBaseScaled": 5000000,
+      "valueScaled": 4251250,
+      "version": 4,
+      "salePriceScaled": 1500000,
+      "costBasisComplete": true,
+      "hasReconciledCostBasis": false
+    },
+    {
+      "warehouseId": 1,
+      "productId": 3,
+      "variantId": 3,
+      "productName": "قهوة اختبار d65e5a95",
+      "variantName": "افتراضي",
+      "quantityBaseScaled": 6000000,
+      "valueScaled": 4502500,
+      "version": 3,
+      "salePriceScaled": 1500000,
+      "costBasisComplete": true,
+      "hasReconciledCostBasis": false
+    }
+  ],
+  "inventoryMovementCount": 7,
+  "inventoryIntegrity": true,
+  "createdVia": "API only; GUI not exercised"
+}

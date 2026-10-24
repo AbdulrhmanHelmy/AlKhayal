@@ -461,8 +461,8 @@
       "route": "purchase-management",
       "module": "المشتريات",
       "title": "إدارة المشتريات",
-      "description": "محرر فاتورة شراء تجريبية بأصناف وصلاحيات وأسعار.",
-      "renderer": "invoice-editor",
+      "description": "حفظ مسودة فاتورة الشراء ونشرها مع استلام المخزون وتسجيل حساب المورد.",
+      "renderer": "purchase-management",
       "data": "purchases",
       "invoiceType": "purchase"
     },
@@ -478,8 +478,8 @@
       "route": "purchases-list",
       "module": "المشتريات",
       "title": "قائمة المشتريات",
-      "description": "سجل فواتير الشراء وحالات السداد.",
-      "renderer": "entity-list",
+      "description": "سجل فواتير الشراء المنشورة والمسودات المحفوظة.",
+      "renderer": "purchase-list",
       "data": "purchases"
     },
     {
@@ -531,10 +531,9 @@
       "route": "purchase-returns",
       "module": "المرتجعات",
       "title": "إدارة مرتجعات المشتريات",
-      "description": "محاكاة مرتجع مورد دون حركة مخزون أو دفتر أستاذ.",
-      "renderer": "returns",
-      "data": "purchases",
-      "returnType": "purchase"
+      "description": "إرجاع بضاعة من إيصال الشراء الأصلي مع تحديد تسوية المورد وتكلفة FIFO.",
+      "renderer": "purchase-returns",
+      "data": "purchases"
     },
 
     {

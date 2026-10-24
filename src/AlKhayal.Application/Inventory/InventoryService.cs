@@ -108,7 +108,7 @@ namespace AlKhayal.Application.Inventory
             catch(OverflowException){return false;}
         }
 
-        private static string CanonicalHashPost(InventoryPostCommand command)
+        public static string CanonicalHashPost(InventoryPostCommand command)
         {
             var sb=new StringBuilder();sb.Append("post|");AppendPostPayload(sb,command,null);
             return "v2:"+Hash(sb.ToString());
@@ -163,6 +163,7 @@ namespace AlKhayal.Application.Inventory
                 // is an explicit extension and is always part of the receipt identity.
                 if(l.SalePrice!=null){sb.Append("sale|");AppendCanonical(sb,l.SalePrice);}
                 AppendCanonical(sb,l.ExpectedVersion);AppendCanonical(sb,l.ExpectedQuantity);
+                if(l.RequiredOriginMovementId.HasValue){sb.Append("origin|");AppendCanonical(sb,l.RequiredOriginMovementId);}
                 AppendCanonical(sb,(l.PhysicalUnits?.Count??0).ToString(CultureInfo.InvariantCulture));
                 foreach(var u in l.PhysicalUnits??new InventoryUnitInput[0])
                 {

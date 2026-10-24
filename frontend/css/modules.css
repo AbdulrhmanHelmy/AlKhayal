@@ -123,3 +123,20 @@
 .inventory-warehouse-browser { margin-bottom: 12px; }
 .inventory-warehouse-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; max-height: 116px; overflow-y: auto; }
 .inventory-warehouse-choices [hidden] { display: none; }
+/* Integrated purchasing: compact, bounded RTL forms and invoice lines. */
+.purchase-head .card-body { padding: 16px; }
+.purchase-search { position: relative; width: min(100%, 360px); }
+.purchase-results { position: absolute; z-index: 4; inset-inline: 0; top: calc(100% + 4px); max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-md); }
+.purchase-result { display: block; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); text-align: start; cursor: pointer; }
+.purchase-result:hover, .purchase-result:focus-visible { background: var(--surface-raised); }
+.purchase-total { display: flex; justify-content: space-between; margin-block: 16px 4px; font-size: 1.05rem; }
+.purchase-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-block: 16px; }
+.purchase-actions > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.purchase-actions .muted { min-width: 0; }
+.purchase-tracking { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; max-width: 520px; margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
+.purchase-tracking label { display: grid; gap: 4px; }
+.purchase-tracking textarea { min-height: 54px; }
+.return-serial { display: inline-flex !important; grid-template-columns: auto 1fr !important; align-items: center; gap: 5px !important; margin-inline-end: 10px; }
+.purchase-head .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 760px) { .purchase-head .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .purchase-actions { align-items: stretch; flex-direction: column; } }
+@media (max-width: 560px) { .purchase-head .form-grid { grid-template-columns: minmax(0, 1fr); } .purchase-search { width: 100%; } }

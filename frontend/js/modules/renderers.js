@@ -1145,8 +1145,7 @@
         });
       });
   }
-  var supplierAccounts = ["الخزنة الرئيسية", "بنك مصر — حساب جاري"],
-    supplierMethods = ["نقدي", "تحويل", "بطاقة"];
+  var supplierMethods = ["نقدي", "تحويل", "بطاقة"];
   function todayIso() {
     return new Date().toISOString().slice(0, 10);
   }
@@ -1183,6 +1182,7 @@
       .join("");
   }
   function openSupplierPaymentModal(supplier, invoice, afterSave) {
+    var paymentOperationKey = "supplier-pay-" + supplier.id + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
     var limit = invoice
       ? Number(invoice.remaining || 0)
       : Number(supplier.payable || 0);
@@ -1191,17 +1191,15 @@
         id: "amount",
         label: "قيمة الدفع",
         type: "number",
-        min: 0.01,
-        step: "0.01",
+        min: 0.0001,
+        step: "0.0001",
         required: true,
       },
       { id: "paymentDate", label: "تاريخ الدفع", type: "date", required: true },
       {
         id: "account",
-        label: "حساب السداد",
-        type: "select",
-        options: supplierAccounts,
-        required: true,
+        label: "مرجع السداد (اختياري — لا حركة خزينة)",
+        type: "text",
       },
       {
         id: "method",
@@ -1215,7 +1213,7 @@
     var defaults = {
       amount: limit,
       paymentDate: todayIso(),
-      account: supplierAccounts[0],
+      account: "",
       method: supplierMethods[0],
       notes: "",
     };
@@ -1229,7 +1227,7 @@
         " — " +
         (invoice ? "المتبقي على الفاتورة " : "المستحق الحالي ") +
         U.money(limit) +
-        "</p>" +
+        "</p><p class=\"muted\">سيُسجل هذا الدفع في حساب المورد فقط؛ لا يتم ترحيل حركة نقدية أو بنكية.</p>" +
         '<form id="supplierPayForm" class="form-grid" novalidate>' +
         fields
           .map(function (field) {
@@ -1269,6 +1267,7 @@
               method: "POST",
               body: JSON.stringify({
                 invoiceId: invoice ? invoice.id : null,
+                operationKey: paymentOperationKey,
                 amount: amount,
                 paymentDate: result.data.paymentDate,
                 method: result.data.method,
@@ -1605,7 +1604,7 @@
       });
   }
   function supplierPayment(screen, container) {
-    var suppliers = [];
+    var suppliers = [], paymentOperationKey = null;
     function invoiceOptions(invoices) {
       return (
         '<option value="">دفعة على الحساب (بدون فاتورة محددة)</option>' +
@@ -1640,7 +1639,7 @@
             label: "قيمة السداد",
             type: "number",
             min: 0.01,
-            step: "0.01",
+            step: "0.0001",
             required: true,
           },
           "",
@@ -1657,12 +1656,10 @@
         UI.field(
           {
             id: "account",
-            label: "حساب السداد",
-            type: "select",
-            options: supplierAccounts,
-            required: true,
+            label: "مرجع السداد (اختياري — لا حركة خزينة)",
+            type: "text",
           },
-          supplierAccounts[0],
+          "",
         ) +
         UI.field(
           {
@@ -1678,7 +1675,7 @@
           { id: "notes", label: "ملاحظات", type: "textarea", span: true },
           "",
         ) +
-        '<div class="span-2"><button class="button primary" type="submit">حفظ السداد في قاعدة البيانات</button></div></form><div id="supplierPaymentResult" class="muted" style="margin-top:12px">سيتم حفظ السداد وتحديث مستحقات المورد (وفاتورته إن اخترتها) عند نجاح العملية.</div></div></section>';
+        '<div class="span-2"><button class="button primary" type="submit">تسجيل السداد بحساب المورد</button></div></form><div id="supplierPaymentResult" class="muted" style="margin-top:12px">يُسجل في حساب المورد فقط؛ لا يتم إنشاء حركة خزينة أو بنك.</div></div></section>';
       var form = container.querySelector("#supplierPaymentForm"),
         supplierSelect = form.querySelector("#paymentSupplier"),
         invoiceSelect = form.querySelector("#paymentInvoice");
@@ -1716,7 +1713,8 @@
           invoice = (invoiceSelect._invoices || []).find(function (row) {
             return String(row.id) === invoiceSelect.value;
           }),
-          amount = Number(form.querySelector("#amount").value),
+          amountText = form.querySelector("#amount").value,
+          amount = Number(amountText),
           button = form.querySelector('[type="submit"]');
         if (!(amount > 0)) {
           UI.toast("أدخل قيمة سداد أكبر من صفر.", "danger");
@@ -1731,6 +1729,7 @@
           return;
         }
         button.disabled = true;
+        paymentOperationKey = paymentOperationKey || "supplier-pay-" + supplier.id + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
         try {
           var saved = await AlKhayalApi.request(
             "/api/suppliers/" +
@@ -1740,7 +1739,8 @@
               method: "POST",
               body: JSON.stringify({
                 invoiceId: invoice ? invoice.id : null,
-                amount: amount,
+                amount: amountText,
+                operationKey: paymentOperationKey,
                 paymentDate: form.querySelector("#paymentDate").value,
                 method: form.querySelector("#method").value,
                 account: form.querySelector("#account").value,
@@ -1749,6 +1749,7 @@
             },
           );
           suppliers = await AlKhayalApi.request("/api/suppliers");
+          paymentOperationKey = null;
           S.store.replace("suppliers", suppliers);
           UI.toast(
             "تم حفظ السداد في قاعدة البيانات وتحديث رصيد المورد.",

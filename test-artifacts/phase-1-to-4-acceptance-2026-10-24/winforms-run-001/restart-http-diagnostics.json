@@ -1,0 +1,62 @@
+{
+  "processId": 27088,
+  "health": true,
+  "loginStatus": 200,
+  "authMeStatus": 200,
+  "suppliersStatus": 200,
+  "supplierResponse": {
+    "success": true,
+    "data": [
+      {
+        "id": 4,
+        "code": "AT-0eadfa16",
+        "name": "مورد اختبار القبول",
+        "contact": "مختبر القبول",
+        "phone": "01000000000",
+        "address": "مصر",
+        "payable": 0.0,
+        "supplierCredit": 125.125,
+        "paid": 550.25,
+        "status": "active"
+      },
+      {
+        "id": 3,
+        "code": "AT-d65e5a95",
+        "name": "مورد اختبار القبول",
+        "contact": "مختبر القبول",
+        "phone": "01000000000",
+        "address": "مصر",
+        "payable": 0.0,
+        "supplierCredit": 100.0,
+        "paid": 550.25,
+        "status": "active"
+      },
+      {
+        "id": 2,
+        "code": "AT-532a3417",
+        "name": "مورد اختبار القبول",
+        "contact": "مختبر القبول",
+        "phone": "01000000000",
+        "address": "مصر",
+        "payable": 0.0,
+        "supplierCredit": 0.0,
+        "paid": 0.0,
+        "status": "active"
+      },
+      {
+        "id": 1,
+        "code": "AT-001",
+        "name": "مورد اختبار القبول",
+        "contact": "مختبر القبول",
+        "phone": "01000000000",
+        "address": "مصر",
+        "payable": 0.0,
+        "supplierCredit": 0.0,
+        "paid": 0.0,
+        "status": "active"
+      }
+    ]
+  },
+  "cookies": 1,
+  "credentialsPersisted": false
+}

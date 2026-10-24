@@ -1,0 +1,15 @@
+{
+  "database": "D:\\projects\\AlKhayal\\test-artifacts\\phase-1-to-4-acceptance-2026-10-24\\winforms-run-001\\database\\alkhayal-ui-acceptance.db",
+  "SchemaVersion": 18,
+  "Suppliers": 4,
+  "SupplierInvoices": 0,
+  "SupplierPayments": 0,
+  "SupplierLedgerEntries": 11,
+  "PurchaseInvoices": 5,
+  "PurchaseReturns": 3,
+  "StockMovements": 7,
+  "InventoryCostLayers": 4,
+  "InventoryCostAllocations": 3,
+  "integrity": "ok",
+  "foreignKeyViolations": 0
+}

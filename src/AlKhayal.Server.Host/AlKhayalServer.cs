@@ -12,6 +12,7 @@ using AlKhayal.Application.Catalog;
 using AlKhayal.Application.Inventory;
 using AlKhayal.Application.Customers;
 using AlKhayal.Application.Suppliers;
+using AlKhayal.Application.Purchasing;
 using AlKhayal.Data.Authentication;
 using AlKhayal.Data.BusinessActivities;
 using AlKhayal.Data.Features;
@@ -21,6 +22,7 @@ using AlKhayal.Data.Catalog;
 using AlKhayal.Data.Inventory;
 using AlKhayal.Data.Customers;
 using AlKhayal.Data.Suppliers;
+using AlKhayal.Data.Purchasing;
 using AlKhayal.Data.Database;
 using Microsoft.Owin;
 using Microsoft.Owin.Hosting;
@@ -57,7 +59,9 @@ namespace AlKhayal.Server.Host
             var accounts = new CustomerAccountService(new SqliteCustomerAccountRepository(connectionString));
             var suppliers = new SupplierService(new SqliteSupplierRepository(connectionString));
             var supplierAccounts = new SupplierAccountService(new SqliteSupplierAccountRepository(connectionString));
-            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : type == typeof(SupplierService) ? suppliers : type == typeof(SupplierAccountService) ? supplierAccounts : null);
+            var supplierLedger = new SupplierLedgerService(new SqliteSupplierLedgerRepository(connectionString));
+            var purchases = new PurchaseService(new SqlitePurchaseRepository(connectionString), new SqliteSupplierRepository(connectionString));
+            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : type == typeof(SupplierService) ? suppliers : type == typeof(SupplierAccountService) ? supplierAccounts : type == typeof(SupplierLedgerService) ? supplierLedger : type == typeof(PurchaseService) ? purchases : null);
 
             _server = WebApp.Start(options.Url, app =>
             {

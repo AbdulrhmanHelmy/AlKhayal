@@ -35,6 +35,7 @@ namespace AlKhayal.Data.Suppliers
                     var newPayable = Math.Round(supplier.Payable + total, 2, MidpointRounding.AwayFromZero);
                     var updated = connection.Execute("UPDATE Suppliers SET Payable=@Payable, UpdatedAt=@Now WHERE Id=@Id", new { Payable = newPayable, Now = now, Id = supplierId }, tx);
                     if (updated != 1) throw new InvalidOperationException("تعذر تحديث رصيد المورد؛ لم يتم اعتماد الفاتورة.");
+                    connection.Execute("INSERT INTO SupplierLedgerEntries(SupplierId,EntryType,AmountScaled,OccurredOn,Reference,Notes,CreatedUtc) VALUES(@SupplierId,'legacy_invoice',@Amount,@Date,@Reference,@Notes,@Now)", new { SupplierId = supplierId, Amount = checked((long)Math.Round(total * 10000m, 0, MidpointRounding.AwayFromZero)), Date = invoiceDate, Reference = "SI-" + id, Notes = "فاتورة مورد محفوظة عبر سجل الفواتير السابق", Now = now }, tx);
                     tx.Commit();
                     return Shape(new SupplierInvoice { Id = id, SupplierId = supplierId, InvoiceNumber = number, InvoiceDate = invoiceDate, DueDate = dueDate, Total = total, PaidAmount = 0, Notes = notes ?? string.Empty, CreatedAt = now });
                 }
@@ -70,6 +71,7 @@ namespace AlKhayal.Data.Suppliers
                     var newPayable = Math.Round(supplier.Payable - amount, 2, MidpointRounding.AwayFromZero);
                     var updated = connection.Execute("UPDATE Suppliers SET Payable=@Payable, UpdatedAt=@Now WHERE Id=@Id", new { Payable = newPayable, Now = now, Id = supplierId }, tx);
                     if (updated != 1) throw new InvalidOperationException("تعذر تحديث رصيد المورد؛ لم يتم اعتماد الدفعة.");
+                    connection.Execute("INSERT INTO SupplierLedgerEntries(SupplierId,EntryType,AmountScaled,OccurredOn,Reference,Notes,CreatedUtc) VALUES(@SupplierId,'legacy_payment',@Amount,@Date,@Reference,@Notes,@Now)", new { SupplierId = supplierId, Amount = -checked((long)Math.Round(amount * 10000m, 0, MidpointRounding.AwayFromZero)), Date = paymentDate, Reference = reference, Notes = "دفعة مورد محفوظة عبر سجل المدفوعات السابق", Now = now }, tx);
                     tx.Commit();
                     return new SupplierPayment { Id = id, SupplierId = supplierId, InvoiceId = invoiceId, InvoiceNumber = invoiceNumber, SupplierName = supplier.Name, Reference = reference, Amount = amount, PaymentDate = paymentDate, Method = method, Account = account, Notes = notes ?? string.Empty, CreatedAt = now };
                 }
@@ -120,25 +122,38 @@ namespace AlKhayal.Data.Suppliers
 
         private static List<SupplierInvoice> GetInvoicesInternal(SQLiteConnection connection, long supplierId)
         {
-            var rows = connection.Query<SupplierInvoice>("SELECT Id, SupplierId, InvoiceNumber, InvoiceDate, DueDate, Total, PaidAmount, Notes, CreatedAt FROM SupplierInvoices WHERE SupplierId=@SupplierId ORDER BY InvoiceDate DESC, Id DESC", new { SupplierId = supplierId }).ToList();
+            var rows = connection.Query<SupplierInvoice>(@"SELECT i.Id,i.SupplierId,i.InvoiceNumber,i.InvoiceDate,i.DueDate,i.Total,
+                i.PaidAmount+COALESCE((SELECT -SUM(l.AmountScaled)/10000.0 FROM SupplierLedgerEntries l WHERE l.SupplierInvoiceId=i.Id AND l.EntryType='payment'),0) PaidAmount,
+                i.Notes,i.CreatedAt,'legacy' InvoiceType,NULL PurchaseInvoiceId FROM SupplierInvoices i WHERE i.SupplierId=@SupplierId
+                UNION ALL
+                SELECT p.Id,p.SupplierId,p.InvoiceNumber,p.InvoiceDate,NULL DueDate,p.TotalScaled/10000.0,
+                    COALESCE((SELECT -SUM(l.AmountScaled)/10000.0 FROM SupplierLedgerEntries l WHERE l.PurchaseInvoiceId=p.Id AND l.EntryType='payment'),0),
+                    p.Notes,p.CreatedUtc,'purchase',p.Id FROM PurchaseInvoices p WHERE p.SupplierId=@SupplierId
+                ORDER BY InvoiceDate DESC,Id DESC", new { SupplierId = supplierId }).ToList();
             foreach (var row in rows) Shape(row);
             return rows;
         }
 
         private static List<SupplierPayment> GetPaymentsInternal(SQLiteConnection connection, long supplierId)
         {
-            return connection.Query<SupplierPayment>("SELECT p.Id, p.SupplierId, p.InvoiceId, p.Reference, p.Amount, p.PaymentDate, p.Method, p.Account, p.Notes, p.CreatedAt, s.Name AS SupplierName, i.InvoiceNumber AS InvoiceNumber FROM SupplierPayments p JOIN Suppliers s ON s.Id=p.SupplierId LEFT JOIN SupplierInvoices i ON i.Id=p.InvoiceId WHERE p.SupplierId=@SupplierId ORDER BY p.PaymentDate, p.Id", new { SupplierId = supplierId }).ToList();
+            return connection.Query<SupplierPayment>(@"SELECT p.Id,p.SupplierId,p.InvoiceId,p.Reference,p.Amount,p.PaymentDate,p.Method,p.Account,p.Notes,p.CreatedAt,s.Name SupplierName,i.InvoiceNumber
+                FROM SupplierPayments p JOIN Suppliers s ON s.Id=p.SupplierId LEFT JOIN SupplierInvoices i ON i.Id=p.InvoiceId WHERE p.SupplierId=@SupplierId
+                UNION ALL
+                SELECT -e.Id,e.SupplierId,e.SupplierInvoiceId,e.Reference,-e.AmountScaled/10000.0,e.OccurredOn,e.PaymentMethod,'',e.Notes,e.CreatedUtc,s.Name,COALESCE(i.InvoiceNumber,pi.InvoiceNumber)
+                FROM SupplierLedgerEntries e JOIN Suppliers s ON s.Id=e.SupplierId LEFT JOIN SupplierInvoices i ON i.Id=e.SupplierInvoiceId LEFT JOIN PurchaseInvoices pi ON pi.Id=e.PurchaseInvoiceId
+                WHERE e.SupplierId=@SupplierId AND e.EntryType='payment' ORDER BY 6,1", new { SupplierId = supplierId }).ToList();
         }
 
         private static SupplierInvoice Shape(SupplierInvoice invoice)
         {
-            invoice.Total = Round(invoice.Total);
-            invoice.PaidAmount = Round(invoice.PaidAmount);
-            invoice.Remaining = Round(invoice.Total - invoice.PaidAmount);
+            invoice.Total = Round4(invoice.Total);
+            invoice.PaidAmount = Round4(invoice.PaidAmount);
+            invoice.Remaining = Round4(invoice.Total - invoice.PaidAmount);
             invoice.Status = invoice.Remaining <= 0 ? PaidStatus : invoice.PaidAmount > 0 ? PartialStatus : OpenStatus;
             return invoice;
         }
 
         private static decimal Round(decimal value) { return Math.Round(value, 2, MidpointRounding.AwayFromZero); }
+        private static decimal Round4(decimal value) { return Math.Round(value, 4, MidpointRounding.AwayFromZero); }
     }
 }

@@ -2,6 +2,8 @@ using System;
 using System.Data.SQLite;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using AlKhayal.Application.Suppliers;
 using AlKhayal.Core.Models;
 using AlKhayal.Data.Database;
 using AlKhayal.Data.Suppliers;
@@ -46,7 +48,7 @@ namespace AlKhayal.IntegrationTests
                 Assert.True(reopened.Update(supplier));
                 var after = new SqliteSupplierRepository(cs).GetById(id);
                 Assert.Equal("اسم جديد", after.Name); Assert.Equal(500m, after.Payable);
-                Assert.True(repo.Delete(id)); Assert.Null(repo.GetById(id));
+                Assert.Throws<SQLiteException>(() => repo.Delete(id)); Assert.NotNull(repo.GetById(id));
             });
         }
 
@@ -160,6 +162,29 @@ namespace AlKhayal.IntegrationTests
                 accounts.AddInvoice(id, "A", "2026-10-01", null, 10m, null);
                 Assert.Throws<SQLiteException>(() => suppliers.Delete(id));
                 Assert.NotNull(suppliers.GetById(id));
+            });
+        }
+
+        [Fact]
+        public void Unified_supplier_ledger_includes_purchase_history_and_payment_replays_idempotently()
+        {
+            WithDatabase(cs =>
+            {
+                var suppliers = new SqliteSupplierRepository(cs); var accounts = new SqliteSupplierAccountRepository(cs);
+                var id = NewSupplier(cs);
+                var invoice = accounts.AddInvoice(id, "LEDGER-1", "2026-10-01", null, 100m, "legacy bill");
+                var ledger = new SupplierLedgerService(new SqliteSupplierLedgerRepository(cs));
+                var payment = ledger.AddPaymentAsync(id, invoice.Id, null, "20.1250", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult();
+                Assert.False(payment.Replayed);
+                var replay = ledger.AddPaymentAsync(id, invoice.Id, null, "20.1250", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult();
+                Assert.True(replay.Replayed);
+                Assert.Throws<InvalidOperationException>(() => ledger.AddPaymentAsync(id, invoice.Id, null, "21", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult());
+                Assert.Equal(79.875m, suppliers.GetById(id).Payable);
+                Assert.Equal(20.125m, accounts.GetInvoices(id).Single().PaidAmount);
+                Assert.Equal(20.125m, accounts.GetPayments(id).Single().Amount);
+                var statement = ledger.StatementAsync(id, null, null, CancellationToken.None).GetAwaiter().GetResult();
+                Assert.Equal(100m, statement.TotalInvoices); Assert.Equal(20.125m, statement.TotalPaid); Assert.Equal(79.875m, statement.ClosingBalance);
+                Assert.Equal(2, ledger.HistoryAsync(id, CancellationToken.None).GetAwaiter().GetResult().Count);
             });
         }
     }

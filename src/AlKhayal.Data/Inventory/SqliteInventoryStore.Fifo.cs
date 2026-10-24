@@ -36,23 +36,25 @@ namespace AlKhayal.Data.Inventory
             return InventoryCosting.AllocateLayer(layer.QuantityScaled,layer.ValueScaled,layer.RemainingQuantityScaled,layer.RemainingValueScaled,quantity);
         }
 
-        private static async Task<InventoryResult<List<CostTake>>> PlanFifoAsync(SQLiteConnection c,SQLiteTransaction tx,long warehouseId,long variantId,long? batchId,long quantity,BalanceState balance,CancellationToken ct)
+        private static async Task<InventoryResult<List<CostTake>>> PlanFifoAsync(SQLiteConnection c,SQLiteTransaction tx,long warehouseId,long variantId,long? batchId,long quantity,BalanceState balance,long? requiredOriginMovementId,CancellationToken ct)
         {
             var layers=(await c.QueryAsync<CostLayer>(Cmd(@"SELECT * FROM InventoryCostLayers WHERE WarehouseId=@WarehouseId AND VariantId=@VariantId AND BatchId IS @BatchId AND RemainingQuantityScaled>0
                 ORDER BY OriginMovementId,Id",new{WarehouseId=warehouseId,VariantId=variantId,BatchId=batchId},tx,ct)).ConfigureAwait(false)).ToList();
-            if(layers.Any(x=>x.Basis=="unresolved"))return Fail<List<CostTake>>("unresolved_cost_basis","تكلفة الرصيد القديم غير مؤكدة. اطلب من المسؤول توثيق أساس التكلفة قبل الصرف أو النقل.");
+            if(!requiredOriginMovementId.HasValue&&layers.Any(x=>x.Basis=="unresolved"))return Fail<List<CostTake>>("unresolved_cost_basis","تكلفة الرصيد القديم غير مؤكدة. اطلب من المسؤول توثيق أساس التكلفة قبل الصرف أو النقل.");
             long available=0,total=0;
             foreach(var layer in layers){available=checked(available+layer.RemainingQuantityScaled);total=checked(total+layer.RemainingValueScaled);}
             if(balance==null||available!=balance.QuantityBaseScaled||total!=balance.ValueScaled)return Fail<List<CostTake>>("fifo_integrity","أرصدة التكلفة لا تطابق حركة المخزون. يلزم فحص البيانات قبل الحفظ.");
+            var eligible=requiredOriginMovementId.HasValue?layers.Where(x=>x.OriginMovementId==requiredOriginMovementId.Value).ToList():layers;
+            if(eligible.Any(x=>x.Basis=="unresolved"))return Fail<List<CostTake>>("unresolved_cost_basis","تكلفة البضاعة الأصلية غير مؤكدة ولا يمكن إرجاعها بأمان.");
             var takes=new List<CostTake>();
-            foreach(var layer in layers)
+            foreach(var layer in eligible)
             {
                 if(quantity==0)break;
                 var take=Math.Min(quantity,layer.RemainingQuantityScaled);
                 takes.Add(new CostTake{Layer=layer,Quantity=take,Value=PortionValue(layer,take)});
                 quantity-=take;
             }
-            if(quantity!=0)return Fail<List<CostTake>>("insufficient_cost_layers","لا توجد طبقات تكلفة كافية لهذه الكمية.");
+            if(quantity!=0)return Fail<List<CostTake>>(requiredOriginMovementId.HasValue?"return_stock_unavailable":"insufficient_cost_layers",requiredOriginMovementId.HasValue?"لا توجد كمية متاحة قابلة للتتبع من الفاتورة الأصلية في هذا المخزن.":"لا توجد طبقات تكلفة كافية لهذه الكمية.");
             return InventoryResult<List<CostTake>>.Ok(takes);
         }
 
