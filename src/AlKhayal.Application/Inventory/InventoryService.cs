@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AlKhayal.Application.Features;
+using AlKhayal.Application.Finance;
 
 namespace AlKhayal.Application.Inventory
 {
@@ -26,7 +27,7 @@ namespace AlKhayal.Application.Inventory
         public Task<InventoryResult<long>> ReconcileCostAsync(InventoryCostReconciliationCommand command,CancellationToken ct)
         {
             long cost;
-            if(command==null||string.IsNullOrWhiteSpace(command.OperationKey)||command.OperationKey.Length>120||command.LayerId<=0||command.UserId<=0||!TryScale(command.UnitCost,4,out cost)||string.IsNullOrWhiteSpace(command.Evidence)||command.Evidence.Length>2000)
+            if(command==null||string.IsNullOrWhiteSpace(command.OperationKey)||command.OperationKey.Length>120||command.LayerId<=0||command.UserId<=0||!MoneyPolicy.TryParseUserAmount(command.UnitCost,false,out cost)||string.IsNullOrWhiteSpace(command.Evidence)||command.Evidence.Length>2000)
                 return Task.FromResult(InventoryResult<long>.Fail("invalid_cost_basis","أدخل تكلفة موثقة ومصدر إثبات التكلفة."));
             var sb=new StringBuilder("reconcile|");AppendCanonical(sb,command.LayerId);AppendCanonical(sb,command.ExpectedVersion);AppendCanonical(sb,command.UnitCost);AppendCanonical(sb,command.Evidence);AppendCanonical(sb,command.UserId);
             return _store.ReconcileCostAsync(command,"v2:"+Hash(sb.ToString()),ct);
@@ -92,9 +93,9 @@ namespace AlKhayal.Application.Inventory
                 if(line==null||line.VariantId<=0||line.ProductUnitId<=0||!TryScale(line.Quantity,6,out quantity)||quantity==0)
                     return InventoryResult<InventoryPostResult>.Fail("invalid_quantity","أدخل كمية صحيحة بدقة لا تتجاوز ست خانات عشرية.");
                 if(command.Type!="adjustment"&&quantity<0)return InventoryResult<InventoryPostResult>.Fail("invalid_quantity","يجب أن تكون الكمية موجبة.");
-                if(line.UnitCost!=null&&!TryScale(line.UnitCost,4,out _))return InventoryResult<InventoryPostResult>.Fail("invalid_cost","تكلفة الوحدة غير صالحة.");
+                if(line.UnitCost!=null&&!MoneyPolicy.TryParseUserAmount(line.UnitCost,false,out _))return InventoryResult<InventoryPostResult>.Fail("invalid_cost","تكلفة الوحدة يجب أن تكون غير سالبة وبدقة لا تتجاوز خانتين عشريتين.");
                 if(line.UnitCost==null&&(command.Type=="opening"||command.Type=="manual_receipt"||command.Type=="adjustment"&&quantity>0))return InventoryResult<InventoryPostResult>.Fail("cost_required","أدخل سعر الشراء الفعلي للبضاعة المضافة.");
-                if(command.Type=="manual_receipt"&&!TryScale(line.SalePrice,4,out _))return InventoryResult<InventoryPostResult>.Fail("sale_price_required","أدخل سعر البيع الجديد بدقة لا تتجاوز أربع خانات عشرية.");
+                if(command.Type=="manual_receipt"&&!MoneyPolicy.TryParseUserAmount(line.SalePrice,false,out _))return InventoryResult<InventoryPostResult>.Fail("sale_price_required","أدخل سعر البيع الجديد بدقة لا تتجاوز خانتين عشريتين.");
                 if(line.PhysicalUnits!=null&&line.PhysicalUnits.Any(x=>x==null))return InventoryResult<InventoryPostResult>.Fail("invalid_identifier","بيانات الأرقام الفعلية غير صالحة.");
             }
             return null;

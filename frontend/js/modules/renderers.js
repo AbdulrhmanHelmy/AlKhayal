@@ -91,6 +91,7 @@
           type: "number",
           required: true,
           min: 0,
+          step: "0.01",
         },
         {
           id: "purchasePrice",
@@ -98,6 +99,7 @@
           type: "number",
           required: true,
           min: 0,
+          step: "0.01",
         },
         { id: "stock", label: "الرصيد الافتتاحي", type: "number", min: 0 },
         { id: "minimum", label: "حد الطلب", type: "number", min: 0 },
@@ -156,6 +158,7 @@
           label: "القيمة",
           type: "number",
           min: 0,
+          step: "0.01",
           required: true,
         },
         {
@@ -192,7 +195,7 @@
           type: "select",
           options: ["الفرع الرئيسي", "مدينة نصر", "الجيزة"],
         },
-        { id: "balance", label: "الرصيد الافتتاحي", type: "number", min: 0 },
+        { id: "balance", label: "الرصيد الافتتاحي", type: "number", min: 0, step: "0.01" },
         {
           id: "status",
           label: "الحالة",
@@ -1191,8 +1194,8 @@
         id: "amount",
         label: "قيمة الدفع",
         type: "number",
-        min: 0.0001,
-        step: "0.0001",
+        min: 0.01,
+        step: "0.01",
         required: true,
       },
       { id: "paymentDate", label: "تاريخ الدفع", type: "date", required: true },
@@ -1639,7 +1642,7 @@
             label: "قيمة السداد",
             type: "number",
             min: 0.01,
-            step: "0.0001",
+            step: "0.01",
             required: true,
           },
           "",
@@ -2133,7 +2136,7 @@
                 .join("") +
               '</select></td><td><input class="input ltr" type="number" min="1" data-line-field="quantity" value="' +
               line.quantity +
-              '"></td><td><input class="input ltr" type="number" min="0" data-line-field="price" value="' +
+              '"></td><td><input class="input ltr" type="number" min="0" step="0.01" data-line-field="price" value="' +
               line.price +
               '"></td><td><input class="input" type="date" value="' +
               (product.expiry === "—" ? "" : product.expiry) +
@@ -2143,7 +2146,7 @@
             );
           })
           .join("") +
-        '</tbody></table></div></div></section><aside class="card"><div class="card-head"><h2>ملخص الفاتورة</h2></div><div class="card-body"><div class="field"><label>خصم الفاتورة</label><input class="input ltr" id="purchaseDiscount" type="number" min="0" value="' +
+        '</tbody></table></div></div></section><aside class="card"><div class="card-head"><h2>ملخص الفاتورة</h2></div><div class="card-body"><div class="field"><label>خصم الفاتورة</label><input class="input ltr" id="purchaseDiscount" type="number" min="0" step="0.01" value="' +
         state.discount +
         '"></div><div class="totals"><div class="total-row"><span>الإجمالي الفرعي</span><strong>' +
         U.money(totals.subtotal) +
@@ -2779,11 +2782,11 @@
         .join("") +
       "</select></div>" +
       UI.field(
-        { id: "contractAmount", label: "قيمة العقد", type: "number", min: 1 },
+        { id: "contractAmount", label: "قيمة العقد", type: "number", min: 1, step: "0.01" },
         state.amount,
       ) +
       UI.field(
-        { id: "downPayment", label: "المقدم", type: "number", min: 0 },
+        { id: "downPayment", label: "المقدم", type: "number", min: 0, step: "0.01" },
         state.down,
       ) +
       UI.field(
@@ -2951,7 +2954,7 @@
       '</div><section class="card"><div class="card-head"><h2>بيانات العملية التجريبية</h2></div><div class="card-body form-grid">' +
       UI.field({ id: "serviceNumber", label: "رقم الخدمة", ltr: true }, "") +
       UI.field(
-        { id: "serviceAmount", label: "القيمة", type: "number", min: 1 },
+        { id: "serviceAmount", label: "القيمة", type: "number", min: 1, step: "0.01" },
         "",
       ) +
       '<div class="span-2"><button class="button primary" data-cash-preview>معاينة فقط</button></div></div></section>';

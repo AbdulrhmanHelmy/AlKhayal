@@ -17,7 +17,18 @@
           <div class="field"><label for="password">كلمة المرور</label><div class="password-field"><input class="input" id="password" name="password" type="password" autocomplete="current-password" placeholder="أدخل كلمة المرور" required><button class="password-toggle" type="button" id="togglePassword">إظهار</button></div><small class="field-error" id="passwordError"></small></div>
           <label class="remember-row"><input id="remember" type="checkbox"><span>تذكر اسم المستخدم على هذا الجهاز</span></label><div class="login-error" id="formError" role="alert"></div>
           <button class="button primary login-submit" id="loginButton" type="submit"><span id="buttonText">تسجيل الدخول</span> <span class="spinner" id="spinner" hidden></span></button>
-        </form><p class="login-help">تُنشأ الحسابات محليًا، ولا تُحفظ كلمة المرور نفسها؛ يُخزن فقط ملخص مشفّر ومملّح منها.</p>
+        </form>
+        <section id="bootstrapPanel" class="bootstrap-panel" hidden aria-live="polite">
+          <p class="bootstrap-message">مرحبًا بك في الخيال. يجب إنشاء حساب المدير للبدء.</p>
+          <form id="bootstrapForm" novalidate>
+            <div class="field"><label for="bootstrapUsername">اسم المستخدم</label><input class="input" id="bootstrapUsername" autocomplete="username" maxlength="64" required><small class="field-error" id="bootstrapUsernameError"></small></div>
+            <div class="field"><label for="bootstrapPassword">كلمة المرور</label><input class="input" id="bootstrapPassword" type="password" autocomplete="new-password" maxlength="4096" required><small class="field-error" id="bootstrapPasswordError"></small></div>
+            <div class="field"><label for="bootstrapConfirmPassword">تأكيد كلمة المرور</label><input class="input" id="bootstrapConfirmPassword" type="password" autocomplete="new-password" maxlength="4096" required><small class="field-error" id="bootstrapConfirmError"></small></div>
+            <div class="login-error" id="bootstrapError" role="alert"></div>
+            <button class="button primary login-submit" id="bootstrapButton" type="submit">إنشاء حساب المدير <span class="spinner" id="bootstrapSpinner" hidden></span></button>
+          </form>
+        </section>
+        <p class="login-help">تُنشأ الحسابات محليًا، ولا تُحفظ كلمة المرور نفسها؛ يُخزن فقط ملخص مشفّر ومملّح منها.</p>
       </div>
     </section>
   </main>

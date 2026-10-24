@@ -10,10 +10,10 @@ namespace AlKhayal.UnitTests
     public sealed class SupplierAccountServiceTests
     {
         [Fact]
-        public void Invoice_total_is_rounded_to_two_decimals_and_dates_are_normalized()
+        public void Invoice_total_requires_two_decimals_and_dates_are_normalized()
         {
             var repo = new FakeAccounts(); var service = new SupplierAccountService(repo);
-            service.AddInvoice(1, new SupplierInvoice { InvoiceNumber = " A-1 ", InvoiceDate = "2026-10-20", DueDate = "2026-11-20", Total = 100.005m });
+            service.AddInvoice(1, new SupplierInvoice { InvoiceNumber = " A-1 ", InvoiceDate = "2026-10-20", DueDate = "2026-11-20", Total = 100.01m });
             Assert.Equal(100.01m, repo.LastInvoiceTotal);
             Assert.Equal("A-1", repo.LastInvoiceNumber);
             Assert.Equal(1, repo.InvoiceCalls);
@@ -44,10 +44,11 @@ namespace AlKhayal.UnitTests
         }
 
         [Fact]
-        public void Valid_payment_is_forwarded_with_invoice_and_rounded_amount()
+        public void Valid_payment_is_forwarded_and_excess_precision_is_rejected()
         {
             var repo = new FakeAccounts(); var service = new SupplierAccountService(repo);
-            service.AddPayment(3, new SupplierPayment { InvoiceId = 9, Amount = 12.345m, PaymentDate = "2026-10-20", Method = " نقدي ", Account = " الخزنة الرئيسية " });
+            Assert.Throws<ArgumentException>(()=>service.AddPayment(3, new SupplierPayment { InvoiceId = 9, Amount = 12.345m, PaymentDate = "2026-10-20", Method = " نقدي ", Account = " الخزنة الرئيسية " }));
+            service.AddPayment(3, new SupplierPayment { InvoiceId = 9, Amount = 12.35m, PaymentDate = "2026-10-20", Method = " نقدي ", Account = " الخزنة الرئيسية " });
             Assert.Equal(1, repo.PaymentCalls); Assert.Equal(9L, repo.LastInvoiceId); Assert.Equal(12.35m, repo.LastPaymentAmount); Assert.Equal("نقدي", repo.LastMethod);
         }
 
@@ -67,7 +68,8 @@ namespace AlKhayal.UnitTests
             Assert.Throws<ArgumentException>(() => service.Create(new Supplier { Code = "S", Name = " ", Phone = "1" }));
             Assert.Throws<ArgumentException>(() => service.Create(new Supplier { Code = "S", Name = "x", Phone = "" }));
             Assert.Throws<ArgumentException>(() => service.Create(new Supplier { Code = "S", Name = "x", Phone = "1", Payable = -1 }));
-            var created = service.Create(new Supplier { Code = " S-1 ", Name = " مورد ", Phone = " 010 ", Payable = 10.555m });
+            Assert.Throws<ArgumentException>(()=>service.Create(new Supplier { Code = "S-X", Name = "مورد", Phone = "010", Payable = 10.555m }));
+            var created = service.Create(new Supplier { Code = " S-1 ", Name = " مورد ", Phone = " 010 ", Payable = 10.56m });
             Assert.Equal("S-1", created.Code); Assert.Equal("مورد", created.Name); Assert.Equal(10.56m, created.Payable); Assert.Equal("نشط", created.Status);
         }
 

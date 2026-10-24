@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
+using AlKhayal.Application.Finance;
 
 namespace AlKhayal.Application.Suppliers
 {
@@ -15,7 +16,8 @@ namespace AlKhayal.Application.Suppliers
         {
             if (invoice == null) throw new ArgumentException("بيانات الفاتورة مطلوبة.");
             if (supplierId <= 0) throw new ArgumentException("اختر موردًا صحيحًا.");
-            var total = Round(invoice.Total);
+            if (!MoneyPolicy.HasAtMostTwoDecimals(invoice.Total)) throw new ArgumentException("إجمالي الفاتورة يجب ألا يتجاوز خانتين عشريتين.");
+            var total = invoice.Total;
             if (total <= 0) throw new ArgumentException("إجمالي الفاتورة يجب أن يكون أكبر من صفر.");
             var invoiceDate = NormalizeDate(invoice.InvoiceDate, "تاريخ الفاتورة غير صحيح.", true);
             var dueDate = NormalizeDate(invoice.DueDate, "تاريخ الاستحقاق غير صحيح.", false);
@@ -30,7 +32,8 @@ namespace AlKhayal.Application.Suppliers
         {
             if (payment == null) throw new ArgumentException("بيانات الدفعة مطلوبة.");
             if (supplierId <= 0) throw new ArgumentException("اختر موردًا صحيحًا.");
-            var amount = Round(payment.Amount);
+            if (!MoneyPolicy.HasAtMostTwoDecimals(payment.Amount)) throw new ArgumentException("قيمة الدفعة يجب ألا تتجاوز خانتين عشريتين.");
+            var amount = payment.Amount;
             if (amount <= 0) throw new ArgumentException("قيمة الدفعة يجب أن تكون أكبر من صفر.");
             if (payment.InvoiceId.HasValue && payment.InvoiceId.Value <= 0) throw new ArgumentException("الفاتورة المختارة غير صحيحة.");
             if (string.IsNullOrWhiteSpace(payment.Method)) throw new ArgumentException("طريقة السداد مطلوبة.");

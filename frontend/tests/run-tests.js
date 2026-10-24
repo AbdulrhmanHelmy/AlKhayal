@@ -23,9 +23,15 @@ var generalSettingsJs = fs.readFileSync(path.join(root, "frontend", "js", "modul
 var settingsStateJs = fs.readFileSync(path.join(root, "frontend", "js", "services", "settings-state.js"), "utf8");
 var posJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "pos.js"), "utf8");
 var purchasingJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "purchasing.js"), "utf8");
+var loginHtml = fs.readFileSync(path.join(root, "frontend", "login.html"), "utf8");
+var loginJs = fs.readFileSync(path.join(root, "frontend", "js", "login.js"), "utf8");
 var mainFormCs = fs.readFileSync(path.join(root, "src", "AlKhayal.UI", "MainForm.cs"), "utf8");
 var serverHostCs = fs.readFileSync(path.join(root, "src", "AlKhayal.Server.Host", "AlKhayalServer.cs"), "utf8");
 var allowedRenderers = new Set(["dashboard", "settings", "settings-hub", "legacy-redirect", "under-construction", "business-activities", "feature-management", "user-management", "company-settings", "general-settings", "appearance-settings", "database-settings", "catalog-products", "catalog-product-form", "catalog-categories", "catalog-units", "warehouse-directory", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services", "purchase-management", "purchase-list", "purchase-returns"]);
+
+assert.ok(loginHtml.indexOf("مرحبًا بك في الخيال. يجب إنشاء حساب المدير للبدء.") >= 0, "login must contain the first-run Arabic message");
+assert.ok(loginHtml.indexOf("إنشاء حساب المدير") >= 0, "login must expose the first Admin action");
+assert.ok(loginJs.indexOf("/api/auth/bootstrap-status") >= 0 && loginJs.indexOf("/api/auth/bootstrap") >= 0, "login must use the bootstrap API contract");
 
 var routes = registry.screens.map(function (screen) { return screen.route; });
 assert.strictEqual(new Set(routes).size, routes.length, "screen routes must be unique");
@@ -84,6 +90,8 @@ assert.ok(featureJs.indexOf("muted ltr")<0,"feature cards must not expose intern
 assert.strictEqual((appJs.match(/alkhayal:access-changed/g) || []).length, 1, "the shell must register exactly one access-state listener");
 assert.ok(indexHtml.indexOf("settings-hub.js")>=0&&settingsHubJs.indexOf("settingsGroup")>=0,"the Settings hub must load and derive entries from registry metadata");
 assert.ok(indexHtml.indexOf("general-settings.js")>=0&&indexHtml.indexOf("settings-state.js")>=0,"real settings UI and shared formatter state must load in the shell");
+assert.ok(settingsStateJs.indexOf('minimumFractionDigits: 2, maximumFractionDigits: 2')>=0,"money formatting must remain fixed at two decimal digits");
+assert.ok(generalSettingsJs.indexOf("options:['2']")>=0,"general settings must not offer non-piastre display precision");
 var realSettings={"settings-general":"general-settings","settings-company":"company-settings","settings-appearance":"appearance-settings","settings-backup":"database-settings"};
 Object.keys(realSettings).forEach(function(route){var screen=registry.screens.find(function(item){return item.route===route;});assert.strictEqual(screen.renderer,realSettings[route],route+" must use a real renderer");assert.ok(screen.settingsGroup,"real settings routes must remain in the registry-driven Settings hub");});
 assert.ok(generalSettingsJs.indexOf("/api/settings/company")>=0&&generalSettingsJs.indexOf("/api/settings/general")>=0&&generalSettingsJs.indexOf("/api/settings/database-info")>=0,"settings screens must use the authenticated API");

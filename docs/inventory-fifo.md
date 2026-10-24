@@ -1,5 +1,9 @@
 # FIFO inventory costing and warehouse recovery
 
+## EGP presentation boundary
+
+FIFO continues to store and allocate value at scale 4. New operator-entered unit costs and sale prices are restricted to two decimal places, but fractional quantities can still create sub-piastre layer values. Those residual internal units remain on the layer and are consumed exactly by cumulative allocation; the last withdrawal receives the last remaining value. Warehouse cost, expected-sale, and gross-profit displays round to two decimals only at presentation. Finalized supplier/invoice account amounts round to the nearest piastre with ties away from zero, while return records retain the actual FIFO value and explicit variance at scale 4.
+
 The warehouse API persists real quantities, acquisition costs, retail prices, tracking identities, and immutable movements. Sales invoices and purchasing/supplier documents remain outside this implementation.
 
 ## Posting and precision

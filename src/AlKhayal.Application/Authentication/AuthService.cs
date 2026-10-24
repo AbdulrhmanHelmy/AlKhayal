@@ -8,6 +8,17 @@ namespace AlKhayal.Application.Authentication
     {
         private readonly IUserStore _users; private readonly ISessionStore _sessions; private readonly IPasswordHasher _hasher; private readonly ITokenGenerator _tokens; private readonly IClock _clock;
         public AuthService(IUserStore users, ISessionStore sessions, IPasswordHasher hasher, ITokenGenerator tokens, IClock clock) { _users = users; _sessions = sessions; _hasher = hasher; _tokens = tokens; _clock = clock; }
+        public Task<bool> IsBootstrapRequiredAsync(CancellationToken ct) { return _users.IsEmptyAsync(ct); }
+        public async Task<AuthResult> BootstrapAdminAsync(BootstrapAdminCommand command, CancellationToken ct)
+        {
+            if (command == null || string.IsNullOrWhiteSpace(command.Username) || command.Username.Trim().Length > 64) return Fail("validation", "اسم المستخدم مطلوب وبحد أقصى 64 حرفًا.");
+            if (string.IsNullOrEmpty(command.Password)) return Fail("validation", "كلمة المرور مطلوبة.");
+            if (command.Password != command.ConfirmPassword) return Fail("password_mismatch", "كلمة المرور وتأكيدها غير متطابقين.");
+            if (command.Password.Length > 4096) return Fail("validation", "كلمة المرور أطول من الحد التقني المسموح.");
+            var username = command.Username.Trim();
+            if (!await _users.TryCreateFirstAdminAsync(username, username, _hasher.Hash(command.Password), ct).ConfigureAwait(false)) return Fail("bootstrap_unavailable", "تم إنشاء مستخدم بالفعل. سجّل الدخول أو استخدم إدارة المستخدمين.");
+            return await LoginAsync(new LoginCommand { Username = username, Password = command.Password }, ct).ConfigureAwait(false);
+        }
         public async Task<AuthResult> LoginAsync(LoginCommand command, CancellationToken ct)
         {
             if (command == null || string.IsNullOrWhiteSpace(command.Username) || string.IsNullOrEmpty(command.Password)) return Fail("validation", "اسم المستخدم وكلمة المرور مطلوبان.");

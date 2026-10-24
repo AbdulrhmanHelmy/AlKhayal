@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
+using AlKhayal.Application.Finance;
 
 namespace AlKhayal.Application.Customers
 {
@@ -36,6 +37,7 @@ namespace AlKhayal.Application.Customers
             if (string.IsNullOrWhiteSpace(customer.Name)) throw new ArgumentException("اسم العميل مطلوب.");
             if (string.IsNullOrWhiteSpace(customer.Phone)) throw new ArgumentException("رقم الهاتف مطلوب.");
             if (customer.Balance < 0 || customer.CreditLimit < 0) throw new ArgumentException("الرصيد وحد الائتمان لا يمكن أن يكونا سالبين.");
+            if (!MoneyPolicy.HasAtMostTwoDecimals(customer.Balance) || !MoneyPolicy.HasAtMostTwoDecimals(customer.CreditLimit)) throw new ArgumentException("الرصيد وحد الائتمان يجب ألا يتجاوزا خانتين عشريتين.");
             customer.Code = customer.Code.Trim();
             customer.Name = customer.Name.Trim();
             customer.Phone = customer.Phone.Trim();

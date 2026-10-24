@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AlKhayal.Application.Catalog;
 using AlKhayal.Application.Inventory;
+using AlKhayal.Application.Finance;
 using Dapper;
 
 namespace AlKhayal.Data.Inventory
@@ -28,7 +29,7 @@ namespace AlKhayal.Data.Inventory
                 COALESCE((SELECT SUM(b.QuantityBaseScaled) FROM InventoryBalances b WHERE b.WarehouseId=w.Id),0) QuantityScaled,
                 COALESCE((SELECT SUM(b.ValueScaled) FROM InventoryBalances b WHERE b.WarehouseId=w.Id),0) ValueScaled
                 FROM Warehouses w ORDER BY w.IsDefault DESC,w.Name,w.Id",cancellationToken:ct)).ConfigureAwait(false))
-                .Select(w=>{w.Quantity=(w.QuantityScaled/1000000m).ToString("0.######",CultureInfo.InvariantCulture);w.Value=(w.ValueScaled/10000m).ToString("0.####",CultureInfo.InvariantCulture);return w;}).ToList();
+                .Select(w=>{w.Quantity=(w.QuantityScaled/1000000m).ToString("0.######",CultureInfo.InvariantCulture);w.Value=MoneyPolicy.FormatForUser(w.ValueScaled);return w;}).ToList();
         }
 
         public async Task<InventoryResult<WarehouseRecord>> SaveWarehouseAsync(WarehouseCommand command,bool multipleWarehouses,CancellationToken ct)
@@ -215,12 +216,12 @@ namespace AlKhayal.Data.Inventory
                 if(baseQuantity==0)value=0;
                 else if(baseQuantity>0)
                 {
-                    long parsed;if(!InventoryService.TryScale(line.UnitCost,4,out parsed))return Fail<InventoryPostResult>("cost_required","أدخل سعر الشراء الفعلي لكل وحدة مختارة.");
+                    long parsed;if(!MoneyPolicy.TryParseUserAmount(line.UnitCost,false,out parsed))return Fail<InventoryPostResult>("cost_required","أدخل سعر الشراء الفعلي بدقة لا تتجاوز خانتين عشريتين.");
                     unitCost=InventoryCosting.BaseUnitPrice(parsed,numerator,denominator);
                     value=InventoryCosting.ReceiptValue(parsed,entered);
                     if(command.Type=="manual_receipt")
                     {
-                        long sale;if(!InventoryService.TryScale(line.SalePrice,4,out sale))return Fail<InventoryPostResult>("sale_price_required","أدخل سعر البيع الجديد.");
+                        long sale;if(!MoneyPolicy.TryParseUserAmount(line.SalePrice,false,out sale))return Fail<InventoryPostResult>("sale_price_required","أدخل سعر البيع الجديد بدقة لا تتجاوز خانتين عشريتين.");
                         var baseSale=InventoryCosting.BaseUnitPrice(sale,numerator,denominator);
                         // A variant override changes only the selected variant. Bump the product
                         // aggregate version so a stale catalog editor cannot undo the new price.
@@ -256,8 +257,8 @@ namespace AlKhayal.Data.Inventory
                 }
                 if(baseQuantity>0)
                 {
-                    long enteredCost;InventoryService.TryScale(line.UnitCost,4,out enteredCost);
-                    long enteredSale;var hasSale=InventoryService.TryScale(line.SalePrice,4,out enteredSale);
+                    long enteredCost;MoneyPolicy.TryParseUserAmount(line.UnitCost,false,out enteredCost);
+                    long enteredSale;var hasSale=MoneyPolicy.TryParseUserAmount(line.SalePrice,false,out enteredSale);
                     await c.ExecuteAsync(Cmd("UPDATE InventoryDocumentLines SET EnteredUnitCostScaled=@Cost,EnteredSalePriceScaled=@Sale WHERE Id=@Id",new{Cost=enteredCost,Sale=hasSale?(long?)enteredSale:null,Id=lineId},tx,ct)).ConfigureAwait(false);
                 }
                 if(baseQuantity==0)continue;

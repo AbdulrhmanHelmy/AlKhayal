@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AlKhayal.Application.Inventory;
+using AlKhayal.Application.Finance;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
 using AlKhayal.Data.Inventory;
@@ -223,7 +224,7 @@ namespace AlKhayal.Data.Purchasing
                         if (checked(previouslyReturned + quantity) > line.QuantityScaled) return null;
                         var eligible = await c.ExecuteScalarAsync<long>(Cmd("SELECT COALESCE(SUM(RemainingQuantityScaled),0) FROM InventoryCostLayers WHERE WarehouseId=@WarehouseId AND VariantId=@VariantId AND BatchId IS @BatchId AND OriginMovementId=@OriginId", new { WarehouseId = command.WarehouseId, line.VariantId, line.BatchId, OriginId = line.OriginMovementId }, tx, ct)).ConfigureAwait(false);
                         if (baseQuantity > eligible) return null;
-                        var accountValue = checked((long)Math.Round((decimal)quantity * line.PurchaseUnitPriceScaled / 1000000m, 0, MidpointRounding.AwayFromZero));
+                        var accountValue = MoneyPolicy.FinalizeQuantityAmount(quantity, line.PurchaseUnitPriceScaled);
                         total = checked(total + accountValue);
                         var batch = line.BatchId.HasValue ? await c.QuerySingleOrDefaultAsync<ReturnBatch>(Cmd("SELECT LotNumber,ExpirationDate FROM ProductBatches WHERE Id=@Id", new { Id = line.BatchId.Value }, tx, ct)).ConfigureAwait(false) : null;
                         prepared.Add(new ReturnPostingLine { Source = line, Quantity = requested.Quantity, QuantityScaled = quantity, BaseQuantityScaled = baseQuantity, AccountAmountScaled = accountValue, Batch = batch, PhysicalUnits = requested.PhysicalUnits ?? new List<PurchasePhysicalUnit>() });
@@ -383,6 +384,6 @@ namespace AlKhayal.Data.Purchasing
         private static long ParseScaled(string text) { long value; if (!long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)) throw new InvalidOperationException("Invalid scaled value."); return value; }
         private static bool TryScale(string text, int places, out long scaled) { decimal value; if (!decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value)) { scaled = 0; return false; } try { scaled = checked((long)(value * (places == 6 ? 1000000m : 10000m))); return true; } catch (OverflowException) { scaled = 0; return false; } }
         private static long ScaleValue(string text, int places) { decimal value; if (!decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value)) throw new InvalidOperationException("Invalid decimal value."); return checked((long)(value * (places == 6 ? 1000000m : 10000m))); }
-        private static string FormatScaled(long value, int scale) { return (value / (scale == 6 ? 1000000m : 10000m)).ToString("0.######", CultureInfo.InvariantCulture); }
+        private static string FormatScaled(long value, int scale) { return scale == 4 ? MoneyPolicy.FormatForUser(value) : (value / 1000000m).ToString("0.######", CultureInfo.InvariantCulture); }
     }
 }

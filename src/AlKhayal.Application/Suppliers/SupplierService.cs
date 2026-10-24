@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
+using AlKhayal.Application.Finance;
 
 namespace AlKhayal.Application.Suppliers
 {
@@ -17,7 +18,7 @@ namespace AlKhayal.Application.Suppliers
         {
             Validate(supplier);
             if (supplier.Payable < 0) throw new ArgumentException("الرصيد المستحق لا يمكن أن يكون سالبًا.");
-            supplier.Payable = Math.Round(supplier.Payable, 2, MidpointRounding.AwayFromZero);
+            if (!MoneyPolicy.HasAtMostTwoDecimals(supplier.Payable)) throw new ArgumentException("الرصيد المستحق يجب ألا يتجاوز خانتين عشريتين.");
             supplier.Id = _suppliers.Add(supplier);
             return _suppliers.GetById(supplier.Id);
         }

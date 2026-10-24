@@ -4,13 +4,13 @@
   function json(value){return JSON.stringify(value);}
   function key(){var bytes=new Uint8Array(16);if(global.crypto&&global.crypto.getRandomValues)global.crypto.getRandomValues(bytes);else for(var i=0;i<16;i++)bytes[i]=Math.floor(Math.random()*256);return Array.prototype.map.call(bytes,function(x){return ("0"+x.toString(16)).slice(-2);}).join("");}
   function formatQty(value){return (Number(value||0)/1000000).toLocaleString("ar-EG",{maximumFractionDigits:6});}
-  function formatValue(value){return (Number(value||0)/10000).toLocaleString("ar-EG",{maximumFractionDigits:4});}
+  function formatValue(value){return (Number(value||0)/10000).toLocaleString("ar-EG",{minimumFractionDigits:2,maximumFractionDigits:2});}
   function error(host,reason){var target=host.querySelector("[data-inventory-error]");if(target){target.textContent=reason.message||reason;target.hidden=false;}else UI.toast(reason.message||reason,"danger");}
   function request(path,method,data){return Api.request(path,{method:method,body:json(data)});}
   function label(type){return ({opening:"رصيد افتتاحي",manual_receipt:"إضافة بضاعة",manual_issue:"إخراج بضاعة",adjustment:"تسوية مخزون",count:"جرد المخزون",transfer:"نقل بضاعة",reversal:"عكس حركة"})[type]||"حركة مخزون";}
   function countStatus(status){return ({draft:"مسودة",posted:"مرحّل",canceled:"ملغى"})[status]||"غير معروفة";}
   function warehouseOptions(rows,current){return rows.filter(function(w){return w.isActive;}).map(function(w){return '<option value="'+w.id+'"'+(String(w.id)===String(current)?' selected':'')+'>'+U.escape(w.name)+'</option>';}).join("");}
-  function formatExactValue(value){var negative=value<0n;if(negative)value=-value;return (negative?"−":"")+(value/10000n).toLocaleString("ar-EG")+"٫"+String(value%10000n).padStart(4,"0");}
+  function formatExactValue(value){var negative=value<0n;if(negative)value=-value;var cents=(value+50n)/100n;return (negative?"−":"")+(cents/100n).toLocaleString("ar-EG")+"٫"+String(cents%100n).padStart(2,"0");}
   function inventoryValuation(rows){
     var cost=0n,sales=0n,costComplete=true,saleComplete=true;
     rows.forEach(function(x){
@@ -54,7 +54,7 @@
       var operationKey=key(),signature=null,busy=false;
       UI.modal({title:"توثيق تكلفة الرصيد القديم",body:'<form class="form-grid"><p class="muted span-2">لا توجد تفاصيل مؤكدة لتكاليف هذا الرصيد القديم. سجّل أساس تكلفة افتتاحيًا موثقًا؛ هذا لا يعيد إنشاء تاريخ شراء سابق. يجب أن يطابق مجموع التكلفة القيمة التاريخية المحفوظة. عند اختلافها يلزم فحص محاسبي مستقل دون تعديل التاريخ.</p><div class="field"><label>تكلفة الوحدة الأساسية الموثقة</label><input class="input ltr" data-basis-cost inputmode="decimal"></div><div class="field span-2"><label>مصدر إثبات التكلفة</label><textarea class="textarea" data-basis-evidence></textarea></div><p class="field-error span-2" data-inventory-error hidden></p></form>',actions:'<button class="button primary" data-save-basis>حفظ الأساس الموثق</button><button class="button" data-modal-close>إلغاء</button>',onOpen:function(modal){modal.querySelector("[data-save-basis]").onclick=function(){
         if(busy)return;var button=this,data={layerId:balance.unresolvedLayerId,expectedVersion:balance.version,unitCost:modal.querySelector("[data-basis-cost]").value.trim(),evidence:modal.querySelector("[data-basis-evidence]").value.trim()};
-        if(!/^\d+(?:\.\d{1,4})?$/.test(data.unitCost)||!data.evidence){error(modal,"أدخل التكلفة ومصدر إثباتها.");return;}
+        if(!/^\d+(?:\.\d{1,2})?$/.test(data.unitCost)||!data.evidence){error(modal,"أدخل التكلفة بدقة لا تتجاوز خانتين ومصدر إثباتها.");return;}
         var next=json(data);if(next!==signature){signature=next;operationKey=key();}data.operationKey=operationKey;busy=true;button.disabled=true;
         request("/api/inventory/cost-basis/reconcile","POST",data).then(function(){UI.closeModal();UI.toast("تم حفظ أساس التكلفة الموثق.","success");load();}).catch(function(reason){busy=false;button.disabled=false;error(modal,reason);});
       };}});
@@ -152,7 +152,7 @@
                 row.querySelector("[data-expiry-field]").hidden=!state.caps.expiry||!plus;
                 var sale=selectedVariant.effectiveSalePrice,ratio=Number(selectedUnit.numerator||1)/Number(selectedUnit.denominator||1);
                 // Retail guidance follows the selected variant/unit. Acquisition cost stays blank.
-                if(receipt)row.querySelector("[data-sale]").placeholder=sale===null||sale===undefined?"أدخل سعر البيع":("السعر الحالي: "+(Number(sale)*ratio).toFixed(4));
+                if(receipt)row.querySelector("[data-sale]").placeholder=sale===null||sale===undefined?"أدخل سعر البيع":("السعر الحالي: "+(Number(sale)*ratio).toFixed(2));
                 var matching=(state.balances||[]).filter(function(b){return String(b.variantId)===variantSelect.value&&(!state.caps.batch||b.lotNumber===row.querySelector("[data-lot]").value.trim());});
                 var current=matching.reduce(function(sum,b){return sum+Number(b.quantityBaseScaled);},0),entered=Number(row.querySelector("[data-quantity]").value||0)*ratio*1000000;
                 row.querySelector("[data-cost-note]").textContent="الرصيد الحالي: "+formatQty(current)+(adjustment?" — الرصيد بعد التسوية: "+formatQty(current+(plus?entered:-entered)):"");
@@ -180,8 +180,8 @@
             if(!unitSelect.value){fail(row,"لا توجد وحدة قياس نشطة لهذا الصنف.");valid=false;return;}
             if(!/^\d+(?:\.\d{1,6})?$/.test(quantity)||Number(quantity)<=0){fail(row,"أدخل كمية صحيحة أكبر من صفر.");valid=false;return;}
             var plus=receipt||adjustment&&row.querySelector("[data-direction]").value==="plus",costInput=row.querySelector("[data-cost]"),saleInput=row.querySelector("[data-sale]"),cost=costInput?costInput.value.trim():null,sale=saleInput?saleInput.value.trim():null;
-            if(plus&&!/^\d+(?:\.\d{1,4})?$/.test(cost||"")){fail(row,"أدخل سعر شراء صحيحًا بدقة أربع خانات عشرية كحد أقصى.");valid=false;return;}
-            if(receipt&&!/^\d+(?:\.\d{1,4})?$/.test(sale||"")){fail(row,"أدخل سعر بيع صحيحًا بدقة أربع خانات عشرية كحد أقصى.");valid=false;return;}
+            if(plus&&!/^\d+(?:\.\d{1,2})?$/.test(cost||"")){fail(row,"أدخل سعر شراء صحيحًا بدقة خانتين عشريتين كحد أقصى.");valid=false;return;}
+            if(receipt&&!/^\d+(?:\.\d{1,2})?$/.test(sale||"")){fail(row,"أدخل سعر بيع صحيحًا بدقة خانتين عشريتين كحد أقصى.");valid=false;return;}
             var selectedUnit=state.units.filter(function(u){return String(u.id)===unitSelect.value;})[0]||{},baseCount=Number(quantity)*Number(selectedUnit.numerator||1)/Number(selectedUnit.denominator||1);
             var units=[],count=baseCount;
             if(caps.serial){

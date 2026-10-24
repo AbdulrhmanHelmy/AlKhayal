@@ -41,7 +41,7 @@ namespace AlKhayal.IntegrationTests
                 var users = new SqliteUserStore(connectionString);
                 var adminId = await users.CreateAsync("supplier-restart-admin", "مسؤول اختبار", new PasswordHasher().Hash("test-only-secret"), "administrator", CancellationToken.None);
                 var product = await new CatalogService(new SqliteCatalogStore(connectionString)).CreateProductAsync(
-                    new CreateProductCommand { OperationKey = "supplier-restart-product", Name = "صنف اختبار إعادة التشغيل", BaseUnitId = 1, ProductType = "stock", SalePrice = "15.0000", PurchasePrice = "10.1250", IsActive = true, UserId = adminId }, CancellationToken.None);
+                    new CreateProductCommand { OperationKey = "supplier-restart-product", Name = "صنف اختبار إعادة التشغيل", BaseUnitId = 1, ProductType = "stock", SalePrice = "15.00", PurchasePrice = "10.13", IsActive = true, UserId = adminId }, CancellationToken.None);
                 Assert.True(product.Succeeded, product.ErrorMessage);
                 productId = product.Value.Id;
                 using (var connection = new SQLiteConnection(connectionString))
@@ -70,7 +70,7 @@ namespace AlKhayal.IntegrationTests
                     Assert.Contains("\"paid\":0", await initialList.Content.ReadAsStringAsync());
 
                     var draftResponse = await Send(client, HttpMethod.Post, "api/purchases/drafts", csrf,
-                        "{\"supplierId\":" + supplierId + ",\"warehouseId\":1,\"invoiceNumber\":\"RESTART-INV-1\",\"invoiceDate\":\"2026-10-24\",\"paymentMode\":\"credit\",\"lines\":[{\"variantId\":" + variantId + ",\"productUnitId\":" + productUnitId + ",\"quantity\":\"2.000000\",\"purchaseUnitPrice\":\"10.1250\",\"saleUnitPrice\":\"15.0000\"}]}");
+                        "{\"supplierId\":" + supplierId + ",\"warehouseId\":1,\"invoiceNumber\":\"RESTART-INV-1\",\"invoiceDate\":\"2026-10-24\",\"paymentMode\":\"credit\",\"lines\":[{\"variantId\":" + variantId + ",\"productUnitId\":" + productUnitId + ",\"quantity\":\"2.000000\",\"purchaseUnitPrice\":\"10.13\",\"saleUnitPrice\":\"15.00\"}]}");
                     Assert.Equal(HttpStatusCode.Created, draftResponse.StatusCode);
                     var draftText = await draftResponse.Content.ReadAsStringAsync();
                     purchaseId = long.Parse(Regex.Match(draftText, "\\\"id\\\":(\\d+)").Groups[1].Value);
@@ -78,7 +78,7 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
 
                     var payment = await Send(client, HttpMethod.Post, "api/suppliers/" + supplierId + "/payments", csrf,
-                        "{\"purchaseInvoiceId\":" + purchaseId + ",\"operationKey\":\"restart-purchase-payment\",\"amount\":5.1250,\"paymentDate\":\"2026-10-24\",\"method\":\"cash\"}");
+                        "{\"purchaseInvoiceId\":" + purchaseId + ",\"operationKey\":\"restart-purchase-payment\",\"amount\":5.13,\"paymentDate\":\"2026-10-24\",\"method\":\"cash\"}");
                     Assert.Equal(HttpStatusCode.Created, payment.StatusCode);
                 }
 
@@ -110,8 +110,8 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
                     Assert.Contains("\"id\":" + supplierId, json);
                     Assert.Contains("مورد إعادة التشغيل", json);
-                    Assert.Contains("\"payable\":15.125", json);
-                    Assert.Contains("\"paid\":5.125", json);
+                    Assert.Contains("\"payable\":15.13", json);
+                    Assert.Contains("\"paid\":5.13", json);
                 }
 
                 server.Dispose(); server = null;

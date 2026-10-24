@@ -7,6 +7,8 @@ namespace AlKhayal.Application.Authentication
     public interface IUserStore
     {
         Task<UserRecord> FindByUsernameAsync(string username, CancellationToken cancellationToken);
+        Task<bool> IsEmptyAsync(CancellationToken cancellationToken);
+        Task<bool> TryCreateFirstAdminAsync(string username, string displayName, string passwordHash, CancellationToken cancellationToken);
         Task<long> CreateAsync(string username, string displayName, string passwordHash, string role, CancellationToken cancellationToken);
         Task UpdatePasswordHashAsync(long userId, string passwordHash, CancellationToken cancellationToken);
         Task UpdateLastLoginAsync(long userId, DateTime utc, CancellationToken cancellationToken);

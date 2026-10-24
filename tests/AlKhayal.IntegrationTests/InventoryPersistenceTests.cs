@@ -394,7 +394,7 @@ namespace AlKhayal.IntegrationTests
                 Assert.Equal(3750000L,(await f.Store.BalancesAsync(1,null,CancellationToken.None)).Single().QuantityBaseScaled);
                 var precision=f.Command("manual_receipt","precision-1","1");precision.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=thirdUnit,Quantity="1",UnitCost="4",SalePrice="12"}};
                 Assert.Equal("invalid_quantity_precision",(await f.Store.PostAsync(precision,"precision-hash",CancellationToken.None)).ErrorCode);
-                var overflow=f.Command("manual_receipt","overflow-1","2");overflow.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="2",UnitCost="922337203685477.5807",SalePrice="12"}};
+                var overflow=f.Command("manual_receipt","overflow-1","2");overflow.Lines=new[]{new InventoryLineInput{VariantId=f.VariantId,ProductUnitId=f.UnitId,Quantity="2",UnitCost="922337203685477.58",SalePrice="12"}};
                 Assert.Equal("numeric_overflow",(await f.Store.PostAsync(overflow,"overflow-hash",CancellationToken.None)).ErrorCode);
                 using(var c=new SQLiteConnection(f.Cs))
                 {

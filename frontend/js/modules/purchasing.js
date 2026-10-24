@@ -2,7 +2,7 @@
   "use strict";
   var U = global.AlKhayalUtils, UI = global.AlKhayalUI, selectedInvoiceId = null;
   function esc(value) { return U.escape(value == null ? "" : String(value)); }
-  function moneyScaled(value) { var n = BigInt(String(value || "0")), whole = (n / 10000n).toString(), fraction = (n % 10000n).toString().padStart(4, "0").replace(/0+$/, ""); return whole + (fraction ? "." + fraction : ""); }
+  function moneyScaled(value) { var n = BigInt(String(value || "0")), negative = n < 0n; if (negative) n = -n; var cents = (n + 50n) / 100n, whole = (cents / 100n).toString(), fraction = (cents % 100n).toString().padStart(2, "0"); return (negative ? "-" : "") + whole + "." + fraction; }
   function numScale(value, places) {
     var text = String(value || "0").trim(), parts = text.split("."), fraction = (parts[1] || "").padEnd(places, "0");
     if (fraction.length > places || !/^\d+$/.test(parts[0] || "0") || !/^\d*$/.test(fraction)) throw new Error("تحقق من دقة الكمية والسعر.");
@@ -13,7 +13,7 @@
   }
   function totalFor(lines) {
     return lines.reduce(function (sum, line) {
-      var raw = numScale(line.quantity, 6) * numScale(line.purchaseUnitPrice, 4), total = (raw + 500000n) / 1000000n;
+      var raw = numScale(line.quantity, 6) * numScale(line.purchaseUnitPrice, 2), total = ((raw + 500000n) / 1000000n) * 100n;
       return sum + total;
     }, 0n);
   }

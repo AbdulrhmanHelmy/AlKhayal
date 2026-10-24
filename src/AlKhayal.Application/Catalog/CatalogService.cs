@@ -7,12 +7,13 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AlKhayal.Application.Features;
+using AlKhayal.Application.Finance;
 
 namespace AlKhayal.Application.Catalog
 {
     public sealed class CatalogService
     {
-        public const long MoneyScale = 10000L;
+        public const long MoneyScale = MoneyPolicy.InternalScale;
         private static readonly HashSet<string> ProductFormCapabilities = new HashSet<string>(new[] { "expiry-dates", "batch-tracking", "sizes", "colors", "product-variants" }, System.StringComparer.OrdinalIgnoreCase);
         private readonly ICatalogStore _store;
         private readonly ICatalogFeatureReader _features;
@@ -162,13 +163,10 @@ namespace AlKhayal.Application.Catalog
 
         public static bool TryScaleMoney(string text, out long scaled)
         {
-            scaled=0; decimal value;
-            if (string.IsNullOrWhiteSpace(text) || !decimal.TryParse(text.Trim(), NumberStyles.AllowLeadingSign|NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value) || value < 0) return false;
-            try { var rounded=decimal.Round(checked(value*MoneyScale),0,MidpointRounding.AwayFromZero); if(rounded>long.MaxValue) return false; scaled=decimal.ToInt64(rounded); return true; }
-            catch(OverflowException) { return false; }
+            return MoneyPolicy.TryParseUserAmount(text, false, out scaled);
         }
 
-        public static string FormatMoney(long scaled) { return (scaled/(decimal)MoneyScale).ToString("0.0000", CultureInfo.InvariantCulture); }
+        public static string FormatMoney(long scaled) { return MoneyPolicy.FormatForUser(scaled); }
         private static string ValidateProduct(string name, string description, long unitId, string type, string price, string purchasePrice, out long scaled, out long? purchaseScaled)
         {
             scaled=0; purchaseScaled=null;
@@ -177,11 +175,11 @@ namespace AlKhayal.Application.Catalog
             if(unitId<=0) return "وحدة القياس الأساسية مطلوبة.";
             type=string.IsNullOrWhiteSpace(type)?ProductTypes.Stock:type.Trim().ToLowerInvariant();
             if(!ProductTypes.IsValid(type)) return "نوع المنتج غير صالح.";
-            if(!TryScaleMoney(price,out scaled)) return "سعر البيع يجب أن يكون رقمًا عشريًا غير سالب ضمن النطاق المسموح.";
+            if(!TryScaleMoney(price,out scaled)) return "سعر البيع يجب أن يكون رقمًا غير سالب بدقة لا تتجاوز خانتين عشريتين.";
             if(!string.IsNullOrWhiteSpace(purchasePrice))
             {
                 long value;
-                if(!TryScaleMoney(purchasePrice,out value)) return "سعر الشراء يجب أن يكون رقمًا عشريًا غير سالب ضمن النطاق المسموح.";
+                if(!TryScaleMoney(purchasePrice,out value)) return "سعر الشراء يجب أن يكون رقمًا غير سالب بدقة لا تتجاوز خانتين عشريتين.";
                 purchaseScaled=value;
             }
             return null;

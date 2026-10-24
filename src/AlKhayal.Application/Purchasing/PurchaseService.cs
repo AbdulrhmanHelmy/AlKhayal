@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
+using AlKhayal.Application.Finance;
 
 namespace AlKhayal.Application.Purchasing
 {
@@ -83,11 +84,11 @@ namespace AlKhayal.Application.Purchasing
                 long quantity, cost, sale;
                 if (line == null || line.VariantId <= 0 || line.ProductUnitId <= 0 || !TryScale(line.Quantity, 6, out quantity) || quantity <= 0)
                     throw new ArgumentException("أدخل صنفًا ووحدة وكمية صحيحة لكل بند.");
-                if (!TryScale(line.PurchaseUnitPrice, 4, out cost) || !TryScale(line.SaleUnitPrice, 4, out sale))
-                    throw new ArgumentException("أدخل سعر شراء وبيع صالحين بدقة أربع خانات عشرية.");
+                if (!MoneyPolicy.TryParseUserAmount(line.PurchaseUnitPrice, false, out cost) || !MoneyPolicy.TryParseUserAmount(line.SaleUnitPrice, false, out sale))
+                    throw new ArgumentException("أدخل سعر شراء وبيع صالحين بدقة لا تتجاوز خانتين عشريتين.");
                 if (line.LotNumber != null && line.LotNumber.Length > 80) throw new ArgumentException("رقم التشغيلة طويل جدًا.");
                 if (line.ExpirationDate != null) ValidateDate(line.ExpirationDate, false);
-                var lineTotal = checked((long)Math.Round((decimal)quantity * cost / 1000000m, 0, MidpointRounding.AwayFromZero));
+                var lineTotal = MoneyPolicy.FinalizeQuantityAmount(quantity, cost);
                 line.LineTotalScaled = lineTotal;
                 total = checked(total + lineTotal);
                 line.PhysicalUnits = line.PhysicalUnits ?? new List<PurchasePhysicalUnit>();

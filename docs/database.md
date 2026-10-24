@@ -1,5 +1,19 @@
 ﻿# Database
 
+## Monetary precision policy
+
+User-entered EGP amounts are limited to two fractional digits. The Application boundary converts them exactly to the existing signed 64-bit scale-4 representation, so a piastre is always a multiple of 100 internal units. Finalized invoice lines and supplier-account return amounts round to the nearest piastre with `MidpointRounding.AwayFromZero`; half-piastre ties therefore round away from zero. Quantity remains scale 6.
+
+Financial display precision is fixed at two digits even for an older database whose legacy `ApplicationSettings.DecimalPrecision` value differs. New settings writes accept only `2`; generic quantity formatting remains independent and supports up to six fractional digits.
+
+FIFO layers, movement values, partial allocations, unit conversions, and historical values remain scale 4. They are not rewritten merely to obtain a two-decimal display. Allocation consumes the final residual value with the final residual quantity, preserving each layer's original total exactly. User-facing formatting rounds scale-4 values to two decimals while the scaled integer remains available for reconciliation and tests.
+
+The customer and supplier legacy preflights read `CAST(value AS TEXT)` and parse invariant decimal text rather than converting SQLite REAL values through binary floating-point comparisons. Compatible scale-4 values upgrade unchanged. A genuine negative, overflow, malformed, or sub-scale historical value aborts the migration transaction with the affected table/row or financial relationship identified; the original row is retained for operator-led reconciliation. No startup path rounds or resets a legacy database.
+
+## Zero-user bootstrap
+
+First-run administrator creation uses the existing `Users` table and PBKDF2 password hasher; no schema migration is required. The SQLite store begins a serializable writer transaction, checks the count of all users (including inactive users), and inserts exactly one active `administrator`. The role is not supplied by the client. Once any user exists, status remains closed across restart and the insert path returns without writing.
+
 The Phase 2.3 tracking foundation reuses persisted product capability assignments. Physical batch and identifier tables are created by the atomic inventory ledger migration `011_inventory_ledger.sql` described below; see [phase-2-task-3-tracking.md](phase-2-task-3-tracking.md) for the Task 2.3 scope.
 
 ## Migration 009 — product reference purchase cost
@@ -43,7 +57,7 @@ Products, categories, units, and optional reference purchase costs are persisted
 
 ## Migration 015 — customer transaction ledger
 
-Migration 015 is additive: it leaves `Customers`, `CustomerPayments`, balances, and all historical rows untouched. It creates immutable customer transaction entries and imports a reconciled opening entry plus the recorded historical collections, so the new statement derives the same current balance rather than rewriting it. The migration preflight rejects a legacy balance or payment that cannot be represented exactly at scale 4; it never rounds a historical monetary value. New monetary entries are validated at scale 4 and use a unique operation key for retry safety.
+Migration 015 is additive: it leaves `Customers`, `CustomerPayments`, balances, and all historical rows untouched. It creates immutable customer transaction entries and imports a reconciled opening entry plus the recorded historical collections, so the new statement derives the same current balance rather than rewriting it. The migration preflight rejects a legacy balance or payment that cannot be represented exactly at scale 4; it never rounds a historical monetary value. New monetary entries are limited to two fractional digits, stored at scale 4, and use a unique operation key for retry safety.
 
 Migration `011_inventory_ledger.sql` is additive to the Task 2.3 catalog schema. It creates the default warehouse, inventory documents/lines, immutable stock movements, batch and physical-unit identities, movement links, balance projection, and inventory audit. Partial unique balance indexes distinguish null batch from a real batch. Projection triggers compare each inserted/updated row with its ledger aggregate; posted documents, lines, movements, and audit rows are protected against edits. See [inventory-ledger.md](inventory-ledger.md) for the complete table list, scale policy, restore/rebuild process, and tracking limits.
 

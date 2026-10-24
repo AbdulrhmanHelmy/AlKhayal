@@ -16,8 +16,9 @@ namespace AlKhayal.UnitTests
             Assert.Equal("validation",(await service.CreateProductAsync(new CreateProductCommand{OperationKey="x",Name="منتج",BaseUnitId=1,ProductType="stock",SalePrice="-1"},CancellationToken.None)).ErrorCode);
             Assert.Null(store.Created);
             Assert.Equal("validation",(await service.CreateProductAsync(new CreateProductCommand{OperationKey="x2",Name="منتج",BaseUnitId=1,ProductType="stock",SalePrice="1",PurchasePrice="-0.01"},CancellationToken.None)).ErrorCode);
-            var result=await service.CreateProductAsync(new CreateProductCommand{OperationKey="op-1",Name="  منتج  ",BaseUnitId=1,ProductType="stock",SalePrice="1.23456",PurchasePrice="3.45678",IsActive=true},CancellationToken.None);
-            Assert.True(result.Succeeded);Assert.Equal(12346,store.Created.SellPriceScaled);Assert.Equal(34568,store.Created.PurchasePriceScaled);Assert.Equal("منتج",store.Created.Name);Assert.False(string.IsNullOrWhiteSpace(store.Created.RequestHash));
+            Assert.Equal("validation",(await service.CreateProductAsync(new CreateProductCommand{OperationKey="bad-precision",Name="منتج",BaseUnitId=1,ProductType="stock",SalePrice="1.234"},CancellationToken.None)).ErrorCode);
+            var result=await service.CreateProductAsync(new CreateProductCommand{OperationKey="op-1",Name="  منتج  ",BaseUnitId=1,ProductType="stock",SalePrice="1.23",PurchasePrice="3.45",IsActive=true},CancellationToken.None);
+            Assert.True(result.Succeeded);Assert.Equal(12300,store.Created.SellPriceScaled);Assert.Equal(34500,store.Created.PurchasePriceScaled);Assert.Equal("منتج",store.Created.Name);Assert.False(string.IsNullOrWhiteSpace(store.Created.RequestHash));
             var unknown=await service.CreateProductAsync(new CreateProductCommand{OperationKey="op-2",Name="بلا تكلفة",BaseUnitId=1,ProductType="stock",SalePrice="2",PurchasePrice=null,IsActive=true},CancellationToken.None);
             Assert.True(unknown.Succeeded);Assert.Null(store.Created.PurchasePriceScaled);Assert.Null(unknown.Value.PurchasePrice);
         }

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
+using AlKhayal.Application.Finance;
 
 namespace AlKhayal.Application.Suppliers
 {
@@ -24,7 +25,7 @@ namespace AlKhayal.Application.Suppliers
         public Task<SupplierLedgerEntry> AddPaymentAsync(long supplierId, long? supplierInvoiceId, long? purchaseInvoiceId, string amount, string paymentDate, string method, string account, string notes, string operationKey, CancellationToken ct)
         {
             long scaled;
-            if (supplierId <= 0 || supplierInvoiceId.HasValue && supplierInvoiceId <= 0 || purchaseInvoiceId.HasValue && purchaseInvoiceId <= 0 || supplierInvoiceId.HasValue && purchaseInvoiceId.HasValue || !TryScale(amount, out scaled) || scaled <= 0)
+            if (supplierId <= 0 || supplierInvoiceId.HasValue && supplierInvoiceId <= 0 || purchaseInvoiceId.HasValue && purchaseInvoiceId <= 0 || supplierInvoiceId.HasValue && purchaseInvoiceId.HasValue || !MoneyPolicy.TryParseUserAmount(amount, false, out scaled) || scaled <= 0)
                 throw new ArgumentException("أدخل المورد والفاتورة وقيمة دفع صحيحة.");
             ValidateDate(paymentDate, true);
             if (string.IsNullOrWhiteSpace(method) || method.Trim().Length > 60 || account != null && account.Trim().Length > 100 || notes != null && notes.Length > 1000)
@@ -34,12 +35,6 @@ namespace AlKhayal.Application.Suppliers
                 PaymentDate = paymentDate, Method = method.Trim(), Account = (account ?? "").Trim(), Notes = notes ?? "", OperationKey = operationKey.Trim() };
             command.RequestHash = Hash(command);
             return _repository.AddPaymentAsync(command, ct);
-        }
-        private static bool TryScale(string value, out long scaled)
-        {
-            scaled = 0; decimal parsed;
-            if (string.IsNullOrWhiteSpace(value) || !decimal.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out parsed) || parsed < 0) return false;
-            try { var result = parsed * 10000m; if (result != decimal.Truncate(result)) return false; scaled = checked((long)result); return true; } catch (OverflowException) { return false; }
         }
         private static void ValidateDate(string value, bool required)
         {

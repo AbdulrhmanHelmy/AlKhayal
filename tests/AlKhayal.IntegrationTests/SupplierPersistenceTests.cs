@@ -174,16 +174,16 @@ namespace AlKhayal.IntegrationTests
                 var id = NewSupplier(cs);
                 var invoice = accounts.AddInvoice(id, "LEDGER-1", "2026-10-01", null, 100m, "legacy bill");
                 var ledger = new SupplierLedgerService(new SqliteSupplierLedgerRepository(cs));
-                var payment = ledger.AddPaymentAsync(id, invoice.Id, null, "20.1250", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult();
+                var payment = ledger.AddPaymentAsync(id, invoice.Id, null, "20.13", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult();
                 Assert.False(payment.Replayed);
-                var replay = ledger.AddPaymentAsync(id, invoice.Id, null, "20.1250", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult();
+                var replay = ledger.AddPaymentAsync(id, invoice.Id, null, "20.13", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult();
                 Assert.True(replay.Replayed);
                 Assert.Throws<InvalidOperationException>(() => ledger.AddPaymentAsync(id, invoice.Id, null, "21", "2026-10-05", "تحويل", "حساب مسجل", "دفعة", "ledger-pay-1", CancellationToken.None).GetAwaiter().GetResult());
-                Assert.Equal(79.875m, suppliers.GetById(id).Payable);
-                Assert.Equal(20.125m, accounts.GetInvoices(id).Single().PaidAmount);
-                Assert.Equal(20.125m, accounts.GetPayments(id).Single().Amount);
+                Assert.Equal(79.87m, suppliers.GetById(id).Payable);
+                Assert.Equal(20.13m, accounts.GetInvoices(id).Single().PaidAmount);
+                Assert.Equal(20.13m, accounts.GetPayments(id).Single().Amount);
                 var statement = ledger.StatementAsync(id, null, null, CancellationToken.None).GetAwaiter().GetResult();
-                Assert.Equal(100m, statement.TotalInvoices); Assert.Equal(20.125m, statement.TotalPaid); Assert.Equal(79.875m, statement.ClosingBalance);
+                Assert.Equal(100m, statement.TotalInvoices); Assert.Equal(20.13m, statement.TotalPaid); Assert.Equal(79.87m, statement.ClosingBalance);
                 Assert.Equal(2, ledger.HistoryAsync(id, CancellationToken.None).GetAwaiter().GetResult().Count);
             });
         }

@@ -75,7 +75,7 @@ namespace AlKhayal.Application.Settings
             if (!TimeFormats.Contains(value.TimeFormat)) return "تنسيق الوقت غير مدعوم.";
             if (string.IsNullOrWhiteSpace(value.CurrencyCode) || value.CurrencyCode.Trim().Length != 3) return "رمز العملة يجب أن يتكون من ثلاثة أحرف.";
             if (string.IsNullOrWhiteSpace(value.CurrencySymbol) || value.CurrencySymbol.Trim().Length > 12) return "رمز عرض العملة مطلوب وبحد أقصى 12 حرفًا.";
-            if (value.DecimalPrecision < 0 || value.DecimalPrecision > 4) return "دقة الكسور يجب أن تكون بين صفر وأربعة.";
+            if (value.DecimalPrecision != 2) return "عرض المبالغ المالية ثابت على خانتين عشريتين.";
             if (value.DefaultTaxRate < 0 || value.DefaultTaxRate > 100) return "نسبة الضريبة يجب أن تكون بين صفر و100.";
             if (!value.TaxEnabled && value.PricesIncludeTax) return "لا يمكن اعتبار الأسعار شاملة للضريبة عند تعطيل الضريبة.";
             return null;

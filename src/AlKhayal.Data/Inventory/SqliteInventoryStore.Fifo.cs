@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AlKhayal.Application.Inventory;
+using AlKhayal.Application.Finance;
 using Dapper;
 
 namespace AlKhayal.Data.Inventory
@@ -91,7 +92,7 @@ namespace AlKhayal.Data.Inventory
                     var balance=await FindBalanceAsync(c,tx,old.WarehouseId,old.VariantId,old.BatchId,ct).ConfigureAwait(false);
                     if(balance==null||balance.Version!=command.ExpectedVersion)return Fail<long>("stale_count","تغير الرصيد. حدّث الصفحة قبل توثيق التكلفة.");
                     long cost;
-                    if(!InventoryService.TryScale(command.UnitCost,4,out cost)||string.IsNullOrWhiteSpace(command.Evidence))return Fail<long>("invalid_cost_basis","أدخل التكلفة ومصدر إثباتها.");
+                    if(!MoneyPolicy.TryParseUserAmount(command.UnitCost,false,out cost)||string.IsNullOrWhiteSpace(command.Evidence))return Fail<long>("invalid_cost_basis","أدخل التكلفة بدقة لا تتجاوز خانتين ومصدر إثباتها.");
                     var value=InventoryCosting.ReceiptValue(cost,old.RemainingQuantityScaled);
                     if(value!=old.RemainingValueScaled)return Fail<long>("legacy_value_mismatch","التكلفة الموثقة لا تطابق القيمة التاريخية. لم تتغير البيانات؛ يلزم تسوية تقييم موثقة منفصلة بواسطة مختص.");
                     var now=Now();

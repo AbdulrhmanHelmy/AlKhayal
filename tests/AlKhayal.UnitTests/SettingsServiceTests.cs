@@ -26,6 +26,7 @@ namespace AlKhayal.UnitTests
             var currency=ValidGeneral();currency.CurrencyCode="LE";Assert.False((await service.UpdateGeneralAsync(currency,CancellationToken.None)).Succeeded);
             var tax=ValidGeneral();tax.DefaultTaxRate=101;Assert.False((await service.UpdateGeneralAsync(tax,CancellationToken.None)).Succeeded);
             var language=ValidGeneral();language.LanguageCode="en";Assert.False((await service.UpdateGeneralAsync(language,CancellationToken.None)).Succeeded);
+            var precision=ValidGeneral();precision.DecimalPrecision=4;Assert.False((await service.UpdateGeneralAsync(precision,CancellationToken.None)).Succeeded);
             Assert.Equal(0,store.GeneralWrites);Assert.Equal(0,store.CompanyWrites);
         }
 

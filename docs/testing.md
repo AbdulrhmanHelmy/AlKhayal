@@ -1,5 +1,13 @@
 # Testing and verification
 
+## Financial precision and first-run regressions
+
+`MoneyPolicyTests` covers 0.01, 0.10, 0.99, a large signed-64-bit-safe amount, zero, prohibited negatives, excess precision, exact two-decimal formatting, fractional quantity multiplication, and positive/negative half-piastre ties. FIFO tests continue to inspect underlying layer/allocation integers, repeated partial withdrawals, cross-layer consumption, final residual allocation, transfers, rollback, restart, and idempotent replay.
+
+`FirstRunBootstrapTests` creates a disposable migrated SQLite database for zero-user creation, successful login after a new service instance, Admin/cashier/inactive-user exclusion, concurrent creation, no partial row after validation failure, the single-character/numeric-only/symbol-only password policy, and the real OWIN API cookie flow.
+
+The realistic financial dataset test uses real catalog, customer, supplier, purchasing, inventory, FIFO, return, payment, transfer, and stock-count services against one disposable SQLite file. It compares invoice, supplier-ledger, supplier projection, customer projection, purchase-return account value, FIFO value, and explicit variance using underlying database integers, reruns migrations, verifies foreign keys, and deletes the test file afterward.
+
 Catalog coverage adds fresh/repeated 001–009 migration, a representative legacy upgrade with ID/value preservation and unknown purchase cost, exact scale-4 sale/reference-cost rounding, negative-cost rejection, invalid legacy sale-price/name quarantine, post-migration reconciliation, foreign-key/integrity checks, category create/edit/duplicate/cycle behavior, protected default unit behavior, invalid references, idempotent create, search/filter, optimistic update conflicts, activation/archive and purchase-cost restart persistence, authenticated API/CSRF/role/screen-permission checks, renderer resolution, contextual product/category/unit actions, inline draft-preserving category creation, two-entry inventory sidebar, hidden-route compatibility, real Warehouse Directory, stale-response suppression, retry states, and explicit non-operational future fields.
 
 Settings coverage includes service validation and concurrent-read caching, real SQLite persistence/restart/audit/rollback, fresh and repeated migration, authenticated reads, administrator/CSRF mutations, cashier rejection, invalid payloads, database-information leakage checks, executable renderer resolution, formatter integration, stale-response handling, and deduplicated frontend loads. Native acceptance must distinguish unauthenticated startup/theme checks from authenticated workflow checks; the latter remain manual if credentials cannot be entered by the available automation.
