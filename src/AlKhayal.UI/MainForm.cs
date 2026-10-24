@@ -97,7 +97,14 @@ namespace AlKhayal.UI
             }
             catch (Exception exception)
             {
-                _status.Text = "تعذر الاتصال بالخادم أو WebView2. ثبّت Runtime المدعوم وتحقق من إعدادات التشغيل.\r\n" + exception.Message;
+                var logged = StartupFailureReporter.TryLog(exception);
+                _server?.Dispose();
+                _server = null;
+                Controls.Clear();
+                Controls.Add(_status);
+                _status.Text = logged
+                    ? "تعذر بدء تشغيل التطبيق. يرجى التواصل مع الدعم الفني؛ حُفظت تفاصيل المشكلة في سجل التشخيص."
+                    : "تعذر بدء تشغيل التطبيق. يرجى التواصل مع الدعم الفني.";
             }
         }
     }

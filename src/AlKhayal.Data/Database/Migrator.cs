@@ -55,6 +55,8 @@ namespace AlKhayal.Data.Database
                             CustomerLedgerMigrationPreflight.Run(conn, tx);
                         if (script.EndsWith("017_integrated_purchasing.sql", StringComparison.Ordinal))
                             SupplierLedgerMigrationPreflight.Run(conn, tx);
+                        if (script.EndsWith("018_purchasing_provenance_and_credit.sql", StringComparison.Ordinal))
+                            SupplierLedgerLegacyPaymentCompatibility.Run(conn, tx);
 
                         Execute(conn, tx, sql);
 

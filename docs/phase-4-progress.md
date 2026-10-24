@@ -49,3 +49,7 @@ Completed. Added return posting, return audit, immutable return records, explici
 - `git diff --check` — passed; Git emitted only configured LF-to-CRLF working-copy notices.
 
 No real treasury integration, tax/discount treatment, or historical FIFO reconstruction is claimed. Supplier-payment and cash-refund labels are supplier-account records only. The UI has automated registry/behavior checks but has not had a manual Windows WebView2 visual smoke test in this environment.
+
+## Startup compatibility follow-up (2026-10-24)
+
+An isolated copy of the default user database (SchemaVersion 001–003, no supplier ledger) upgraded successfully with the current binaries, so the reported screenshot's exact database state was not reproduced from that file. A representative recorded-017 schema missing `SupplierLedgerEntries.LegacyPaymentId` did reproduce the exact 018 `UPDATE` failure. The migrator now repairs that specific missing link transactionally only when every historical payment maps uniquely; unresolved history stops without writing. No applied migration file was edited. The WinForms startup error state now shows Arabic guidance while retaining the exception and stack trace in the local diagnostic log. Manual normal-database UI click-through remains unverified.
