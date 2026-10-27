@@ -103,6 +103,18 @@ namespace AlKhayal.Application.Inventory
         public long? UnresolvedLayerId { get; set; }
         public bool HasReconciledCostBasis { get; set; }
     }
+    public sealed class InventoryValuation
+    {
+        public long WarehouseId { get; set; }
+        public long? ProductId { get; set; }
+        public long QuantityBaseScaled { get; set; }
+        public string CostValue { get; set; }
+        public string PotentialSellingValue { get; set; }
+        public string EstimatedGrossMargin { get; set; }
+        public bool CostComplete { get; set; }
+        public bool SellingComplete { get; set; }
+        public long VariantCount { get; set; }
+    }
 
     public sealed class InventoryMovementRecord
     {
@@ -206,6 +218,8 @@ namespace AlKhayal.Application.Inventory
         Task<InventoryResult<WarehouseRecord>> SaveWarehouseAsync(WarehouseCommand command,bool multipleWarehouses,CancellationToken ct);
         Task<InventoryResult<InventoryPostResult>> PostAsync(InventoryPostCommand command,string requestHash,CancellationToken ct);
         Task<IReadOnlyList<InventoryBalanceRecord>> BalancesAsync(long? warehouseId,long? productId,CancellationToken ct);
+        Task<InventoryPage<InventoryBalanceRecord>> BalancePageAsync(long warehouseId,string search,int page,int pageSize,CancellationToken ct);
+        Task<InventoryValuation> ValuationAsync(long warehouseId,long? productId,CancellationToken ct);
         Task<InventoryPage<InventoryMovementRecord>> MovementsAsync(long? warehouseId,long? productId,string type,string reference,string from,string to,int page,int pageSize,CancellationToken ct);
         Task<InventoryResult<InventoryCountRecord>> CreateCountAsync(long warehouseId,long userId,IReadOnlyList<long> variantIds,CancellationToken ct);
         Task<IReadOnlyList<InventoryCountRecord>> CountsAsync(long warehouseId,CancellationToken ct);

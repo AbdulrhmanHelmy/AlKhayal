@@ -3,6 +3,7 @@ using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using AlKhayal.Application.Suppliers;
 using AlKhayal.Core.Models;
 using AlKhayal.Data.Database;
@@ -13,6 +14,24 @@ namespace AlKhayal.IntegrationTests
 {
     public sealed class SupplierPersistenceTests
     {
+        [Fact]
+        public async Task Supplier_pages_search_all_rows_and_keep_balances()
+        {
+            var path=Path.GetFullPath(Path.Combine(Path.GetTempPath(),"alkhayal-supplier-pages-"+Guid.NewGuid().ToString("N")+".db"));
+            var app=Path.GetFullPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"AlKhayal"));
+            Assert.False(path.StartsWith(app+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase));Assert.False(File.Exists(path));
+            try
+            {
+                var cs=Db.ConnectionStringFor(path);Migrator.Run(cs);var repo=new SqliteSupplierRepository(cs);
+                for(var i=0;i<31;i++)repo.Add(new Supplier{Code="PAGE-"+i.ToString("00"),Name="مورد "+i.ToString("00"),Phone="010"+i,Payable=12,Status="نشط"});
+                var first=await repo.ListAsync("",1,10,CancellationToken.None);var second=await repo.ListAsync("",2,10,CancellationToken.None);
+                Assert.Equal(31,first.TotalCount);Assert.Equal(10,first.Items.Count);Assert.Equal(10,second.Items.Count);Assert.Empty(first.Items.Select(x=>x.Id).Intersect(second.Items.Select(x=>x.Id)));
+                var found=await repo.ListAsync("PAGE-30",1,10,CancellationToken.None);Assert.Single(found.Items);Assert.Equal(12m,found.Items[0].Payable);
+                Assert.Single((await repo.ListAsync("01030",1,10,CancellationToken.None)).Items);
+                Assert.Empty((await repo.ListAsync("%",1,10,CancellationToken.None)).Items);
+            }
+            finally{SQLiteConnection.ClearAllPools();if(File.Exists(path))File.Delete(path);}
+        }
         private static void WithDatabase(Action<string> body)
         {
             var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".db");

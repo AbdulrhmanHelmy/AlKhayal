@@ -21,13 +21,13 @@ var uiJs = fs.readFileSync(path.join(root, "frontend", "js", "components", "ui.j
 var settingsHubJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "settings-hub.js"), "utf8");
 var generalSettingsJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "general-settings.js"), "utf8");
 var settingsStateJs = fs.readFileSync(path.join(root, "frontend", "js", "services", "settings-state.js"), "utf8");
-var posJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "pos.js"), "utf8");
+var salesJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "sales.js"), "utf8");
 var purchasingJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "purchasing.js"), "utf8");
 var loginHtml = fs.readFileSync(path.join(root, "frontend", "login.html"), "utf8");
 var loginJs = fs.readFileSync(path.join(root, "frontend", "js", "login.js"), "utf8");
 var mainFormCs = fs.readFileSync(path.join(root, "src", "AlKhayal.UI", "MainForm.cs"), "utf8");
 var serverHostCs = fs.readFileSync(path.join(root, "src", "AlKhayal.Server.Host", "AlKhayalServer.cs"), "utf8");
-var allowedRenderers = new Set(["dashboard", "settings", "settings-hub", "legacy-redirect", "under-construction", "business-activities", "feature-management", "user-management", "company-settings", "general-settings", "appearance-settings", "database-settings", "catalog-products", "catalog-product-form", "catalog-categories", "catalog-units", "warehouse-directory", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services", "purchase-management", "purchase-list", "purchase-returns"]);
+var allowedRenderers = new Set(["dashboard", "settings", "settings-hub", "legacy-redirect", "under-construction", "business-activities", "feature-management", "user-management", "company-settings", "general-settings", "appearance-settings", "database-settings", "catalog-products", "catalog-product-form", "catalog-categories", "catalog-units", "warehouse-directory", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "sales-invoices", "sales-returns", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services", "purchase-management", "purchase-list", "purchase-returns"]);
 
 assert.ok(loginHtml.indexOf("مرحبًا بك في الخيال. يجب إنشاء حساب المدير للبدء.") >= 0, "login must contain the first-run Arabic message");
 assert.ok(loginHtml.indexOf("إنشاء حساب المدير") >= 0, "login must expose the first Admin action");
@@ -43,6 +43,17 @@ assert.deepStrictEqual(registry.modules.find(function(module){return module.id==
 assert.ok(indexHtml.indexOf('js/modules/inventory.js')>=0&&inventoryJs.indexOf('R["warehouse-directory"]=directory')>=0,"real warehouse renderer must load after catalog module");
 assert.ok(indexHtml.indexOf('js/modules/purchasing.js')>=0&&purchasingJs.indexOf('global.AlKhayalRenderers["purchase-management"]')>=0&&purchasingJs.indexOf('global.AlKhayalRenderers["purchase-returns"]')>=0,"purchasing and traceable return screens must load real renderers");
 assert.ok(purchasingJs.indexOf('"imei-tracking"')>=0&&purchasingJs.indexOf('returnMode: state.mode')>=0&&purchasingJs.indexOf('لا توجد حركة خزينة فعلية')>=0,"purchase UI must collect tracking identities and clearly distinguish refund recording from treasury posting");
+assert.ok(indexHtml.indexOf('js/modules/sales.js')>=0&&salesJs.indexOf('/api/sales/drafts')>=0&&salesJs.indexOf('/api/sales/')>=0&&salesJs.indexOf('/api/catalog/barcodes/lookup')>=0,"standard sales and touch cashier must use persistent invoice, posting, and barcode APIs");
+assert.ok(salesJs.indexOf('R["sales-returns"]=salesReturns')>=0&&salesJs.indexOf('/payments')>=0&&salesJs.indexOf('/returns')>=0,"sales collections and returns must use persisted APIs and dedicated renderers");
+assert.ok(salesJs.indexOf('الكاشير اللمسي')>=0&&salesJs.indexOf('data-checkout')<0&&modulesCss.indexOf('.touch-pos')>=0&&modulesCss.indexOf('touch-cashier-active')>=0,"touch cashier must use a dedicated bounded layout rather than the demonstration checkout");
+assert.ok(salesJs.indexOf('listQuery')>=0&&salesJs.indexOf('productQuery')>=0,"invoice history and catalog search must keep independent query state");
+assert.ok(salesJs.indexOf('method:state.invoice?"PUT":"POST"')>=0,"posting an existing draft must persist the current editor payload before posting");
+assert.ok(salesJs.indexOf('function variantLabel')>=0&&salesJs.indexOf("variantName:variantLabel(product,variant)")>=0,"touch and standard carts must preserve a readable selected-variant label");
+assert.ok(salesJs.indexOf('getTimezoneOffset')>=0,"sales dates must use the local business date rather than the UTC date boundary");
+assert.ok(appJs.indexOf('activeRoute = route; localStorage.setItem("alkhayal_last_route",route)')>=0,"workspace tab activation must persist the actual active route for a later reload");
+assert.ok(salesJs.indexOf('occurredOn:localDate()')>=0,"sales collections must use the local business date rather than the UTC date boundary");
+assert.ok(modulesCss.indexOf('grid-template-rows:minmax(180px,.8fr) minmax(250px,1fr)')<0&&modulesCss.indexOf('.touch-head{height:42px}')<0,"compact touch layout must not stack fixed-height panes or collapse a multi-row header");
+assert.ok(!registry.screens.find(function(x){return x.route==="pos";}).description.includes("محاكاة")&&registry.screens.find(function(x){return x.route==="pos";}).title==="الكاشير اللمسي","POS registry must use the exact cashier title and no mock description");
 assert.ok(inventoryJs.indexOf('/api/inventory/post')>=0&&inventoryJs.indexOf('/api/inventory/counts')>=0&&inventoryJs.indexOf('/api/inventory/movements')>=0,"inventory views must use persisted APIs");
 assert.ok(registry.screens.filter(function(screen){return ["stock-adjustment","warehouse-transfer","stock-movements"].indexOf(screen.route)>=0;}).every(function(screen){return screen.redirectTo==="warehouses-list";}),"legacy stock routes must resolve through the warehouse directory");
 registry.quickAccess.forEach(function (item) { assert.ok(routes.indexOf(item.route) >= 0, "quick-access route is missing: " + item.route); });
@@ -122,13 +133,20 @@ assert.ok(catalogJs.indexOf("data-manage-categories")>=0&&catalogJs.indexOf('con
 assert.ok(catalogJs.indexOf("compactCategories")>=0&&catalogJs.indexOf("compactUnits")>=0&&catalogJs.indexOf('R["catalog-categories"]=compactCategories')>=0&&catalogJs.indexOf('R["catalog-units"]=compactUnits')>=0,"category and unit routes must use table-first renderers");
 assert.ok(catalogJs.indexOf("catalogManagementModal")>=0&&catalogJs.indexOf("+ إضافة تصنيف")>=0&&catalogJs.indexOf("+ إضافة وحدة قياس")>=0,"catalog management must expose compact modal add actions");
 assert.ok(catalogJs.indexOf("جارٍ الحفظ")>=0&&catalogJs.indexOf("تغييرات غير محفوظة")>=0&&catalogJs.indexOf("data-toggle-management")>=0,"management modals must validate, prevent duplicate saves, and protect unsaved edits");
+assert.ok(settingsHubJs.indexOf("setSelectionRange")<0&&settingsHubJs.indexOf(".focus()")<0,"settings hub search must preserve its input node naturally without a programmatic focus restore");
+assert.ok(settingsHubJs.indexOf("data-settings-results")>=0&&settingsHubJs.indexOf("query=this.value;paint();")>=0,"settings hub search must repaint only the persistent results region");
+assert.ok(activityJs.indexOf("next.focus()")<0&&activityJs.indexOf("setSelectionRange")<0&&activityJs.indexOf('id="activityGrid"')>=0&&activityJs.indexOf("query = this.value; updateSearchResults();")>=0,"activity search must update only the activity grid without rebuilding or refocusing its input");
+assert.ok(activityJs.indexOf("previewToken")>=0&&activityJs.indexOf("loadToken")>=0&&activityJs.indexOf("token !== previewToken")>=0&&activityJs.indexOf("token !== loadToken")>=0,"activity load and recommendation previews must discard stale async responses");
+assert.ok(catalogJs.indexOf("products(screen,container,context);},220")<0&&catalogJs.indexOf("render();},180")<0,"catalog searches must not remount the whole screen from the search handler");
+assert.ok(catalogJs.indexOf('id="catalogResults"')>=0&&catalogJs.indexOf('id="categoryManagementResults"')>=0&&catalogJs.indexOf('id="unitManagementResults"')>=0,"catalog list searches must update a persistent in-place results region only");
 assert.ok(uiJs.indexOf("beforeClose")>=0&&uiJs.indexOf("focusSelector")>=0&&uiJs.indexOf("event.key === \"Escape\"")>=0,"shared modal behavior must support close guards, initial focus, Escape, and focus trapping");
 var inventoryModule=registry.modules.find(function(module){return module.id==="inventory";});
 var customerModule=registry.modules.find(function(module){return module.id==="customers";});
-assert.deepStrictEqual(Array.from(customerModule.items),["customers-list","customer-statement","customer-credit-payment","customers-export"],"customer sidebar must keep the management, statement, credit-payment, and export entries only");
+assert.deepStrictEqual(Array.from(customerModule.items),["customers-list","customer-statement","customer-credit-payment"],"customer sidebar must omit the requested export entry");
 ["customers-list","customer-statement","customer-credit-payment"].forEach(function(route){assert.ok(customerModule.items.indexOf(route)>=0,"customer sidebar must keep "+route);});
 ["customer-add","customer-edit","customer-subscriptions"].forEach(function(route){assert.ok(customerModule.items.indexOf(route)<0,"customer sidebar must not expose the standalone "+route+" entry");assert.ok(sidebarRoutes.indexOf(route)<0,"removed customer entry must not stay in any sidebar group: "+route);});
 ["customer-add","customer-edit","customer-subscriptions"].forEach(function(route){var screen=registry.screens.find(function(item){return item.route===route;});assert.ok(screen,"customer route must remain registered: "+route);assert.ok(screen.navigationHidden,"customer action route must stay out of navigation and search: "+route);});
+["customers-export","supplier-reports","supplier-paid-report","invoice-lookup","sales-reports","sales-confirm"].forEach(function(route){var screen=registry.screens.find(function(item){return item.route===route;});assert.ok(screen&&screen.navigationHidden,"requested sidebar removal must preserve a hidden compatibility route: "+route);assert.ok(sidebarRoutes.indexOf(route)<0,"requested route must not remain in a sidebar group: "+route);});
 assert.strictEqual(registry.screens.find(function(screen){return screen.route==="customer-add";}).renderer,"entity-form","customer creation must use the real customer form");
 assert.strictEqual(registry.screens.find(function(screen){return screen.route==="customer-edit";}).renderer,"entity-form","customer editing must use the real customer form");
 assert.ok(appJs.indexOf('"customer-add"')>=0&&appJs.indexOf('"customer-edit"')>=0,"customer creation and editing routes must render their real forms");
@@ -138,7 +156,8 @@ assert.ok(renderersJs.indexOf('info.singular.replace(/^ال/, "")')>=0,"the cust
 assert.ok(renderersJs.indexOf('method: isEdit ? "PUT" : "POST"')>=0&&renderersJs.indexOf('"/api/customers"')>=0,"customer creation and editing must persist through the customer API");
 assert.deepStrictEqual(Array.from(inventoryModule.items),["products-list","warehouses-list"],"inventory sidebar must contain only Product Catalog and Warehouse Directory");
 assert.strictEqual(registry.screens.find(function(screen){return screen.route==="warehouses-list";}).renderer,"warehouse-directory","Warehouse Directory must resolve to its real renderer");
-assert.ok(inventoryJs.indexOf('/api/inventory/warehouses')>=0&&inventoryJs.indexOf('/api/inventory/balances')>=0&&inventoryJs.indexOf('data-select-warehouse')>=0,"Warehouse Directory must query persisted warehouses and balances with searchable selection");
+assert.ok(inventoryJs.indexOf('/api/inventory/warehouses')>=0&&inventoryJs.indexOf('/api/inventory/balance-page')>=0&&inventoryJs.indexOf('data-select-warehouse')>=0,"Warehouse Directory must query persisted warehouses and balances with searchable selection");
+assert.ok(inventoryJs.indexOf('/api/inventory/balance-page')>=0&&inventoryJs.indexOf('inventoryProductSearch')>=0&&inventoryJs.indexOf('data-balance-page')>=0,"warehouse balances must use server-side product search and pagination");
 assert.ok(inventoryJs.indexOf('receiptModal')>=0&&inventoryJs.indexOf('data-operation")==="manual_receipt"')>=0,"the add-stock action must open the simplified receipt modal");
 assert.ok(inventoryJs.indexOf('data-save-receipt')>=0&&inventoryJs.indexOf(">حفظ<")>=0&&inventoryJs.indexOf('جارٍ الحفظ')>=0,"the simplified receipt must save directly with a disabled-while-saving button");
 var receiptSource=inventoryJs.slice(inventoryJs.indexOf('    function receiptModal('));
@@ -165,10 +184,28 @@ settingsEntries.forEach(function(screen){assert.ok(routes.indexOf(screen.route)>
 assert.ok(appJs.indexOf("typeof renderers[screen.renderer]")>=0,"startup must fail visibly when registry renderer code is missing");
 assert.ok(mainFormCs.indexOf("Network.clearBrowserCache")>=0&&serverHostCs.indexOf("no-store, no-cache, must-revalidate")>=0,"desktop startup and static serving must prevent shell/registry cache version skew");
 assert.ok(appJs.indexOf("resolveRoute")>=0&&appJs.indexOf("screen.redirectTo")>=0,"legacy route compatibility must use centralized route resolution");
-function verifyRuntimeRendererResolution(){var context={window:{AlKhayalUtils:{},AlKhayalUI:{},AlKhayalServices:{},AlKhayalCalculations:{},AlKhayalApi:{},AlKhayalFeatures:{},AlKhayalSettings:{},AlKhayalTheme:{}}};context.window.window=context.window;[renderersJs,catalogJs,inventoryJs,activityJs,featureJs,settingsHubJs,generalSettingsJs,userManagementJs,dashboardJs,posJs,purchasingJs].forEach(function(source,index){vm.runInNewContext(source,context,{filename:"renderer-"+index+".js"});});registry.screens.forEach(function(screen){assert.strictEqual(typeof context.window.AlKhayalRenderers[screen.renderer],"function","route must resolve to executable renderer: "+screen.route+" -> "+screen.renderer);});}
+function verifyRuntimeRendererResolution(){var context={window:{AlKhayalUtils:{},AlKhayalUI:{},AlKhayalServices:{},AlKhayalCalculations:{},AlKhayalApi:{},AlKhayalFeatures:{},AlKhayalSettings:{},AlKhayalTheme:{}}};context.window.window=context.window;[renderersJs,catalogJs,inventoryJs,activityJs,featureJs,settingsHubJs,generalSettingsJs,userManagementJs,dashboardJs,salesJs,purchasingJs].forEach(function(source,index){vm.runInNewContext(source,context,{filename:"renderer-"+index+".js"});});registry.screens.forEach(function(screen){assert.strictEqual(typeof context.window.AlKhayalRenderers[screen.renderer],"function","route must resolve to executable renderer: "+screen.route+" -> "+screen.renderer);});}
 verifyRuntimeRendererResolution();
 function verifyRepeatedAdministrationRendering(){var requests=0;var utils={normalize:function(value){return String(value||"").toLowerCase();},escape:function(value){return String(value==null?"":value);}};var ui={pageHeader:function(){return "";},field:function(){return "";}};var context={window:{AlKhayalUtils:utils,AlKhayalUI:ui,AlKhayalFeatures:{routeEnabled:function(){return true;}},AlKhayalApi:{request:function(){requests+=1;return new Promise(function(){});}},AlKhayalRenderers:{},confirm:function(){return true;}}};context.window.window=context.window;vm.runInNewContext(settingsHubJs,context,{filename:"settings-hub-repeat.js"});vm.runInNewContext(userManagementJs,context,{filename:"user-management-repeat.js"});function container(){var input={focus:function(){},setSelectionRange:function(){}};return{innerHTML:"",querySelector:function(selector){return selector==="[data-settings-search]"?input:null;},querySelectorAll:function(){return[];}};}var renderContext={registry:registry,user:{role:"administrator",id:"admin"},canNavigate:function(){return true;},navigate:function(){},isActive:function(){return true;}};var settings=registry.screens.find(function(screen){return screen.route==="settings-program";}),users=registry.screens.find(function(screen){return screen.route==="users-list";});for(var index=0;index<5;index+=1){context.window.AlKhayalRenderers["settings-hub"](settings,container(),renderContext);context.window.AlKhayalRenderers["user-management"](users,container(),renderContext);}assert.strictEqual(requests,5,"five User Management reopen cycles must issue one bounded list request each without recursive loads");}
 verifyRepeatedAdministrationRendering();
+function verifySalesPrecisionAndVariantLabels(){
+  var source=salesJs.replace('  R["sales-invoices"]=sales;', '  global.__salesTest={scaled:scaled,taxTotals:taxTotals,variantLabel:variantLabel,invoiceDiscount:invoiceDiscount,moneyInput:moneyInput};\n  R["sales-invoices"]=sales;');
+  assert.notStrictEqual(source,salesJs,"sales test hook must attach to the registered module");
+  var context={window:{AlKhayalUtils:{},AlKhayalUI:{},AlKhayalApi:{},AlKhayalSettings:{},AlKhayalRenderers:{}},Date:Date,BigInt:BigInt};context.window.window=context.window;
+  vm.runInNewContext(source,context,{filename:"sales-financial-regressions.js"});
+  var helpers=context.window.__salesTest;
+  assert.strictEqual(helpers.scaled("-0.50",4),-5000n,"negative sub-unit amounts must retain their sign");
+  var included=helpers.taxTotals(1150000n,0n,{taxEnabled:true,defaultTaxRate:15,pricesIncludeTax:true});
+  assert.strictEqual(included.tax,150000n,"tax included in EGP 115 at 15% must be EGP 15");
+  assert.strictEqual(included.total,1150000n,"tax-inclusive total must remain the entered total");
+  assert.strictEqual(helpers.invoiceDiscount(1000050n,"percent","12.50"),125000n,"percentage discount must round to a monetary cent");
+  assert.strictEqual(helpers.moneyInput(helpers.invoiceDiscount(1000050n,"percent","12.50")),"12.50","percentage discount must persist as the exact fixed amount accepted by sales posting");
+  assert.throws(function(){helpers.invoiceDiscount(1000000n,"percent","100.01");},/0 و100/,"percentage over 100 must be rejected");
+  assert.throws(function(){helpers.invoiceDiscount(1000000n,"fixed","101.00");},/أكبر/,"fixed discount cannot exceed subtotal");
+  var product={name:"قميص",attributes:[{values:[{valueId:11,value:"M"},{valueId:12,value:"L"}]}]};
+  assert.strictEqual(helpers.variantLabel(product,{name:"قميص",attributeValueIds:[12]}),"L","generated variants must be distinguishable by their assigned values");
+}
+verifySalesPrecisionAndVariantLabels();
 var responsiveViewports = [[1920, 1080], [1600, 900], [1366, 768], [1280, 720], [1024, 768], [900, 600]];
 assert.strictEqual(responsiveViewports.length, 6, "responsive viewport matrix is explicit");
 
@@ -283,12 +320,13 @@ function verifyCustomerManagementCreateAndEdit(){
   }).then(function(){
     var update=apiCalls.filter(function(call){return call.target==="/api/customers/1"&&call.options.method==="PUT";});
     assert.strictEqual(update.length,1,"the customer edit form must save through the persisted customer API");
+    modalLayer.selectors["[data-save-record]"].disabled=false;
     context.window.AlKhayalServices.store.replace("customers",context.window.AlKhayalMockSeed.customers);
     render();
     return container.onclick({target:{closest:function(selector){return selector==="[data-list-add]"?{}:null;}}});
   }).then(function(){
     assert.ok(modalLayer.innerHTML.indexOf("إضافة عميل")>=0,"the customer management screen must open the Arabic add-customer form");
-    assert.ok(modalLayer.innerHTML.indexOf('id="code"')>=0&&modalLayer.innerHTML.indexOf('id="name"')>=0&&modalLayer.innerHTML.indexOf('id="phone"')>=0,"the add-customer form must keep the Arabic customer fields");
+    assert.ok(modalLayer.innerHTML.indexOf('id="code"')<0&&modalLayer.innerHTML.indexOf('id="name"')>=0&&modalLayer.innerHTML.indexOf('id="phone"')>=0,"the add-customer form must generate the code and keep the other customer fields");
     return modalLayer.selectors["[data-save-record]"].onclick();
   }).then(function(){
     var create=apiCalls.filter(function(call){return call.target==="/api/customers"&&call.options.method==="POST";});
@@ -299,11 +337,308 @@ function verifyCustomerManagementCreateAndEdit(){
     var addScreen=registry.screens.find(function(item){return item.route==="customer-add";});
     var formContainer={innerHTML:"",querySelector:function(selector){return selector==="#entityForm"?formElement:null;},querySelectorAll:function(){return[];}};
     context.window.AlKhayalRenderers["entity-form"](addScreen,formContainer,renderContext,true);
-    assert.ok(formContainer.innerHTML.indexOf('id="entityForm"')>=0&&formContainer.innerHTML.indexOf('id="code"')>=0&&formContainer.innerHTML.indexOf('id="name"')>=0,"the contextual customer-add route must still open the real customer form");
+    assert.ok(formContainer.innerHTML.indexOf('id="entityForm"')>=0&&formContainer.innerHTML.indexOf('id="code"')<0&&formContainer.innerHTML.indexOf('id="name"')>=0,"the contextual customer-add route must generate the code and open the real customer form");
     return formElement.onsubmit({preventDefault:function(){}});
   }).then(function(){
     var routeCreate=apiCalls.filter(function(call){return call.target==="/api/customers"&&call.options.method==="POST";});
     assert.strictEqual(routeCreate.length,2,"the contextual customer-add route must save through the persisted customer API");
   });
 }
-Promise.all([require("./inventory-tests.js")(),verifyFeatureStateLifecycle(),verifyAccessStateLifecycle(),verifySettingsStateLifecycle(),verifyCustomerManagementCreateAndEdit()]).then(function () { console.log("Frontend registry, settings/feature/access lifecycle, user management, customer management, and calculation tests passed (" + routes.length + " screens)."); }).catch(function (error) { console.error(error); process.exitCode = 1; });
+function verifyEntityListSearchKeepsFocus(){
+  function fakeElement(){var element={innerHTML:"",textContent:"",value:"",listeners:{},addEventListener:function(name,handler){element.listeners[name]=handler;},querySelector:function(){return null;},querySelectorAll:function(){return[];},getAttribute:function(){return null;}};return element;}
+  var context={window:{},console:console,document:{activeElement:null,getElementById:function(id){return id==="modalLayer"||id==="toastStack"?fakeElement():null;},createElement:function(){return fakeElement();},body:{appendChild:function(){}}},localStorage:{getItem:function(){return null;},setItem:function(){}},setTimeout:setTimeout,clearTimeout:clearTimeout,AlKhayalApi:{request:function(){return Promise.resolve({success:true,data:[]});}}};
+  context.window.window=context.window;
+  function mirrorGlobals(){["AlKhayalUtils","AlKhayalCalculations","AlKhayalMockSeed","AlKhayalServices","AlKhayalUI","AlKhayalApi"].forEach(function(key){if(context[key]!==undefined)context.window[key]=context[key];});}
+  ["frontend/js/core/utils.js","frontend/js/core/calculations.js","frontend/js/mocks/data.js","frontend/js/services/mock-services.js","frontend/js/components/ui.js"].forEach(function(relative){vm.runInNewContext(fs.readFileSync(path.join(root,relative),"utf8"),context,{filename:relative});mirrorGlobals();});
+  vm.runInNewContext(renderersJs,context,{filename:"renderers.js"});
+  var html="",selectors={};
+  var container={onclick:null,querySelectorAll:function(){return[];}};
+  Object.defineProperty(container,"innerHTML",{get:function(){return html;},set:function(value){html=String(value);selectors={};}});
+  container.querySelector=function(selector){
+    var markers={"#listSearch":'id="listSearch"',"[data-table-host]":"data-table-host","[data-list-count]":"data-list-count","[data-list-pagination]":"data-list-pagination"};
+    if(markers[selector]===undefined||html.indexOf(markers[selector])<0)return null;
+    if(!selectors[selector])selectors[selector]=fakeElement();
+    return selectors[selector];
+  };
+  var screen=registry.screens.find(function(item){return item.route==="customers-list";});
+  var renderContext={state:{},navigate:function(){},canNavigate:function(){return true;},registry:registry,user:{role:"administrator"},isActive:function(){return true;}};
+  context.window.AlKhayalRenderers["entity-list"](screen,container,renderContext,true);
+  var search=container.querySelector("#listSearch"),tableHost=container.querySelector("[data-table-host]");
+  assert.ok(search&&typeof search.listeners.input==="function","entity list must wire a debounced search listener on #listSearch");
+  function type(text){search.value=text;search.listeners.input();return new Promise(function(resolve){setTimeout(resolve,250);});}
+  return type("أحمد").then(function(){
+    assert.strictEqual(container.querySelector("#listSearch"),search,"debounced entity-list search must preserve the #listSearch DOM node so keyboard focus survives");
+    assert.strictEqual(container.querySelector("[data-table-host]"),tableHost,"search refresh must reuse the table host node instead of rebuilding the toolbar");
+    assert.ok(tableHost.innerHTML.indexOf('data-row-id="1"')>=0,"filtered entity list must render the matching customer row");
+    assert.ok(tableHost.innerHTML.indexOf('data-row-id="2"')<0,"filtered entity list must drop non-matching customer rows");
+    assert.strictEqual(container.querySelector("[data-list-count]").textContent,context.window.AlKhayalUtils.number(1)+" سجل","search refresh must update the Arabic record count in place");
+    return type("محمود").then(function(){
+      assert.strictEqual(container.querySelector("#listSearch"),search,"a second search keystroke must still hit the same preserved input node");
+      assert.ok(tableHost.innerHTML.indexOf('data-row-id="2"')>=0&&tableHost.innerHTML.indexOf('data-row-id="1"')<0,"the preserved input must keep driving filtered results");
+      assert.strictEqual(container.querySelector("[data-list-count]").textContent,context.window.AlKhayalUtils.number(1)+" سجل","repeated searches must keep the record count in sync");
+    });
+  });
+}
+async function verifySearchInputFocusSurvival(){
+  function fakeElement(){var el={isConnected:true,checked:false,disabled:false,value:"",textContent:"",innerHTML:""};return el;}
+  function makeContainer(markers){
+    var html="",writes=0,selectors={};
+    var node=fakeElement();
+    Object.defineProperty(node,"innerHTML",{get:function(){return html;},set:function(value){html=String(value);writes+=1;selectors={};}});
+    node.querySelector=function(selector){
+      var needle=markers[selector];
+      if(!needle||html.indexOf(needle)<0)return null;
+      if(!selectors[selector])selectors[selector]=fakeElement();
+      return selectors[selector];
+    };
+    node.querySelectorAll=function(){return[];};
+    return{node:node,selectors:function(){return selectors;},writes:function(){return writes;},innerHTML:function(){return html;}};
+  }
+  function tick(ms){return new Promise(function(resolve){setTimeout(resolve,ms||0);});}
+  function flush(){return tick().then(function(){return tick();});}
+  var context={window:{},console:console,setTimeout:setTimeout,clearTimeout:clearTimeout,Url:URL};
+  context.window.window=context.window;
+  vm.runInNewContext(fs.readFileSync(path.join(root,"frontend","js","core","utils.js"),"utf8"),context,{filename:"utils.js"});
+  var toasts=[],queue=[],calls=[];
+  context.window.AlKhayalUI={pageHeader:function(screen,actions){return String(actions||"");},toast:function(message,kind){toasts.push({message:message,kind:kind});},badge:function(text){return "<span>"+text+"</span>";},confirm:function(){return Promise.resolve(false);}};
+  context.window.AlKhayalFeatures={routeEnabled:function(){return true;},find:function(){return null;},load:function(){return Promise.resolve({});}};
+  context.window.AlKhayalApi={request:function(url){calls.push(url);return new Promise(function(resolve,reject){var item=queue.shift();if(!item){reject(new Error("طلب غير متوقع: "+url));return;}if(item.error){reject(new Error(item.error));return;}resolve(item.value);});}};
+  var renderContext={registry:registry,state:{},user:{role:"administrator",id:"admin"},canNavigate:function(){return true;},navigate:function(){},isActive:function(){return true;}};
+  context.window.AlKhayalRenderers={};
+  [settingsHubJs,activityJs,catalogJs].forEach(function(source,index){vm.runInNewContext(source,context,{filename:"search-focus-"+index+".js"});});
+  // Settings hub: typing updates only the persistent results region.
+  var box=makeContainer({"[data-settings-search]":'data-settings-search',"[data-settings-results]":'data-settings-results'});
+  context.window.AlKhayalRenderers["settings-hub"](registry.screens.find(function(item){return item.route==="settings-program";}),box.node,renderContext);
+  assert.ok(box.writes()===1,"settings hub initial render must write the shell exactly once");
+  var search=box.node.querySelector("[data-settings-search]"),results=box.node.querySelector("[data-settings-results]");
+  search.value="الإعدادات";search.oninput();await flush();
+  assert.strictEqual(box.node.querySelector("[data-settings-search]"),search,"settings hub typing must not replace the search input node");
+  assert.ok(box.writes()===1,"settings hub typing must not rewrite the shell container");
+  assert.ok(results.innerHTML.indexOf("data-settings-route")>=0,"typing in the settings hub must refresh matched settings links in place");
+  search.value="نص غير موجود";search.oninput();
+  assert.ok(results.innerHTML.indexOf("data-settings-route")<0,"settings hub results must clear non-matching entries");
+  // Business activities: typing filters only the activity grid; async loads are token-guarded.
+  var box=makeContainer({"#activitySearch":'id="activitySearch"',"#activityGrid":'id="activityGrid"',"[data-retry]":'data-retry'});
+  queue.length=0;calls.length=0;
+  queue.push({value:[{key:"retail",arabicName:"تجزئة",description:"بيع المنتجات",suggestedCapabilities:["inventory"]},{key:"services",arabicName:"خدمات",description:"خدمات",suggestedCapabilities:[]}]});
+  queue.push({value:{activityKeys:["retail","services"],primaryActivityKey:"retail",isConfigured:true}});
+  queue.push({value:{recommendations:[],newlyRecommended:[],noLongerRecommended:[],administratorOverrides:[]}});
+  context.window.AlKhayalRenderers["business-activities"](registry.screens.find(function(item){return item.route==="business-activities";}),box.node,renderContext);
+  await flush();
+  assert.ok(queue.length===0,"activity screen must consume activities, selected, and recommendation requests");
+  var search=box.node.querySelector("#activitySearch"),grid=box.node.querySelector("#activityGrid"),writes=box.writes();
+  assert.ok(box.innerHTML().indexOf('value="retail"')>=0,"loaded activity screen must render activity cards");
+  search.value="تجزئة";search.oninput();
+  assert.strictEqual(box.node.querySelector("#activitySearch"),search,"activity search must not replace its own input node");
+  assert.ok(box.writes()===writes,"activity search must not rewrite the page container while typing");
+  assert.ok(grid.innerHTML.indexOf('value="services"')<0,"typing must filter the activity cards in place");
+  search.value="لا شيء";search.oninput();
+  assert.ok(grid.innerHTML.indexOf("لا توجد نتائج مطابقة")>=0,"empty activity search results must render the Arabic empty state in the preserved grid");
+  // Product list: debounced search re-queries the persisted API and repaints only the results region.
+  var box=makeContainer({"#catalogSearch":'id="catalogSearch"',"#catalogResults":'id="catalogResults"',"#catalogCategory":'id="catalogCategory"',"#catalogStatus":'id="catalogStatus"'});
+  queue.length=0;calls.length=0;
+  queue.push({value:[{id:1,name:"عام",isActive:true}]});
+  queue.push({value:{items:[{id:11,name:"قميص",description:"",categoryName:"عام",baseUnitName:"قطعة",unitSymbol:"قطعة",productType:"stock",salePrice:"10.00",isActive:true,isArchived:false,version:1,sizeValues:[],colorValues:[],variantCount:1,baseUnitId:1}],page:1,pageSize:20,totalCount:1}});
+  queue.push({value:{items:[],page:1,pageSize:20,totalCount:0}});
+  context.window.AlKhayalRenderers["catalog-products"](registry.screens.find(function(item){return item.route==="products-list";}),box.node,renderContext);
+  await flush();
+  assert.ok(queue.length===1,"product list must load categories and products in one bounded cycle");
+  var search=box.node.querySelector("#catalogSearch"),results=box.node.querySelector("#catalogResults"),writes=box.writes();
+  assert.ok(box.node.querySelector("#catalogResults").innerHTML.indexOf('data-product-id="11"')>=0,"product list must render persisted product rows");
+  assert.ok(box.innerHTML().indexOf('data-product-id="11"')<0,"product rows must live in the results region, not the shell markup");
+  search.value="قميص";search.oninput();
+  assert.strictEqual(box.node.querySelector("#catalogSearch"),search,"product search must not replace its own input node");
+  await tick(320);
+  assert.ok(box.writes()===writes,"product search must not rewrite the page container after the debounced fetch");
+  assert.ok(calls.some(function(url){return url.indexOf("/api/catalog/products?search="+encodeURIComponent("قميص"))===0;}),"typing in the product search must re-query the persisted products API");
+  assert.ok(box.node.querySelector("#catalogResults").innerHTML.indexOf("لا توجد منتجات مطابقة")>=0,"the empty filtered product page must render the Arabic empty state in the results region");
+  // Category and unit management: search filters rows in place.
+  var box=makeContainer({"#categoryManagementSearch":'id="categoryManagementSearch"',"#categoryManagementResults":'id="categoryManagementResults"',"[data-add-management]":'data-add-management'});
+  queue.length=0;calls.length=0;
+  queue.push({value:[{id:1,name:"مخزون",parentCategoryId:null,isActive:true,sortOrder:1}]});
+  context.window.AlKhayalRenderers["catalog-categories"](registry.screens.find(function(item){return item.route==="product-categories";}),box.node,renderContext);
+  await flush();
+  var search=box.node.querySelector("#categoryManagementSearch"),results=box.node.querySelector("#categoryManagementResults"),writes=box.writes();
+  assert.ok(results.innerHTML.indexOf('data-management-id="1"')>=0,"category management must render the persisted category rows");
+  assert.ok(box.innerHTML().indexOf('data-management-id="1"')<0,"category rows must live in the results region, not the shell markup");
+  search.value="لا يوجد";search.oninput();
+  assert.strictEqual(box.node.querySelector("#categoryManagementSearch"),search,"category search must not replace its input node");
+  assert.ok(box.writes()===writes,"category search must not rewrite the page container");
+  assert.ok(results.innerHTML.indexOf('data-management-id="1"')<0&&results.innerHTML.indexOf("لا توجد تصنيفات")>=0,"category search must filter rows in the persistent region");
+  var unitBox=makeContainer({"#unitManagementSearch":'id="unitManagementSearch"',"#unitManagementResults":'id="unitManagementResults"',"[data-add-management]":'data-add-management'});
+  queue.length=0;calls.length=0;
+  queue.push({value:[{id:5,code:"PCS",name:"قطعة",symbol:"قطعة",isActive:true,isSystem:true}]});
+  context.window.AlKhayalRenderers["catalog-units"](registry.screens.find(function(item){return item.route==="unit-add";}),unitBox.node,renderContext);
+  await flush();
+  var unitSearch=unitBox.node.querySelector("#unitManagementSearch"),unitResults=unitBox.node.querySelector("#unitManagementResults"),unitWrites=unitBox.writes();
+  unitSearch.value="لا شيء";unitSearch.oninput();
+  assert.strictEqual(unitBox.node.querySelector("#unitManagementSearch"),unitSearch,"unit search must not replace its input node");
+  assert.ok(unitBox.writes()===unitWrites,"unit search must not rewrite the page container");
+  assert.ok(unitResults.innerHTML.indexOf('data-management-id="5"')<0&&unitResults.innerHTML.indexOf("لا توجد وحدات مطابقة")>=0,"unit search must filter rows in the persistent region");
+}
+
+function makeProduct(id, name, price) {
+  return { id: id, productType: "stock", isActive: true, isArchived: false, name: name, salePrice: price, unitName: "قطعة", availableQuantityScaled:1000000 };
+}
+async function verifySalesSearchMountedInput() {
+  function fakeElement() { var el = { isConnected: true, checked: false, disabled: false, value: "", textContent: "", innerHTML: "" }; return el; }
+  function makeContainer(markers) {
+    var html = "", writes = 0, selectors = {};
+    var node = fakeElement();
+    Object.defineProperty(node, "innerHTML", { get: function () { return html; }, set: function (value) { html = String(value); writes += 1; selectors = {}; } });
+    node.querySelector = function (selector) {
+      var needle = markers[selector];
+      if (!needle || html.indexOf(needle) < 0) return null;
+      if (!selectors[selector]) selectors[selector] = fakeElement();
+      return selectors[selector];
+    };
+    node.querySelectorAll = function () { return []; };
+    return { node: node, writes: function () { return writes; }, innerHTML: function () { return html; } };
+  }
+  function tick(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms || 0); }); }
+  function flush() { return tick().then(function () { return tick(); }); }
+  assert.ok(salesJs.indexOf("next.focus();next.setSelectionRange") < 0, "the POS product search must not rely on a refocus-after-redraw hack");
+  var deferred = [], queue = [], requestedUrls=[];
+  function buildContext() {
+    var context = { window: {}, console: console, setTimeout: setTimeout, clearTimeout: clearTimeout, URL: URL, Date: Date, BigInt: BigInt };
+    context.window.window = context.window;
+    vm.runInNewContext(fs.readFileSync(path.join(root, "frontend", "js", "core", "utils.js"), "utf8"), context, { filename: "utils.js" });
+    context.window.AlKhayalUI = { pageHeader: function (screen, actions) { return String(actions || ""); }, toast: function () { }, badge: function (text) { return "<span>" + text + "</span>"; }, confirm: function () { return Promise.resolve(true); } };
+    context.window.AlKhayalSettings = { current: function () { return {}; }, load: function () { return Promise.resolve({}); } };
+    context.window.AlKhayalFeatures = { routeEnabled: function () { return true; }, find: function () { return null; }, load: function () { return Promise.resolve({}); } };
+    context.window.AlKhayalApi = {
+      request: function (url) {
+        requestedUrls.push(url);
+        return new Promise(function (resolve, reject) {
+          var item = queue.shift();
+          if (!item) throw new Error("طلب غير متوقع: " + url);
+          if (item.error) { reject(new Error(item.error)); return; }
+          if (item.defer) { deferred.push({ resolve: resolve, reject: reject, url: url }); return; }
+          resolve(item.value);
+        });
+      }
+    };
+    context.window.AlKhayalRenderers = {};
+    return context;
+  }
+  var renderContext = { state: {}, user: { role: "administrator", id: "admin" }, canNavigate: function () { return true; }, navigate: function () { }, registry: registry, isActive: function () { return true; } };
+  function runModule(context) {
+    var source = salesJs.replace("    init();", "    global.__salesTestFor={state:state,draw:draw,searchProducts:searchProducts,searchCustomers:searchCustomers,click:click,payload:payload};\n    init();");
+    assert.strictEqual((source.match(/__salesTestFor/g) || []).length, 1, "the sales test hook must attach exactly once");
+    vm.runInNewContext(source, context, { filename: "sales-search-focus.js" });
+  }
+  // --- POS: stale product-search responses lose against newer typed queries, and the input stays mounted. ---
+  var posContext = buildContext();
+  runModule(posContext);
+  queue.push({ value: [{ id: 1, name: "مخزن رئيسي", isActive: true, isDefault: true }] }, { value: {} },{ value:[{id:5,name:"ملابس"}] },{value:{items:[makeProduct(3,"قميص","10")],totalCount:42}});
+  var posBox = makeContainer({ "[data-search]": "data-search", ".touch-product-grid": "touch-product-grid", ".touch-product-status":"touch-product-status", "[data-customer-search]":"data-customer-search", "[data-customer-results]":"data-customer-results", "[data-warehouse-search]":"data-warehouse-search", "[data-warehouse-results]":"data-warehouse-results" });
+  posContext.window.AlKhayalRenderers.pos(registry.screens.find(function (item) { return item.route === "pos"; }), posBox.node, renderContext);
+  await flush();
+  assert.ok(posBox.innerHTML().indexOf('input class="input touch-search" data-search') >= 0, "touch POS must render its persistent search input");
+  assert.ok(requestedUrls.some(function(url){return url.indexOf("/api/inventory/products?search=&page=1&pageSize=40")===0;}),"touch POS must load its first product page without a search");
+  assert.ok(posBox.innerHTML().indexOf('data-category="5"')>=0,"touch POS must render category browsing");
+  var test = posContext.window.__salesTestFor, posState = test.state;
+  var grid = posBox.node.querySelector(".touch-product-grid");
+  assert.ok(grid, "touch POS must render its product grid inside the shell");
+  var writesAfterRender = posBox.writes();
+  var searchInput = posBox.node.querySelector("[data-search]");
+  // First (older) search stays in flight while a second query starts and resolves first:
+  posState.productQuery = "بخل";
+  queue.push({ value: { items: [makeProduct(9, "بطيخ", "10")],totalCount:1 }, defer: true });
+  test.searchProducts();
+  posState.productQuery = "بهند";
+  queue.push({ value: { items: [makeProduct(2, "بهند", "20")],totalCount:1 } });
+  var newer = test.searchProducts();
+  await flush();
+  assert.strictEqual(posBox.writes(), writesAfterRender, "POS product searches must not rewrite the shell container");
+  assert.ok(grid.innerHTML.indexOf('data-product="2"') >= 0, "the newest product search payload must paint the grid");
+  deferred.shift().resolve({ items: [makeProduct(9, "بطيخ", "10")],totalCount:1 }); // the resident stale first response arrives now
+  await flush();
+  assert.ok(grid.innerHTML.indexOf('data-product="9"') < 0, "a stale product search response must never replace newer results");
+  assert.ok(grid.innerHTML.indexOf('data-product="2"') >= 0, "new results must survive the stale response");
+  assert.strictEqual(posBox.writes(), writesAfterRender, "POS search repaints must stay inside the product grid region");
+  assert.strictEqual(posBox.node.querySelector("[data-search]"), searchInput, "POS typing must keep one mounted search input node");
+  posState.productQuery="";
+  queue.push({value:{items:[makeProduct(2,"بهند","20")],totalCount:2}});
+  var categoryOption={getAttribute:function(){return "5";}};
+  await test.click({target:{closest:function(selector){return selector==="[data-category]"?categoryOption:null;}}});await flush();
+  assert.ok(requestedUrls[requestedUrls.length-1].indexOf("categoryId=5")>=0,"category selection must constrain the server-side product page");
+  assert.ok(requestedUrls[requestedUrls.length-1].indexOf("posWarehouseId=1")>=0,"POS browse must send its selected warehouse");
+  queue.push({value:{items:[makeProduct(4,"قميص","30")],totalCount:2}});
+  await test.searchProducts(true);
+  assert.ok(requestedUrls[requestedUrls.length-1].indexOf("page=2")>=0,"more products must request the next server page");
+  assert.ok(grid.innerHTML.indexOf('data-product="2"')>=0&&grid.innerHTML.indexOf('data-product="4"')>=0,"pagination must append without losing prior cards");
+  posState.customerQuery="01055";
+  queue.push({value:[{id:55,name:"عميل هاتف",code:"C55",phone:"01055"}]});
+  await test.searchCustomers();
+  assert.ok(requestedUrls[requestedUrls.length-1].indexOf("/api/customers/search?query=01055")===0,"customer search must query the bounded server selector by phone");
+  assert.ok(posBox.node.querySelector("[data-customer-results]").innerHTML.indexOf('data-customer-option="55"')>=0,"customer matches must remain in a separate results region");
+  posState.customerQuery="قديم";queue.push({value:[],defer:true});var olderCustomer=test.searchCustomers();
+  posState.customerQuery="جديد";queue.push({value:[{id:55,name:"عميل جديد",code:"C55",phone:"01055"}]});await test.searchCustomers();
+  deferred.shift().resolve([{id:99,name:"عميل قديم",code:"C99",phone:"099"}]);await olderCustomer;
+  assert.ok(posBox.node.querySelector("[data-customer-results]").innerHTML.indexOf('data-customer-option="55"')>=0&&posBox.node.querySelector("[data-customer-results]").innerHTML.indexOf('data-customer-option="99"')<0,"stale customer lookup must not replace newer matches");
+  var customerOption={getAttribute:function(name){return name==="data-customer-option"?"55":"عميل هاتف";}};
+  await test.click({target:{closest:function(selector){return selector==="[data-customer-option]"?customerOption:null;}}});
+  assert.strictEqual(posState.customerId,"55","selecting a customer must preserve its invoice association");
+  assert.strictEqual(test.payload().customerId,55,"checkout payload must carry the selected customer ID");
+  posState.warehouses.push({id:2,name:"مخزن ثان",code:"W2",isActive:true});posState.multipleWarehouses=true;test.draw();
+  queue.push({value:{items:[],totalCount:0}});
+  var warehouseOption={getAttribute:function(){return "2";}};
+  await test.click({target:{closest:function(selector){return selector==="[data-warehouse-option]"?warehouseOption:null;}}});await flush();
+  assert.strictEqual(posState.warehouseId,2,"warehouse selector must preserve the selected warehouse");
+  assert.ok(requestedUrls[requestedUrls.length-1].indexOf("posWarehouseId=2")>=0,"warehouse changes must query availability for the new warehouse");
+  var scanInput=posBox.node.querySelector("[data-search]"),barcode="123456789";
+  queue.push({value:{isSellable:true,productId:70,variantId:71,productUnitId:72,effectiveSalePrice:"12.00"}},
+    {value:{id:70,name:"صنف باركود",salePrice:"12.00",attributes:[],capabilities:[],variants:[{id:71,name:"صنف باركود",isActive:true,isArchived:false,isDefault:true}],units:[{id:72,name:"قطعة",isActive:true,isSaleUnit:true,isBase:true}]}},
+    {value:{items:[],totalCount:0}});
+  barcode.split("").forEach(function(ch){scanInput.value+=ch;scanInput.oninput({inputType:"insertText"});});
+  await tick(115);await flush();
+  assert.strictEqual(posState.lines.length,1,"a rapid scanner without Enter must add an exact barcode once");
+  assert.strictEqual(requestedUrls.filter(function(url){return url.indexOf("/api/catalog/barcodes/lookup?code="+barcode)===0;}).length,1,"scanner must issue one exact barcode lookup");
+  scanInput.onkeydown({key:"Enter",preventDefault:function(){}});await flush();
+  assert.strictEqual(posState.lines.length,1,"a late Enter suffix must not add the same scan twice");
+  var pasteInput=posBox.node.querySelector("[data-search]");pasteInput.value="قميص";queue.push({value:{items:[makeProduct(6,"قميص","10")],totalCount:1}});pasteInput.oninput({inputType:"insertFromPaste"});
+  await tick(220);
+  assert.ok(posBox.node.querySelector(".touch-product-grid").innerHTML.indexOf('data-product="6"')>=0,"pasting a search term must update results without removing the input");
+  assert.strictEqual(posBox.node.querySelector("[data-search]"),pasteInput,"paste search must preserve the focused input node");
+  assert.strictEqual(posState.lines.length,1,"paste must not be misread as a scanner sale");
+  // --- Invoice history: typing refreshes only the dedicated results region. ---
+  var listContext = buildContext();
+  runModule(listContext);
+  var listBox = makeContainer({ "#salesSearch": 'id="salesSearch"', "#salesListResults": 'id="salesListResults"' });
+  queue.length = 0; deferred.length = 0;
+  queue.push({ value: [] }, { value: [{ id: 1, name: "مخزن رئيسي", isActive: true, isDefault: true }] }, { value: {} });
+  queue.push({ value: [{ id: 20, status: "posted", invoiceNumber: "S-00020", invoiceDate: "2026-10-20", customerName: "", warehouseName: "م", totalScaled: 100000, paidScaled: 100000 }] });
+  listContext.window.AlKhayalRenderers["sales-invoices"](registry.screens.find(function (item) { return item.route === "sales-list"; }), listBox.node, renderContext);
+  await flush();
+  var listWrites = listBox.writes(), listSearch = listBox.node.querySelector("#salesSearch"), listResults = listBox.node.querySelector("#salesListResults");
+  assert.ok(listResults, "invoice history must render a dedicated results region");
+  assert.ok(listBox.innerHTML().indexOf('data-open="20"') >= 0 && listBox.innerHTML().indexOf('id="salesListResults"') >= 0, "invoice history must render its rows in a dedicated results region");
+  listSearch.value = "S-00021"; listSearch.oninput();
+  queue.push({ value: [{ id: 21, status: "posted", invoiceNumber: "S-00021", invoiceDate: "2026-10-21", customerName: "", warehouseName: "م", totalScaled: 100000, paidScaled: 100000 }] });
+  await tick(220);
+  assert.ok(listBox.writes() === listWrites, "invoice-history typing must not rewrite the page container");
+  assert.strictEqual(listBox.node.querySelector("#salesSearch"), listSearch, "invoice history must keep a single mounted search input");
+  assert.ok(listResults.innerHTML.indexOf('data-open="21"') >= 0, "invoice-history search must refresh its own results region");
+}
+
+async function verifySupplierPagedSearch(){
+  var pending=[],calls=[],search={value:""},host={innerHTML:""},count={textContent:""},exportButton={disabled:false};
+  var nodes={"#supplierSearch":search,"[data-supplier-results]":host,"[data-supplier-count]":count,"[data-supplier-export]":exportButton};
+  var container={innerHTML:"",querySelector:function(selector){return nodes[selector];}};
+  var U={escape:function(x){return String(x==null?"":x);},number:String,money:String,debounce:function(fn,delay){var timer;return function(){clearTimeout(timer);timer=setTimeout(fn,delay);};}};
+  var UI={pageHeader:function(){return "";},badge:String},store={replace:function(){},find:function(){}};
+  var api={request:function(url){calls.push(url);return new Promise(function(resolve){pending.push(resolve);});}};
+  var sandbox={window:{AlKhayalUtils:U,AlKhayalUI:UI,AlKhayalServices:{store:store},AlKhayalCalculations:{}},AlKhayalApi:api,localStorage:{},setTimeout:setTimeout,clearTimeout:clearTimeout,console:console};
+  vm.runInNewContext(renderersJs,sandbox,{filename:"renderers.js"});
+  var context={state:{},isActive:function(){return true;}};
+  sandbox.window.AlKhayalRenderers["entity-list"]({data:"suppliers"},container,context);
+  search.value="new";search.oninput();await new Promise(function(resolve){setTimeout(resolve,220);});
+  assert.strictEqual(nodes["#supplierSearch"],search,"supplier search keeps the input mounted");
+  assert.ok(calls[1].indexOf("search=new&page=1")>=0,"supplier search resets the server page");
+  pending[1]({items:[{id:2,code:"NEW",name:"new supplier",phone:"1",payable:0,paid:0,status:"نشط"}],totalCount:1,page:1,pageSize:25});await Promise.resolve();
+  pending[0]({items:[{id:1,code:"OLD",name:"old supplier",phone:"1",payable:0,paid:0,status:"نشط"}],totalCount:1,page:1,pageSize:25});await Promise.resolve();
+  assert.ok(host.innerHTML.indexOf("NEW")>=0&&host.innerHTML.indexOf("OLD")<0,"late supplier results cannot overwrite the newer search");
+}
+
+Promise.all([require("./inventory-tests.js")(),verifyFeatureStateLifecycle(),verifyAccessStateLifecycle(),verifySettingsStateLifecycle(),verifyCustomerManagementCreateAndEdit(),verifyEntityListSearchKeepsFocus(),verifySalesSearchMountedInput(),verifySearchInputFocusSurvival(),verifySupplierPagedSearch()]).then(function () { console.log("Frontend registry, settings/feature/access lifecycle, user management, customer management, entity-list and settings/catalog search focus, and calculation tests passed (" + routes.length + " screens)."); }).catch(function (error) { console.error(error); process.exitCode = 1; });

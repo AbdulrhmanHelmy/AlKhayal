@@ -459,6 +459,8 @@
       draft = record || {},
       info = persistedInfo(entity),
       persistent = !!info;
+    if (entity === "customers" && !isEdit)
+      fields = fields.filter(function (field) { return field.id !== "code"; });
     if (entity === "suppliers" && isEdit)
       fields = fields.filter(function (field) {
         return field.id !== "payable";
@@ -472,6 +474,7 @@
           ? "إضافة " + info.singular.replace(/^ال/, "")
           : "إضافة سجل تجريبي",
       body:
+        (entity === "customers" && !isEdit ? '<p class="muted span-2">يُنشأ كود العميل تلقائيًا عند الحفظ.</p>' : '') +
         '<form id="recordForm" class="form-grid" novalidate>' +
         fields
           .map(function (field) {
@@ -492,10 +495,13 @@
         result = UI.collectForm(form, fields);
       if (!result.valid) return;
       var button = layer.querySelector("[data-save-record]");
+      if(button.disabled)return;
       button.disabled = true;
+      button.textContent = "جارٍ الحفظ...";
       try {
+        var saved;
         if (persistent) {
-          await AlKhayalApi.request(
+          saved = await AlKhayalApi.request(
             isEdit
               ? info.path + "/" + encodeURIComponent(record.id)
               : info.path,
@@ -509,13 +515,14 @@
         UI.closeModal();
         UI.toast(
           persistent
-            ? "تم حفظ بيانات " + info.singular + " في قاعدة البيانات."
+            ? "تم حفظ بيانات " + info.singular + " في قاعدة البيانات." + (entity === "customers" && !isEdit && saved && saved.code ? " الكود: " + saved.code : "")
             : "تم حفظ التغيير مؤقتًا داخل جلسة العرض.",
           "success",
         );
         if (afterSave) afterSave();
       } catch (error) {
         button.disabled = false;
+        button.textContent = "حفظ";
         UI.toast(
           error.message ||
             (persistent
@@ -526,11 +533,22 @@
       }
     };
   }
+  function supplierList(screen, container, context) {
+    var state=context.state,schema=schemaFor("suppliers"),token=0;state.supplierQuery=state.supplierQuery||"";state.supplierPage=state.supplierPage||1;
+    container.innerHTML=UI.pageHeader(screen,'<button class="button primary" data-supplier-add>+ إضافة مورد</button><button class="button" data-supplier-export>تصدير CSV</button>')+'<div class="toolbar"><div class="field grow"><label for="supplierSearch">بحث</label><input class="input" id="supplierSearch" value="'+U.escape(state.supplierQuery)+'" placeholder="اسم المورد أو الكود أو الهاتف"></div><span class="muted" data-supplier-count></span></div><div data-supplier-results aria-live="polite"></div>';
+    var search=container.querySelector("#supplierSearch"),host=container.querySelector("[data-supplier-results]"),count=container.querySelector("[data-supplier-count]");
+    function load(){var requestToken=++token;host.innerHTML='<div class="card"><div class="card-body">جارٍ تحميل الموردين...</div></div>';AlKhayalApi.request("/api/suppliers?search="+encodeURIComponent(state.supplierQuery)+"&page="+state.supplierPage+"&pageSize=25").then(function(data){if(requestToken!==token||!context.isActive())return;var rows=data.items||[],pages=Math.max(1,Math.ceil((data.totalCount||0)/(data.pageSize||25)));if(data.page>pages){state.supplierPage=pages;load();return;}S.store.replace("suppliers",rows);count.textContent=U.number(data.totalCount||0)+" سجل";host.innerHTML=rowsTable(schema.columns,rows,true)+'<div class="pagination"><span>صفحة '+data.page+' من '+pages+'</span><div class="pagination-buttons"><button class="button" data-supplier-page="prev"'+(data.page<=1?' disabled':'')+'>السابق</button><button class="button" data-supplier-page="next"'+(data.page>=pages?' disabled':'')+'>التالي</button></div></div>';}).catch(function(error){if(requestToken===token&&context.isActive())host.innerHTML='<div class="empty-state"><strong>تعذر تحميل الموردين</strong><span>'+U.escape(error.message||"")+'</span><button class="button" data-supplier-retry>إعادة المحاولة</button></div>';});}
+    var scheduleSearch=U.debounce(function(){state.supplierQuery=search.value;state.supplierPage=1;load();},180);search.oninput=function(){token++;scheduleSearch();};
+    container.querySelector("[data-supplier-export]").onclick=async function(){var button=this;if(button.disabled)return;button.disabled=true;button.textContent="جارٍ التصدير...";var query=search.value,rows=[],pageNumber=1;try{var data;do{data=await AlKhayalApi.request("/api/suppliers?search="+encodeURIComponent(query)+"&page="+pageNumber+"&pageSize=100");rows=rows.concat(data.items||[]);pageNumber++;}while(rows.length<data.totalCount&&(data.items||[]).length);U.downloadCsv("suppliers.csv",schema.columns,rows);UI.toast("تم إنشاء ملف CSV متوافق مع Excel.","success");}catch(error){UI.toast(error.message||"تعذر تصدير الموردين.","danger");}finally{button.disabled=false;button.textContent="تصدير CSV";}};
+    container.onclick=async function(event){var page=event.target.closest("[data-supplier-page]"),action=event.target.closest("[data-row-action]");if(event.target.closest("[data-supplier-retry]")){load();return;}if(event.target.closest("[data-supplier-add]")){openRecordModal("suppliers",null,"add",load);return;}if(page){state.supplierPage+=page.getAttribute("data-supplier-page")==="next"?1:-1;load();return;}if(!action)return;var row=S.store.find("suppliers",action.closest("tr").getAttribute("data-row-id")),operation=action.getAttribute("data-row-action");if(operation==="view")openRecordModal("suppliers",row,"view");else if(operation==="edit")openRecordModal("suppliers",row,"edit",load);else if(operation==="delete"&&await UI.confirm({title:"حذف مورد",message:"سيتم حذف المورد نهائيًا من قاعدة البيانات.",confirmText:"حذف",danger:true})){try{await AlKhayalApi.request("/api/suppliers/"+encodeURIComponent(row.id),{method:"DELETE"});UI.toast("تم حذف المورد من قاعدة البيانات.","success");load();}catch(error){UI.toast(error.message||"تعذر حذف المورد.","danger");}}};
+    load();
+  }
   function entityList(screen, container, context, dataLoaded) {
     var entity = screen.data,
       schema = schemaFor(entity),
       state = context.state,
       info = persistedInfo(entity);
+    if(entity==="suppliers"){supplierList(screen,container,context);return;}
     if (info && !dataLoaded) {
       container.innerHTML =
         UI.pageHeader(screen) +
@@ -539,10 +557,12 @@
         " من قاعدة البيانات...</div></section>";
       AlKhayalApi.request(info.path)
         .then(function (rows) {
+          if (!context.isActive()) return;
           S.store.replace(entity, rows);
           entityList(screen, container, context, true);
         })
         .catch(function (error) {
+          if (!context.isActive()) return;
           container.innerHTML =
             UI.pageHeader(screen) +
             '<section class="card"><div class="card-body"><strong>تعذر تحميل ' +
@@ -563,18 +583,22 @@
     state.sortKey =
       state.sortKey || (schema.columns[0] && schema.columns[0].key);
     state.sortDirection = state.sortDirection || "asc";
-    var allRows = S.query(entity, {
-      query: state.query,
-      keys: schema.columns.map(function (column) {
-        return column.key;
-      }),
-      sortKey: state.sortKey,
-      sortDirection: state.sortDirection,
-    });
-    if (screen.filter === "low-stock")
-      allRows = allRows.filter(function (product) {
-        return product.stock <= product.minimum;
+    function queryRows() {
+      var allRows = S.query(entity, {
+        query: state.query,
+        keys: schema.columns.map(function (column) {
+          return column.key;
+        }),
+        sortKey: state.sortKey,
+        sortDirection: state.sortDirection,
       });
+      if (screen.filter === "low-stock")
+        allRows = allRows.filter(function (product) {
+          return product.stock <= product.minimum;
+        });
+      return allRows;
+    }
+    var allRows = queryRows();
     var pages = Math.max(1, Math.ceil(allRows.length / state.pageSize));
     state.page = Math.min(state.page, pages);
     var rows = allRows.slice(
@@ -582,44 +606,60 @@
         state.page * state.pageSize,
       ),
       canAdd = !!schema.fields;
-    container.innerHTML =
-      UI.pageHeader(
-        screen,
-        (canAdd
-          ? '<button class="button primary" data-list-add>+ إضافة' +
-            (info ? " " + info.singular.replace(/^ال/, "") : "") +
-            "</button>"
-          : "") + '<button class="button" data-list-export>تصدير CSV</button>',
-      ) +
-      (info
-        ? ""
-        : UI.mockBanner(
-            '<button class="button ghost" data-reset-mocks>إعادة بيانات العرض</button>',
-          )) +
-      '<div class="toolbar"><div class="field grow"><label for="listSearch">بحث</label><input class="input" id="listSearch" value="' +
-      U.escape(state.query) +
-      '" placeholder="ابحث في السجلات…"></div><span class="muted">' +
-      U.number(allRows.length) +
-      " سجل</span></div><div data-table-host>" +
-      rowsTable(schema.columns, rows, true) +
-      '</div><div class="pagination"><span>صفحة ' +
-      state.page +
-      " من " +
-      pages +
-      '</span><div class="pagination-buttons"><button class="button" data-page="prev"' +
-      (state.page <= 1 ? " disabled" : "") +
-      '>السابق</button><button class="button" data-page="next"' +
-      (state.page >= pages ? " disabled" : "") +
-      ">التالي</button></div></div>";
-    var search = container.querySelector("#listSearch");
-    search.addEventListener(
-      "input",
-      U.debounce(function () {
-        state.query = search.value;
-        state.page = 1;
-        entityList(screen, container, context, true);
-      }, 180),
-    );
+    var tableHtml = rowsTable(schema.columns, rows, true),
+      countText = U.number(allRows.length) + " سجل",
+      paginationInner =
+        "<span>صفحة " +
+        state.page +
+        " من " +
+        pages +
+        '</span><div class="pagination-buttons"><button class="button" data-page="prev"' +
+        (state.page <= 1 ? " disabled" : "") +
+        '>السابق</button><button class="button" data-page="next"' +
+        (state.page >= pages ? " disabled" : "") +
+        ">التالي</button></div>",
+      tableHost = container.querySelector("[data-table-host]");
+    if (tableHost) {
+      // تحديث القائمة في مكانها مع الحفاظ على حقل البحث وتركيزه وموضع المؤشر.
+      tableHost.innerHTML = tableHtml;
+      var count = container.querySelector("[data-list-count]");
+      if (count) count.textContent = countText;
+      var pagination = container.querySelector("[data-list-pagination]");
+      if (pagination) pagination.innerHTML = paginationInner;
+    } else {
+      container.innerHTML =
+        UI.pageHeader(
+          screen,
+          (canAdd
+            ? '<button class="button primary" data-list-add>+ إضافة' +
+              (info ? " " + info.singular.replace(/^ال/, "") : "") +
+              "</button>"
+            : "") + '<button class="button" data-list-export>تصدير CSV</button>',
+        ) +
+        (info
+          ? ""
+          : UI.mockBanner(
+              '<button class="button ghost" data-reset-mocks>إعادة بيانات العرض</button>',
+            )) +
+        '<div class="toolbar"><div class="field grow"><label for="listSearch">بحث</label><input class="input" id="listSearch" value="' +
+        U.escape(state.query) +
+        '" placeholder="ابحث في السجلات…"></div><span class="muted" data-list-count>' +
+        countText +
+        "</span></div><div data-table-host>" +
+        tableHtml +
+        '</div><div class="pagination" data-list-pagination>' +
+        paginationInner +
+        "</div>";
+      var search = container.querySelector("#listSearch");
+      search.addEventListener(
+        "input",
+        U.debounce(function () {
+          state.query = search.value;
+          state.page = 1;
+          entityList(screen, container, context, true);
+        }, 180),
+      );
+    }
     container.onclick = async function (event) {
       var sort = event.target.closest("[data-sort]"),
         page = event.target.closest("[data-page]"),
@@ -648,7 +688,7 @@
         return;
       }
       if (event.target.closest("[data-list-export]")) {
-        U.downloadCsv(entity + ".csv", schema.columns, allRows);
+        U.downloadCsv(entity + ".csv", schema.columns, queryRows());
         UI.toast("تم إنشاء ملف CSV متوافق مع Excel.", "success");
         return;
       }
@@ -719,10 +759,12 @@
         '<section class="card"><div class="card-body">جارٍ تحميل بيانات العملاء...</div></section>';
       AlKhayalApi.request("/api/customers")
         .then(function (rows) {
+          if (!context.isActive()) return;
           S.store.replace("customers", rows);
           entityForm(screen, container, context, true);
         })
         .catch(function (error) {
+          if (!context.isActive()) return;
           container.innerHTML =
             UI.pageHeader(screen) +
             '<section class="card"><div class="card-body">تعذر تحميل العملاء: ' +
@@ -733,6 +775,8 @@
     }
     if (screen.mode === "edit" && entity === "customers")
       record = S.store.all(entity)[0] || {};
+    if (entity === "customers" && screen.mode !== "edit")
+      fields = fields.filter(function (field) { return field.id !== "code"; });
     if (screen.mode === "quick" && entity === "products")
       fields = fields.filter(function (field) {
         return (
@@ -764,6 +808,7 @@
             .join("") +
           "</select></div>"
         : "") +
+      (entity === "customers" && screen.mode !== "edit" ? '<p class="muted span-2">يُنشأ كود العميل تلقائيًا عند الحفظ.</p>' : '') +
       '<form id="entityForm" class="form-grid" novalidate>' +
       fields
         .map(function (field) {
@@ -791,9 +836,13 @@
       event.preventDefault();
       var result = UI.collectForm(form, fields);
       if (!result.valid) return;
+      if (form.dataset && form.dataset.saving === "true") return;
+      if (form.dataset) form.dataset.saving = "true";
+      var submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton) { submitButton.disabled = true; submitButton.textContent = "جارٍ الحفظ..."; }
       try {
         if (entity === "customers") {
-          await AlKhayalApi.request(
+          var savedCustomer = await AlKhayalApi.request(
             screen.mode === "edit"
               ? "/api/customers/" + encodeURIComponent(record.id)
               : "/api/customers",
@@ -802,7 +851,7 @@
               body: JSON.stringify(result.data),
             },
           );
-          UI.toast("تم حفظ بيانات العميل في قاعدة البيانات.", "success");
+          UI.toast("تم حفظ بيانات العميل في قاعدة البيانات." + (screen.mode !== "edit" && savedCustomer && savedCustomer.code ? " الكود: " + savedCustomer.code : ""), "success");
           S.store.replace(
             "customers",
             await AlKhayalApi.request("/api/customers"),
@@ -820,6 +869,9 @@
         }
       } catch (error) {
         UI.toast(error.message || "تعذر حفظ البيانات.", "danger");
+      } finally {
+        if (form.dataset) form.dataset.saving = "false";
+        if (submitButton) { submitButton.disabled = false; submitButton.textContent = entity === "customers" ? "حفظ" : "حفظ مؤقت"; }
       }
     };
   }
@@ -837,7 +889,7 @@
         id: "startPage",
         label: "شاشة البداية",
         type: "select",
-        options: ["الرئيسية", "نقطة بيع سريعة", "المبيعات"],
+        options: ["الرئيسية", "الكاشير اللمسي", "فواتير البيع"],
       },
     ],
     system: [
@@ -1131,6 +1183,7 @@
       '<section class="card"><div class="card-body">جارٍ تحميل العملاء من قاعدة البيانات...</div></section>';
     AlKhayalApi.request("/api/customers")
       .then(function (customers) {
+        if (!context.isActive()) return;
         S.store.replace("customers", customers);
         if (!customers.length) {
           container.innerHTML =
@@ -1588,6 +1641,7 @@
       '<section class="card"><div class="card-body">جارٍ تحميل الموردين من قاعدة البيانات...</div></section>';
     AlKhayalApi.request("/api/suppliers")
       .then(function (rows) {
+        if (!context.isActive()) return;
         suppliers = rows;
         S.store.replace("suppliers", rows);
         if (!rows.length) {

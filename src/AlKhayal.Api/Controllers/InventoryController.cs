@@ -21,22 +21,29 @@ namespace AlKhayal.Api.Controllers
         public InventoryController(InventoryService inventory,AuthService auth,UserManagementService users,FeatureService features,CatalogService catalog){_inventory=inventory;_auth=auth;_users=users;_features=features;_catalog=catalog;}
 
         [HttpGet,Route("products")]
-        public async Task<IHttpActionResult> Products(string search=null,int page=1,int pageSize=30,CancellationToken ct=default(CancellationToken))
+        public async Task<IHttpActionResult> Products(string search=null,int page=1,int pageSize=30,long? categoryId=null,long? posWarehouseId=null,CancellationToken ct=default(CancellationToken))
         {
-            var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;
-            var result=await _catalog.ListProductsAsync(new ProductQuery{Search=search,IsActive=true,Page=page,PageSize=Math.Min(100,Math.Max(1,pageSize))},ct).ConfigureAwait(false);
+            var access=await RequireSalesRead(ct).ConfigureAwait(false);if(access.Error!=null)return access.Error;
+            if(posWarehouseId.HasValue && !(await _inventory.WarehousesAsync(ct).ConfigureAwait(false)).Any(x=>x.Id==posWarehouseId.Value&&x.IsActive))return Content(HttpStatusCode.BadRequest,ApiEnvelope<object>.Fail("invalid_warehouse","المخزن غير متاح."));
+            var result=await _catalog.ListProductsAsync(new ProductQuery{Search=search,CategoryId=categoryId,IsActive=true,Page=page,PageSize=Math.Min(100,Math.Max(1,pageSize)),PosWarehouseId=posWarehouseId},ct).ConfigureAwait(false);
             return result.Succeeded?Content(HttpStatusCode.OK,ApiEnvelope<CatalogPage>.Ok(result.Value)):Content(HttpStatusCode.BadRequest,ApiEnvelope<object>.Fail(result.ErrorCode,result.ErrorMessage));
         }
         [HttpGet,Route("products/{id:long}")]
         public async Task<IHttpActionResult> Product(long id,CancellationToken ct)
         {
-            var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;
+            var access=await RequireSalesRead(ct).ConfigureAwait(false);if(access.Error!=null)return access.Error;
             var result=await _catalog.GetProductDetailAsync(id,ct).ConfigureAwait(false);
             return result.Succeeded?Content(HttpStatusCode.OK,ApiEnvelope<CatalogProductDetail>.Ok(result.Value)):Content(HttpStatusCode.NotFound,ApiEnvelope<object>.Fail(result.ErrorCode,result.ErrorMessage));
         }
+        [HttpGet,Route("categories")]
+        public async Task<IHttpActionResult> Categories(CancellationToken ct)
+        {
+            var access=await RequireSalesRead(ct).ConfigureAwait(false);if(access.Error!=null)return access.Error;
+            return Ok(ApiEnvelope<IReadOnlyList<ProductCategory>>.Ok(await _catalog.ListCategoriesAsync(false,ct).ConfigureAwait(false)));
+        }
 
         [HttpGet,Route("warehouses")]
-        public async Task<IHttpActionResult> Warehouses(CancellationToken ct){var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;return Ok(ApiEnvelope<IReadOnlyList<WarehouseRecord>>.Ok(await _inventory.WarehousesAsync(ct).ConfigureAwait(false)));}
+        public async Task<IHttpActionResult> Warehouses(CancellationToken ct){var access=await RequireSalesRead(ct).ConfigureAwait(false);if(access.Error!=null)return access.Error;return Ok(ApiEnvelope<IReadOnlyList<WarehouseRecord>>.Ok(await _inventory.WarehousesAsync(ct).ConfigureAwait(false)));}
         [HttpGet,Route("warehouses/{id:long}")]
         public async Task<IHttpActionResult> Warehouse(long id,CancellationToken ct){var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;var record=(await _inventory.WarehousesAsync(ct).ConfigureAwait(false)).FirstOrDefault(x=>x.Id==id);return record==null?Content(HttpStatusCode.NotFound,ApiEnvelope<object>.Fail("not_found","المخزن غير موجود.")):Content(HttpStatusCode.OK,ApiEnvelope<WarehouseRecord>.Ok(record));}
         [HttpPost,Route("warehouses")]
@@ -45,6 +52,10 @@ namespace AlKhayal.Api.Controllers
         public async Task<IHttpActionResult> UpdateWarehouse(long id,WarehouseCommand command,CancellationToken ct){var access=await Require(ct,true,true).ConfigureAwait(false);if(access.Error!=null)return access.Error;if(command!=null)command.Id=id;return Result(await _inventory.SaveWarehouseAsync(command,ct).ConfigureAwait(false));}
         [HttpGet,Route("balances")]
         public async Task<IHttpActionResult> Balances(long? warehouseId=null,long? productId=null,CancellationToken ct=default(CancellationToken)){var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;return Ok(ApiEnvelope<IReadOnlyList<InventoryBalanceRecord>>.Ok(await _inventory.BalancesAsync(warehouseId,productId,ct).ConfigureAwait(false)));}
+        [HttpGet,Route("balance-page")]
+        public async Task<IHttpActionResult> BalancePage(long warehouseId,string search=null,int page=1,int pageSize=25,CancellationToken ct=default(CancellationToken)){var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;try{return Ok(ApiEnvelope<InventoryPage<InventoryBalanceRecord>>.Ok(await _inventory.BalancePageAsync(warehouseId,search,page,pageSize,ct).ConfigureAwait(false)));}catch(ArgumentException ex){return Content(HttpStatusCode.BadRequest,ApiEnvelope<object>.Fail("invalid_balance_query",ex.Message));}}
+        [HttpGet,Route("valuation")]
+        public async Task<IHttpActionResult> Valuation(long warehouseId,long? productId=null,CancellationToken ct=default(CancellationToken)){var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;try{return Ok(ApiEnvelope<InventoryValuation>.Ok(await _inventory.ValuationAsync(warehouseId,productId,ct).ConfigureAwait(false)));}catch(ArgumentException ex){return Content(HttpStatusCode.BadRequest,ApiEnvelope<object>.Fail("invalid_valuation",ex.Message));}}
         [HttpGet,Route("movements")]
         public async Task<IHttpActionResult> Movements(long? warehouseId=null,long? productId=null,string type=null,string reference=null,string from=null,string to=null,int page=1,int pageSize=25,CancellationToken ct=default(CancellationToken)){var access=await Require(ct,false,false).ConfigureAwait(false);if(access.Error!=null)return access.Error;return Ok(ApiEnvelope<InventoryPage<InventoryMovementRecord>>.Ok(await _inventory.MovementsAsync(warehouseId,productId,type,reference,from,to,page,pageSize,ct).ConfigureAwait(false)));}
         [HttpPost,Route("post")]
@@ -81,6 +92,17 @@ namespace AlKhayal.Api.Controllers
                 if(!effective.ScreenIds.Contains("warehouses-list",StringComparer.OrdinalIgnoreCase))return new AuthCheck{Error=Content(HttpStatusCode.Forbidden,ApiEnvelope<object>.Fail("screen_forbidden","لا تملك صلاحية دليل المخازن."))};
             }
             if(csrf&&!await _auth.ValidateCsrfAsync(token,Header("X-CSRF-Token"),ct).ConfigureAwait(false))return new AuthCheck{Error=Content(HttpStatusCode.Forbidden,ApiEnvelope<object>.Fail("invalid_csrf","تعذر التحقق من الطلب. حدّث الصفحة وحاول مرة أخرى."))};
+            return new AuthCheck{User=user};
+        }
+        private async Task<AuthCheck> RequireSalesRead(CancellationToken ct)
+        {
+            var token=ReadToken();var user=await _auth.GetCurrentUserAsync(token,ct).ConfigureAwait(false);
+            if(user==null)return new AuthCheck{Error=Content(HttpStatusCode.Unauthorized,ApiEnvelope<object>.Fail("unauthorized","يرجى تسجيل الدخول أولًا."))};
+            if(user.Role!=UserRoles.Administrator)
+            {
+                var access=await _users.GetEffectiveAccessAsync(user,await _features.GetEffectiveAsync(ct).ConfigureAwait(false),ct).ConfigureAwait(false);
+                if(!new[]{"warehouses-list","pos","sales-management","sales-list","purchase-management","purchases-list"}.Any(x=>access.ScreenIds.Contains(x,StringComparer.OrdinalIgnoreCase)))return new AuthCheck{Error=Content(HttpStatusCode.Forbidden,ApiEnvelope<object>.Fail("screen_forbidden","لا تملك صلاحية استعراض المنتجات والمخازن المطلوبة للعمل."))};
+            }
             return new AuthCheck{User=user};
         }
         private IHttpActionResult Result<T>(InventoryResult<T> result,HttpStatusCode success=HttpStatusCode.OK)

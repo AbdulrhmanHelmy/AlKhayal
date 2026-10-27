@@ -214,6 +214,8 @@ namespace AlKhayal.IntegrationTests
                 recon.UnitCost="100";
                 var saved=await f.InventoryService.ReconcileCostAsync(recon,NoCancellation);Assert.True(saved.Succeeded,saved.ErrorMessage);
                 Assert.Equal(saved.Value,(await f.InventoryService.ReconcileCostAsync(recon,NoCancellation)).Value);
+                var reconciled=(await f.Store.BalancesAsync(1,null,NoCancellation)).Single();
+                Assert.True(reconciled.CostBasisComplete);Assert.True(reconciled.HasReconciledCostBasis);Assert.Null(reconciled.UnresolvedLayerId);
                 recon.Evidence="تغيير المصدر";Assert.Equal("operation_key_conflict",(await f.InventoryService.ReconcileCostAsync(recon,NoCancellation)).ErrorCode);
                 await PostOk(f,f.Command("manual_receipt","legacy-new","10",cost:"120"));
                 await PostOk(f,f.Command("manual_issue","legacy-consume","12",cost:null));
@@ -223,7 +225,7 @@ namespace AlKhayal.IntegrationTests
                     c.Open();Assert.Equal(10000000,c.ExecuteScalar<long>("SELECT ValueScaled FROM StockMovements WHERE Id=1"));
                     Assert.Equal("legacy-hash",c.ExecuteScalar<string>("SELECT RequestHash FROM InventoryDocuments WHERE Id=1"));
                     Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryCostReconciliations"));
-                    Assert.Equal(18,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));
+                    Assert.Equal(23,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));
                 }
                 Assert.True(await f.Store.VerifyProjectionAsync(NoCancellation));
             }

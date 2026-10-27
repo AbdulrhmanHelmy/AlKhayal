@@ -59,7 +59,7 @@ namespace AlKhayal.Data.Inventory
             return InventoryResult<List<CostTake>>.Ok(takes);
         }
 
-        private static async Task<long> AddLayerAsync(SQLiteConnection c,SQLiteTransaction tx,long warehouseId,long variantId,long? batchId,long? movementId,long? parentId,long? originId,string acquired,string basis,long quantity,long value,long? unitCost,CancellationToken ct)
+        internal static async Task<long> AddLayerAsync(SQLiteConnection c,SQLiteTransaction tx,long warehouseId,long variantId,long? batchId,long? movementId,long? parentId,long? originId,string acquired,string basis,long quantity,long value,long? unitCost,CancellationToken ct)
         {
             await c.ExecuteAsync(Cmd(@"INSERT INTO InventoryCostLayers(WarehouseId,VariantId,BatchId,SourceMovementId,ParentLayerId,OriginMovementId,AcquiredUtc,Basis,QuantityScaled,ValueScaled,UnitCostScaled,RemainingQuantityScaled,RemainingValueScaled)
                 VALUES(@WarehouseId,@VariantId,@BatchId,@MovementId,@ParentId,@OriginId,@Acquired,@Basis,@Quantity,@Value,@Cost,@Quantity,@Value)",new{WarehouseId=warehouseId,VariantId=variantId,BatchId=batchId,MovementId=movementId,ParentId=parentId,OriginId=originId,Acquired=acquired,Basis=basis,Quantity=quantity,Value=value,Cost=unitCost},tx,ct)).ConfigureAwait(false);

@@ -61,6 +61,22 @@ namespace AlKhayal.IntegrationTests
         }
 
         [Fact]
+        public async Task Balance_page_searches_full_warehouse_by_name_sku_and_barcode()
+        {
+            using(var f=new Fixture())
+            {
+                Assert.True((await f.InventoryService.PostAsync(f.Command("manual_receipt","page-receipt","3"),CancellationToken.None)).Succeeded);
+                using(var c=new SQLiteConnection(f.Cs)){c.Open();c.Execute("INSERT INTO ProductSkus(ProductId,VariantId,Sku,NormalizedSku,CreatedUtc,CreatedByUserId) VALUES(@P,@V,'STAB-SKU','STAB-SKU','2026-01-01',1); INSERT INTO ProductBarcodes(ProductId,VariantId,ProductUnitId,Barcode,NormalizedBarcode,BarcodeType,CreatedUtc,CreatedByUserId) VALUES(@P,@V,@U,'STAB-BC','STAB-BC','internal','2026-01-01',1)",new{P=f.ProductId,V=f.VariantId,U=f.UnitId});}
+                var page=await f.Store.BalancePageAsync(1,"شاي",1,1,CancellationToken.None);
+                Assert.Equal(1,page.TotalCount);Assert.Equal(3000000,page.Items.Single().QuantityBaseScaled);
+                Assert.Single((await f.Store.BalancePageAsync(1,"STAB-SKU",1,25,CancellationToken.None)).Items);
+                Assert.Single((await f.Store.BalancePageAsync(1,"STAB-BC",1,25,CancellationToken.None)).Items);
+                Assert.Empty((await f.Store.BalancePageAsync(1,"missing",1,25,CancellationToken.None)).Items);
+                Assert.Empty((await f.Store.BalancePageAsync(999,"شاي",1,25,CancellationToken.None)).Items);
+            }
+        }
+
+        [Fact]
         public async Task Manual_stock_and_transfer_are_atomic_idempotent_and_persist()
         {
             using(var f=new Fixture())
@@ -120,7 +136,7 @@ namespace AlKhayal.IntegrationTests
         {
             using(var f=new Fixture())
             {
-                using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(18,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(0,c.ExecuteScalar<long>("PRAGMA foreign_key_check"));}
+                using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(23,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(0,c.ExecuteScalar<long>("PRAGMA foreign_key_check"));}
                 var receipt=await f.Store.PostAsync(f.Command("opening","open","1"),"hash",CancellationToken.None);Assert.True(receipt.Succeeded,receipt.ErrorMessage);
                 using(var c=new SQLiteConnection(f.Cs))
                 {
@@ -236,7 +252,7 @@ namespace AlKhayal.IntegrationTests
                 {
                     c.Open();c.Execute("CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL)");
                     var assembly=typeof(Migrator).Assembly;
-                    foreach(var resource in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql")&&!x.EndsWith("011_inventory_ledger.sql")&&!x.EndsWith("016_inventory_fifo.sql")).OrderBy(x=>x,StringComparer.Ordinal))
+                    foreach(var resource in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql")&&!x.EndsWith("011_inventory_ledger.sql")&&!x.EndsWith("016_inventory_fifo.sql")&&!x.EndsWith("023_directory_query_indexes.sql")).OrderBy(x=>x,StringComparer.Ordinal))
                     {
                         using(var reader=new StreamReader(assembly.GetManifestResourceStream(resource)))c.Execute(reader.ReadToEnd());
                         c.Execute("INSERT INTO SchemaVersion(Name,AppliedAt) VALUES(@Name,'2026-01-01T00:00:00Z')",new{Name=resource});
@@ -248,7 +264,7 @@ namespace AlKhayal.IntegrationTests
                     c.Execute("INSERT INTO ProductUnits(ProductId,UnitId,ToBaseNumerator,ToBaseDenominator,IsBase,IsSaleUnit,IsPurchaseUnit,IsActive,CreatedUtc,UpdatedUtc) VALUES(77,1,1,1,1,1,1,1,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')");
                 }
                 Migrator.Run(cs);Migrator.Run(cs);
-                using(var c=new SQLiteConnection(cs)){c.Open();Assert.Equal(18,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(77,c.ExecuteScalar<long>("SELECT ProductId FROM ProductDetails WHERE ProductId=77"));Assert.Equal(88,c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=77"));Assert.Equal(33,c.ExecuteScalar<long>("SELECT Id FROM Users WHERE Id=33"));Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM Warehouses WHERE IsDefault=1"));}
+                using(var c=new SQLiteConnection(cs)){c.Open();Assert.Equal(23,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(77,c.ExecuteScalar<long>("SELECT ProductId FROM ProductDetails WHERE ProductId=77"));Assert.Equal(88,c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=77"));Assert.Equal(33,c.ExecuteScalar<long>("SELECT Id FROM Users WHERE Id=33"));Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM Warehouses WHERE IsDefault=1"));}
             }
             finally{SQLiteConnection.ClearAllPools();if(File.Exists(path))File.Delete(path);}
         }

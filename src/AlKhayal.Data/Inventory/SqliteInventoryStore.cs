@@ -285,14 +285,14 @@ namespace AlKhayal.Data.Inventory
             return InventoryResult<InventoryPostResult>.Ok(new InventoryPostResult{DocumentId=documentId,Reference="INV-"+documentId});
         }
 
-        private static async Task<long> InsertMovementAsync(SQLiteConnection c,SQLiteTransaction tx,long documentId,long lineId,long warehouseId,long variantId,long? batchId,long quantity,long value,long? cost,string now,CancellationToken ct)
+        internal static async Task<long> InsertMovementAsync(SQLiteConnection c,SQLiteTransaction tx,long documentId,long lineId,long warehouseId,long variantId,long? batchId,long quantity,long value,long? cost,string now,CancellationToken ct)
         {
             await c.ExecuteAsync(Cmd("INSERT INTO StockMovements(DocumentId,DocumentLineId,WarehouseId,VariantId,BatchId,QuantityBaseScaled,ValueScaled,UnitCostScaled,CreatedUtc) VALUES(@DocumentId,@LineId,@WarehouseId,@VariantId,@BatchId,@Quantity,@Value,@Cost,@Now)",new{DocumentId=documentId,LineId=lineId,WarehouseId=warehouseId,VariantId=variantId,BatchId=batchId,Quantity=quantity,Value=value,Cost=cost,Now=now},tx,ct)).ConfigureAwait(false);
             return await c.ExecuteScalarAsync<long>(Cmd("SELECT last_insert_rowid()",null,tx,ct)).ConfigureAwait(false);
         }
         private static Task<BalanceState> FindBalanceAsync(SQLiteConnection c,SQLiteTransaction tx,long warehouseId,long variantId,long? batchId,CancellationToken ct)
         { return c.QuerySingleOrDefaultAsync<BalanceState>(Cmd("SELECT * FROM InventoryBalances WHERE WarehouseId=@WarehouseId AND VariantId=@VariantId AND ((@BatchId IS NULL AND BatchId IS NULL) OR BatchId=@BatchId)",new{WarehouseId=warehouseId,VariantId=variantId,BatchId=batchId},tx,ct)); }
-        private static async Task ApplyBalanceAsync(SQLiteConnection c,SQLiteTransaction tx,long warehouseId,long variantId,long? batchId,long quantity,long value,string now,CancellationToken ct)
+        internal static async Task ApplyBalanceAsync(SQLiteConnection c,SQLiteTransaction tx,long warehouseId,long variantId,long? batchId,long quantity,long value,string now,CancellationToken ct)
         {
             var current=await FindBalanceAsync(c,tx,warehouseId,variantId,batchId,ct).ConfigureAwait(false);
             var nextQuantity=checked((current==null?0:current.QuantityBaseScaled)+quantity);
@@ -338,14 +338,45 @@ namespace AlKhayal.Data.Inventory
         public async Task<IReadOnlyList<InventoryBalanceRecord>> BalancesAsync(long? warehouseId,long? productId,CancellationToken ct)
         {
             using(var c=Open())return (await c.QueryAsync<InventoryBalanceRecord>(new CommandDefinition(@"SELECT b.WarehouseId,v.ProductId,b.VariantId,p.Name ProductName,v.Name VariantName,b.BatchId,bat.LotNumber,bat.ExpirationDate,b.QuantityBaseScaled,b.ValueScaled,b.Version,COALESCE(v.SellPriceOverrideScaled,d.SellPriceScaled) SalePriceScaled,
-                (NOT EXISTS(SELECT 1 FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId AND cl.Basis='unresolved' AND cl.RemainingQuantityScaled>0)
-                 AND b.QuantityBaseScaled=COALESCE((SELECT SUM(cl.RemainingQuantityScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)
-                 AND b.ValueScaled=COALESCE((SELECT SUM(cl.RemainingValueScaled) FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId),0)) CostBasisComplete,
-                (SELECT cl.Id FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId AND cl.Basis='unresolved' AND cl.RemainingQuantityScaled>0 LIMIT 1) UnresolvedLayerId,
-                EXISTS(SELECT 1 FROM InventoryCostLayers cl WHERE cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId AND cl.Basis<>'unresolved' AND cl.OriginMovementId IS NULL AND cl.RemainingQuantityScaled>0) HasReconciledCostBasis
+                (COALESCE(cl.UnresolvedLayerCount,0)=0
+                 AND b.QuantityBaseScaled=COALESCE(cl.RemainingQuantityScaled,0)
+                 AND b.ValueScaled=COALESCE(cl.RemainingValueScaled,0)) CostBasisComplete,
+                cl.UnresolvedLayerId,
+                COALESCE(cl.HasReconciledCostBasis,0) HasReconciledCostBasis
                 FROM InventoryBalances b JOIN ProductVariants v ON v.Id=b.VariantId JOIN Products p ON p.Id=v.ProductId JOIN ProductDetails d ON d.ProductId=p.Id LEFT JOIN ProductBatches bat ON bat.Id=b.BatchId
+                LEFT JOIN (
+                    SELECT WarehouseId,VariantId,BatchId,
+                        SUM(CASE WHEN Basis='unresolved' THEN 1 ELSE 0 END) UnresolvedLayerCount,
+                        SUM(RemainingQuantityScaled) RemainingQuantityScaled,
+                        SUM(RemainingValueScaled) RemainingValueScaled,
+                        MIN(CASE WHEN Basis='unresolved' THEN Id END) UnresolvedLayerId,
+                        MAX(CASE WHEN Basis<>'unresolved' AND OriginMovementId IS NULL THEN 1 ELSE 0 END) HasReconciledCostBasis
+                    FROM InventoryCostLayers
+                    WHERE RemainingQuantityScaled>0
+                    GROUP BY WarehouseId,VariantId,BatchId
+                ) cl ON cl.WarehouseId=b.WarehouseId AND cl.VariantId=b.VariantId AND cl.BatchId IS b.BatchId
                 WHERE (@WarehouseId IS NULL OR b.WarehouseId=@WarehouseId) AND (@ProductId IS NULL OR v.ProductId=@ProductId)
                 ORDER BY p.Name,v.Name,bat.ExpirationDate,bat.LotNumber",new{WarehouseId=warehouseId,ProductId=productId},cancellationToken:ct)).ConfigureAwait(false)).ToList();
+        }
+
+        public async Task<InventoryPage<InventoryBalanceRecord>> BalancePageAsync(long warehouseId,string search,int page,int pageSize,CancellationToken ct)
+        {
+            var escaped=(search??string.Empty).Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_");
+            var from=@" FROM InventoryBalances b JOIN ProductVariants v ON v.Id=b.VariantId JOIN Products p ON p.Id=v.ProductId JOIN ProductDetails d ON d.ProductId=p.Id LEFT JOIN ProductBatches bat ON bat.Id=b.BatchId
+                WHERE b.WarehouseId=@WarehouseId AND (@Search='' OR p.Name LIKE @Like ESCAPE '\' OR EXISTS(SELECT 1 FROM ProductSkus ps WHERE ps.ProductId=p.Id AND ps.RetiredUtc IS NULL AND ps.Sku LIKE @Like ESCAPE '\') OR EXISTS(SELECT 1 FROM ProductBarcodes pb WHERE pb.ProductId=p.Id AND pb.RetiredUtc IS NULL AND pb.Barcode LIKE @Like ESCAPE '\'))";
+            var args=new{WarehouseId=warehouseId,Search=search??string.Empty,Like="%"+escaped+"%",Limit=pageSize,Offset=(page-1)*pageSize};
+            using(var c=Open())
+            {
+                var count=await c.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*)"+from,args,cancellationToken:ct)).ConfigureAwait(false);
+                var rows=await c.QueryAsync<InventoryBalanceRecord>(new CommandDefinition(@"SELECT q.*,
+                    (NOT EXISTS(SELECT 1 FROM InventoryCostLayers l WHERE l.WarehouseId=q.WarehouseId AND l.VariantId=q.VariantId AND l.BatchId IS q.BatchId AND l.RemainingQuantityScaled>0 AND l.Basis='unresolved')
+                    AND q.QuantityBaseScaled=COALESCE((SELECT SUM(l.RemainingQuantityScaled) FROM InventoryCostLayers l WHERE l.WarehouseId=q.WarehouseId AND l.VariantId=q.VariantId AND l.BatchId IS q.BatchId AND l.RemainingQuantityScaled>0),0)
+                    AND q.ValueScaled=COALESCE((SELECT SUM(l.RemainingValueScaled) FROM InventoryCostLayers l WHERE l.WarehouseId=q.WarehouseId AND l.VariantId=q.VariantId AND l.BatchId IS q.BatchId AND l.RemainingQuantityScaled>0),0)) CostBasisComplete,
+                    (SELECT MIN(l.Id) FROM InventoryCostLayers l WHERE l.WarehouseId=q.WarehouseId AND l.VariantId=q.VariantId AND l.BatchId IS q.BatchId AND l.RemainingQuantityScaled>0 AND l.Basis='unresolved') UnresolvedLayerId,
+                    EXISTS(SELECT 1 FROM InventoryCostLayers l WHERE l.WarehouseId=q.WarehouseId AND l.VariantId=q.VariantId AND l.BatchId IS q.BatchId AND l.RemainingQuantityScaled>0 AND l.Basis<>'unresolved' AND l.OriginMovementId IS NULL) HasReconciledCostBasis
+                    FROM (SELECT b.WarehouseId,v.ProductId,b.VariantId,p.Name ProductName,v.Name VariantName,b.BatchId,bat.LotNumber,bat.ExpirationDate,b.QuantityBaseScaled,b.ValueScaled,b.Version,COALESCE(v.SellPriceOverrideScaled,d.SellPriceScaled) SalePriceScaled"+from+" ORDER BY p.Name COLLATE NOCASE,p.Id,v.Name COLLATE NOCASE,v.Id,bat.ExpirationDate,bat.LotNumber,b.Id LIMIT @Limit OFFSET @Offset) q",args,cancellationToken:ct)).ConfigureAwait(false);
+                return new InventoryPage<InventoryBalanceRecord>{Items=rows.ToList(),TotalCount=count,Page=page,PageSize=pageSize};
+            }
         }
 
         public async Task<InventoryPage<InventoryMovementRecord>> MovementsAsync(long? warehouseId,long? productId,string type,string reference,string from,string to,int page,int pageSize,CancellationToken ct)

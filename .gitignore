@@ -483,3 +483,5 @@ $RECYCLE.BIN/
 
 # Local OpenCode call history
 .codex/opencode-log.md
+
+/seeded-database.db

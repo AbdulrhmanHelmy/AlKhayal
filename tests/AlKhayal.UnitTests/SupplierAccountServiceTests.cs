@@ -87,6 +87,7 @@ namespace AlKhayal.UnitTests
         {
             private readonly Dictionary<long, Supplier> _rows = new Dictionary<long, Supplier>();
             public List<Supplier> GetAll() { return new List<Supplier>(_rows.Values); }
+            public System.Threading.Tasks.Task<SupplierPage> ListAsync(string search, int page, int pageSize, System.Threading.CancellationToken ct) { return System.Threading.Tasks.Task.FromResult(new SupplierPage { Items = GetAll(), TotalCount = _rows.Count, Page = page, PageSize = pageSize }); }
             public Supplier GetById(long id) { Supplier s; return _rows.TryGetValue(id, out s) ? s : null; }
             public long Add(Supplier supplier) { var id = _rows.Count + 1; supplier.Id = id; _rows[id] = supplier; return id; }
             public bool Update(Supplier supplier) { return _rows.ContainsKey(supplier.Id); }

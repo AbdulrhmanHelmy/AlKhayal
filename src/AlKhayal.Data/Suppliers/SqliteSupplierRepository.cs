@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
 using Dapper;
@@ -18,6 +20,20 @@ namespace AlKhayal.Data.Suppliers
         {
             using (var connection = new SQLiteConnection(_connectionString))
                 return connection.Query<SupplierRow>("SELECT " + SelectColumns + " FROM Suppliers s ORDER BY s.Id DESC").Select(ToSupplier).ToList();
+        }
+
+        public async Task<SupplierPage> ListAsync(string search, int page, int pageSize, CancellationToken ct)
+        {
+            var escaped=(search??string.Empty).Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_");
+            var where=" WHERE (@Search='' OR s.Name LIKE @Like ESCAPE '\\' OR s.Code LIKE @Like ESCAPE '\\' OR s.Phone LIKE @Like ESCAPE '\\' OR s.Contact LIKE @Like ESCAPE '\\')";
+            var args=new{Search=search??string.Empty,Like="%"+escaped+"%",Limit=pageSize,Offset=(page-1)*pageSize};
+            using(var connection=new SQLiteConnection(_connectionString))
+            {
+                await connection.OpenAsync(ct).ConfigureAwait(false);
+                var count=await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM Suppliers s"+where,args,cancellationToken:ct)).ConfigureAwait(false);
+                var rows=await connection.QueryAsync<SupplierRow>(new CommandDefinition("SELECT "+SelectColumns+" FROM Suppliers s"+where+" ORDER BY s.Name COLLATE NOCASE,s.Id LIMIT @Limit OFFSET @Offset",args,cancellationToken:ct)).ConfigureAwait(false);
+                return new SupplierPage{Items=rows.Select(ToSupplier).ToList(),TotalCount=count,Page=page,PageSize=pageSize};
+            }
         }
 
         public Supplier GetById(long id)

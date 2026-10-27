@@ -38,6 +38,7 @@ namespace AlKhayal.Application.Catalog
         public bool HasImeiTracking { get; set; }
         public long Version { get; set; }
         public DateTime UpdatedUtc { get; set; }
+        public long AvailableQuantityScaled { get; set; }
     }
 
     public sealed class CatalogPage
@@ -91,6 +92,7 @@ namespace AlKhayal.Application.Catalog
         public bool IncludeArchived { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 25;
+        public long? PosWarehouseId { get; set; }
     }
 
     public sealed class CreateProductCommand

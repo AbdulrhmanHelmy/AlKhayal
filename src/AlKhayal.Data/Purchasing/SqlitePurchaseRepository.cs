@@ -99,6 +99,8 @@ namespace AlKhayal.Data.Purchasing
                 {
                     var invoice = await LoadForPostAsync(c, tx, id, ct).ConfigureAwait(false);
                     if (invoice == null) return PurchasePostResult.Fail("not_found", "الفاتورة غير موجودة.");
+                    var priorKey = await c.QuerySingleOrDefaultAsync<PurchaseInvoice>(Cmd("SELECT Id,PostRequestHash FROM PurchaseInvoices WHERE PostOperationKey=@Key",new{Key=operationKey},tx,ct)).ConfigureAwait(false);
+                    if (priorKey != null && (priorKey.Id != id || priorKey.PostRequestHash != requestHash)) return PurchasePostResult.Fail("operation_key_conflict", "مفتاح العملية مستخدم لطلب شراء مختلف.");
                     if (invoice.Status == "posted")
                         return invoice.PostOperationKey == operationKey && invoice.PostRequestHash == requestHash
                             ? PurchasePostResult.Ok(invoice, true)

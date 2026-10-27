@@ -33,6 +33,7 @@ namespace AlKhayal.Application.Catalog
         public bool VariantMode { get; set; }
         public long Version { get; set; }
         public DateTime UpdatedUtc { get; set; }
+        public long AvailableQuantityScaled { get; set; }
     }
 
     public sealed class ProductStoreQuery
@@ -43,6 +44,8 @@ namespace AlKhayal.Application.Catalog
         public bool IncludeArchived { get; set; }
         public int Offset { get; set; }
         public int Limit { get; set; }
+        public long? PosWarehouseId { get; set; }
+        public string SinceDate { get; set; }
     }
 
     public sealed class ProductStorePage

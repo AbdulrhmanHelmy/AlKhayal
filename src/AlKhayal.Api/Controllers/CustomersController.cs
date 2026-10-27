@@ -26,6 +26,12 @@ namespace AlKhayal.Api.Controllers
             if (!await IsAuthenticated(ct)) return UnauthorizedResult();
             return Ok(ApiEnvelope<object>.Ok(_customers.GetAll()));
         }
+        [HttpGet, Route("search")]
+        public async Task<IHttpActionResult> Search(string query="",CancellationToken ct=default(CancellationToken))
+        {
+            if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            return Ok(ApiEnvelope<object>.Ok(await _customers.SearchAsync(query,ct).ConfigureAwait(false)));
+        }
 
         [HttpPost, Route("")]
         public async Task<IHttpActionResult> Create(Customer customer, CancellationToken ct)
@@ -89,6 +95,8 @@ namespace AlKhayal.Api.Controllers
             if (!await HasValidCsrf(ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("invalid_csrf", "تعذر التحقق من الطلب. حدّث الصفحة وحاول مرة أخرى."));
             try { return Content(HttpStatusCode.Created, ApiEnvelope<CustomerStatementTransaction>.Ok(_accounts.PostTransaction(id,request == null ? null : request.Type,request == null ? 0 : request.Amount,request == null ? null : request.OccurredOn,request == null ? null : request.Notes,request == null ? null : request.OperationKey))); }
             catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
+            // QA-101: a reused operation key with a changed payload is a conflict, not a replay.
+            catch (CustomerOperationKeyConflictException ex) { return Content(HttpStatusCode.Conflict, ApiEnvelope<object>.Fail("operation_key_conflict", ex.Message)); }
             catch (System.Collections.Generic.KeyNotFoundException ex) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", ex.Message)); }
         }
 

@@ -11,7 +11,19 @@ namespace AlKhayal.Data.Authentication
     }
     public sealed class SqliteSessionStore : ISessionStore { private readonly string _cs; public SqliteSessionStore(string cs) { _cs = cs; }
         public async Task SaveAsync(SessionRecord s, CancellationToken ct) { using (var c = new SQLiteConnection(_cs)) await c.ExecuteAsync(new CommandDefinition("INSERT INTO Sessions (Token, CsrfToken, UserId, ExpiresUtc, CreatedUtc) VALUES (@Token,@CsrfToken,@UserId,@ExpiresUtc,@CreatedUtc)", new { s.Token, s.CsrfToken, s.UserId, ExpiresUtc=s.ExpiresUtc.ToString("o"), CreatedUtc=System.DateTime.UtcNow.ToString("o") }, cancellationToken: ct)); }
-        public async Task<SessionRecord> FindAsync(string token, CancellationToken ct) { using (var c = new SQLiteConnection(_cs)) return await c.QuerySingleOrDefaultAsync<SessionRecord>(new CommandDefinition("SELECT s.Token, s.CsrfToken, s.UserId, s.ExpiresUtc, u.Username, u.DisplayName, u.Role FROM Sessions s JOIN Users u ON u.Id=s.UserId WHERE s.Token=@Token AND u.IsActive=1", new { Token=token }, cancellationToken: ct)); }
+        public async Task<SessionRecord> FindAsync(string token, CancellationToken ct) { using (var c = new SQLiteConnection(_cs)) { var row = await c.QuerySingleOrDefaultAsync<SqliteSessionRow>(new CommandDefinition("SELECT s.Token, s.CsrfToken, s.UserId, s.ExpiresUtc AS ExpiresUtcText, u.Username, u.DisplayName, u.Role FROM Sessions s JOIN Users u ON u.Id=s.UserId WHERE s.Token=@Token AND u.IsActive=1", new { Token=token }, cancellationToken: ct)); if (row == null) return null; System.DateTime expiresUtc; if (!TryParseExpiresUtc(row.ExpiresUtcText, out expiresUtc)) return null; return new SessionRecord { Token=row.Token, CsrfToken=row.CsrfToken, UserId=row.UserId, ExpiresUtc=expiresUtc, Username=row.Username, DisplayName=row.DisplayName, Role=row.Role }; } }
+        // Sessions.ExpiresUtc is stored as UTC ISO-8601 text (always with a trailing 'Z' for values written
+        // through SaveAsync). The provider materializes that text as local wall-clock ticks with
+        // DateTimeKind.Unspecified, so AuthService's `ExpiresUtc > UtcNow` comparison granted an extra
+        // local-offset window to expired sessions on non-UTC machines. Parse the raw text explicitly and
+        // always hand AuthService a DateTimeKind.Utc value: 'Z' suffix round-trips as UTC, prior ISO UTC
+        // values without a zone are interpreted as UTC (AssumeUniversal), and explicit offsets are
+        // converted (AdjustToUniversal). Unreadable/invalid stored expiry returns null so it can never
+        // grant access.
+        private static bool TryParseExpiresUtc(string raw, out System.DateTime expiresUtc) { expiresUtc = System.DateTime.MinValue; return !string.IsNullOrWhiteSpace(raw) && System.DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out expiresUtc) && expiresUtc.Kind == System.DateTimeKind.Utc; }
         public async Task DeleteAsync(string token, CancellationToken ct) { using (var c = new SQLiteConnection(_cs)) await c.ExecuteAsync(new CommandDefinition("DELETE FROM Sessions WHERE Token=@Token", new { Token=token }, cancellationToken: ct)); }
     }
+    // Raw materialization target for SqliteSessionStore.FindAsync: ExpiresUtc is read as its stored text so
+    // its UTC semantics survive Dapper/provider mapping (internal so Dapper can emit a deserializer).
+    internal sealed class SqliteSessionRow { public string Token { get; set; } public string CsrfToken { get; set; } public long UserId { get; set; } public string ExpiresUtcText { get; set; } public string Username { get; set; } public string DisplayName { get; set; } public string Role { get; set; } }
 }

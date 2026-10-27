@@ -44,7 +44,8 @@
       container.oninput = function (event) { syncHeader(event.target); };
       container.onchange = function (event) { syncHeader(event.target); };
       var search = container.querySelector("#purchaseSearch");
-      search.oninput = searchProducts;
+      var delayedSearch=U.debounce(searchProducts,180);
+      search.oninput=function(){++productSearchToken;delayedSearch(search.value.trim());};
     }
     function lineHtml(line, index) {
       var track = line.tracking || {};
@@ -71,16 +72,19 @@
       if (input.id === "purchaseMode") state.paymentMode = input.value;
       if (input.id === "purchaseNotes") state.notes = input.value;
     }
-    async function searchProducts(event) {
-      var query = event.target.value.trim(), target = container.querySelector("#purchaseResults");
+    var productSearchToken=0;
+    async function searchProducts(query) {
+      var target = container.querySelector("#purchaseResults"),token=productSearchToken;
+      if (!target)return;
       if (query.length < 2) { target.hidden = true; return; }
+      target.innerHTML='<span class="muted">جارٍ البحث عن المنتجات...</span>';target.hidden=false;
       try {
         var result = await AlKhayalApi.request("/api/inventory/products?search=" + encodeURIComponent(query) + "&page=1&pageSize=20");
-        if (!container.contains(target)) return;
+        if (token!==productSearchToken||!container.contains(target)||(context.isActive&&!context.isActive())) return;
         state.products = (result.items || []).filter(function (x) { return x.productType === "stock" && x.isActive && !x.isArchived; });
         target.innerHTML = state.products.map(function (x) { return '<button class="purchase-result" type="button" data-add-product="' + esc(x.id) + '">' + esc(x.name) + (x.primarySku ? " — " + esc(x.primarySku) : "") + '</button>'; }).join("") || '<span class="muted">لا توجد أصناف مطابقة</span>';
         target.hidden = false;
-      } catch (error) { UI.toast(error.message, "danger"); }
+      } catch (error) { if(token===productSearchToken&&container.contains(target))target.innerHTML='<span class="field-error">'+esc(error.message||"تعذر البحث عن المنتجات.")+'</span>'; }
     }
     async function addProduct(id) {
       try {

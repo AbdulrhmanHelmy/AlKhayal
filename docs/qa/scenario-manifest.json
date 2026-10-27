@@ -1,0 +1,467 @@
+{
+  "manifestVersion": 1,
+  "description": "Data-only QA scenario manifest for the AlKhayal acceptance runner (scripts/run-acceptance-tests.ps1). Maps scenario IDs to exact xUnit FullyQualifiedName test selectors. This file contains no logic; later batches extend it by adding titles/tests to placeholder entries or appending new scenarios. Never edit an already-mapped scenario's tests without re-executing them.",
+  "numberingCaveat": "The repository has no committed canonical QA-001..QA-100 checklist. QA-001..QA-017 follow docs/qa/phase-1-coverage.md (QA-004/QA-005 are authoritative; the rest are marked inferred there). Batch 3 (2026-10-26) confirmed the phase/module ranges per the QA owner's explicit instruction and defined QA-018..QA-039; see docs/qa/phase-2-coverage.md. QA-040..QA-100 remain unmapped scaffold placeholders under the scaffoldRanges convention below; a later batch that owns the canonical list must replace or confirm them.",
+  "statusSemantics": {
+    "PASS": "Every mapped test for the scenario was executed in this run and passed, and the manifest records no manual/browser/desktop/hardware remainder for the scenario.",
+    "PARTIAL": "Every mapped test for the scenario ran and passed, but the scenario carries an unexecuted manual remainder (browser-only native, desktop, or hardware portion). PARTIAL is never converted to PASS; the open remainder is reported in the record's manualRemainder and reason.",
+    "FAIL": "One or more mapped tests failed, or a mapped test did not appear in the run results (selector mismatch or discovery failure).",
+    "SKIP": "Mapped scenario that was outside the requested run scope and therefore not executed in this run.",
+    "BLOCKED": "The scenario could not be executed honestly: unmapped placeholder, no automated test mapping, missing tool (dotnet/node), or a build failure. BLOCKED is never converted to PASS."
+  },
+  "scaffoldRanges": {
+    "phase1": { "from": "QA-001", "to": "QA-017", "module": "authentication/bootstrap/users/sessions/settings/features/infrastructure per scenario" },
+    "phase2": { "from": "QA-018", "to": "QA-039", "module": "catalog (QA-018..QA-026) and inventory (QA-027..QA-039)" },
+    "phase3": { "from": "QA-040", "to": "QA-055", "module": "customers (QA-040..QA-047) / suppliers (QA-048..QA-055)" },
+    "phase4": { "from": "QA-056", "to": "QA-071", "module": "purchasing: purchases/returns (QA-056..QA-071)" },
+    "phase5": { "from": "QA-072", "to": "QA-100", "module": "sales/returns/printing (QA-072..QA-093), frontend/native (QA-086..QA-093 subset), cross-module (QA-094..QA-100 carries numeric phase 5 because the runner validates phase 1..5)" }
+  },
+  "phases": {
+    "1": "Authentication, bootstrap, users, sessions, settings, features (Batch 1 scope)",
+    "2": "Catalog, products, units, variants, barcodes + inventory warehouse, receipt/issue, adjustment, transfer, count, FIFO, tracking, ledger projection (QA-018..QA-039 Batch 3 scope)",
+    "3": "Customers (QA-040..QA-047) and suppliers (QA-048..QA-055); mapped by QA Batch 4 (docs/qa/phase-3-coverage.md), QA-047 remains BLOCKED without an automated mapping",
+    "4": "Purchases and purchase returns (unmapped placeholder range QA-056..QA-071)",
+    "5": "Sales, POS, sales returns, printing, frontend shell, native lifecycle (QA-072..QA-093) and cross-module items (QA-094..QA-100, numeric phase 5)"
+  },
+  "scenarios": [
+    {
+      "id": "QA-001",
+      "phase": 1,
+      "module": "bootstrap",
+      "title": "First-run bootstrap only with zero users; blocked afterwards; exactly one admin under concurrency; no partial user on validation failure",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Bootstrap UI wizard flow in WebView2 (manual native acceptance)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FirstRunBootstrapTests.Fresh_database_bootstraps_admin_logs_in_and_survives_restart" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FirstRunBootstrapTests.Any_existing_user_blocks_bootstrap" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FirstRunBootstrapTests.Concurrent_bootstrap_creates_exactly_one_admin" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FirstRunBootstrapTests.Bootstrap_api_is_public_once_then_permanently_conflicts" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FirstRunBootstrapTests.Invalid_or_mismatched_password_leaves_no_partial_user" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FirstRunBootstrapTests.Simple_non_empty_passwords_are_accepted" }
+      ],
+      "notes": "Inferred ID (docs/qa/phase-1-coverage.md). Theory test may materialize multiple cases."
+    },
+    {
+      "id": "QA-002",
+      "phase": 1,
+      "module": "authentication",
+      "title": "Wrong username/password rejected at the API (401 invalid_credentials)",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Login-screen Arabic validation messages (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" }
+      ],
+      "notes": "Inferred ID. Wrong-password 401 is covered indirectly inside the shared user-management API test; direct wrong-password status assertion exists only at service level."
+    },
+    {
+      "id": "QA-003",
+      "phase": 1,
+      "module": "authentication",
+      "title": "Disabled account cannot log in; deactivating an account invalidates its live session",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Deactivated-user UX after session loss (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" }
+      ],
+      "notes": "Inferred ID. Session-follows-account-state is covered inside the shared user-management API test; direct login-with-disabled-account assertion exists only at service level."
+    },
+    {
+      "id": "QA-004",
+      "phase": 1,
+      "module": "sessions",
+      "title": "Session expires exactly 8 hours after login; expired cookie rejected by /api/auth/me and protected endpoints; expired row removed; restart does not restore it; bound CSRF token invalid after expiry",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Real 8-hour wall-clock session; WebView2 cookie retention across restarts (manual native acceptance)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaPhase1SessionSecurityTests.QA004_expired_session_is_rejected_removed_and_not_restored_by_restart" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaPhase1SessionSecurityTests.QA004_csrf_token_is_invalid_for_an_expired_session" }
+      ],
+      "notes": "Authoritative ID. Expiry exercised without sleeps by moving Sessions.ExpiresUtc directly in the isolated database."
+    },
+    {
+      "id": "QA-005",
+      "phase": 1,
+      "module": "sessions",
+      "title": "Login sets alkhayal_session cookie with HttpOnly and SameSite=Lax (Secure over HTTPS); login/me response bodies never expose the session token or password hash",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Secure flag over a real HTTPS listener; WebView2 cookie storage inspection (manual native acceptance)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaPhase1SessionSecurityTests.QA005_session_cookie_sets_HttpOnly_and_SameSite_and_login_me_responses_leak_no_secrets" }
+      ],
+      "notes": "Authoritative ID."
+    },
+    {
+      "id": "QA-006",
+      "phase": 1,
+      "module": "sessions",
+      "title": "Session survives a service restart against the same database; logout deletes the session",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "WebView2 restore of a cookie after desktop restart (manual native acceptance)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.AuthServicePersistenceTests.Auth_session_survives_new_service_instance" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.ApiEndpointTests.Health_login_me_and_logout_use_real_owin_api" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-007",
+      "phase": 1,
+      "module": "users",
+      "title": "Cashier role forbidden on administrator APIs; every protected endpoint rejects anonymous access",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Sidebar/search/direct-route gating in a real browser session (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.BusinessActivityApiTests.Api_enforces_auth_admin_validation_and_persists_after_restart" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogApiTests.Catalog_api_enforces_authentication_csrf_screen_permissions_and_restart_persistence" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryApiTests.Inventory_api_requires_auth_csrf_and_existing_screen_permission" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SettingsApiTests.Settings_api_authenticates_authorizes_validates_and_persists_after_restart" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FeatureApiTests.Feature_api_reads_validates_authorizes_and_persists_after_restart" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-008",
+      "phase": 1,
+      "module": "users",
+      "title": "Per-user screen-permission grants persist and are enforced; administrator-only screens reject cashier grants",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Screen-permission editor interaction (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementPersistenceTests.Effective_access_combines_role_grants_and_enabled_modules" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-009",
+      "phase": 1,
+      "module": "users",
+      "title": "Last active administrator cannot be deactivated (409)",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Administrator UX messaging (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementPersistenceTests.Users_permissions_last_admin_and_rollback_are_persisted_transactionally" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-010",
+      "phase": 1,
+      "module": "settings",
+      "title": "Settings API authenticates, authorizes, validates, persists, audits, rolls back",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Settings screens in WebView2 (manual native acceptance)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SettingsApiTests.Settings_api_authenticates_authorizes_validates_and_persists_after_restart" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SettingsPersistenceTests.Company_general_audit_and_database_information_persist_after_restart" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SettingsPersistenceTests.Settings_update_and_audit_are_one_transaction" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-011",
+      "phase": 1,
+      "module": "features",
+      "title": "Features/modules API authenticates, authorizes, persists across restart, keeps administrator overrides",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Modules & Features screen interaction (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FeatureApiTests.Feature_api_reads_validates_authorizes_and_persists_after_restart" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FeaturePersistenceTests.Feature_states_overrides_audit_and_reenable_survive_real_sqlite" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FeaturePersistenceTests.Invalid_user_rolls_back_state_and_audit_and_migration_is_repeatable" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-012",
+      "phase": 1,
+      "module": "sessions",
+      "title": "State-changing calls without/with a wrong X-CSRF-Token are rejected with 403 invalid_csrf",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Front-end CSRF refresh flow (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.ApiEndpointTests.Health_login_me_and_logout_use_real_owin_api" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogApiTests.Catalog_api_enforces_authentication_csrf_screen_permissions_and_restart_persistence" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryApiTests.Inventory_api_requires_auth_csrf_and_existing_screen_permission" }
+      ],
+      "notes": "Inferred ID. CSRF rejection is covered indirectly inside these shared tests."
+    },
+    {
+      "id": "QA-013",
+      "phase": 1,
+      "module": "bootstrap",
+      "title": "bootstrap-status public once; login/me/logout flow over the real OWIN host with cookies",
+      "mapped": true,
+      "partial": false,
+      "manualRemainder": null,
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.FirstRunBootstrapTests.Bootstrap_api_is_public_once_then_permanently_conflicts" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.ApiEndpointTests.Health_login_me_and_logout_use_real_owin_api" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-014",
+      "phase": 1,
+      "module": "users",
+      "title": "User CRUD: validation, case-insensitive uniqueness, role validation, rollback on audit failure, password reset with hash replacement",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "User-management screen interaction (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementPersistenceTests.Users_permissions_last_admin_and_rollback_are_persisted_transactionally" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserProvisionerTests.Provisioner_accepts_a_single_character_password_and_stores_only_its_hash" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserProvisionerTests.Password_reset_replaces_the_hash_for_an_existing_user" }
+      ],
+      "notes": "Inferred ID."
+    },
+    {
+      "id": "QA-015",
+      "phase": 1,
+      "module": "sessions",
+      "title": "Safe serialization: no password hashes in API responses; static files served no-store",
+      "mapped": true,
+      "partial": true,
+      "manualRemainder": "Client-side storage inspection (no secrets in localStorage) (browser-only)",
+      "tests": [
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.UserManagementApiTests.Admin_manages_users_cashier_is_forbidden_and_sessions_follow_account_state" },
+        { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaPhase1SessionSecurityTests.QA005_session_cookie_sets_HttpOnly_and_SameSite_and_login_me_responses_leak_no_secrets" }
+      ],
+      "notes": "Inferred ID. QA-005 test extends hash-leak coverage to login/me bodies; users-list no-store assertion lives inside the user-management API test."
+    },
+    {
+      "id": "QA-016",
+      "phase": 1,
+      "module": "infrastructure",
+      "title": "LAN/cloud hardening: rate limiting, CSRF review, TLS decisions before production cookie-authenticated deployment",
+      "mapped": false,
+      "placeholder": false,
+      "partial": false,
+      "manualRemainder": "Entirely (deployment review work; not implemented per AGENTS.md)",
+      "tests": [],
+      "notes": "Known scenario with no automated coverage. Must never be reported PASS. Requires explicit LAN binding, TLS, rate-limit and CSRF review before production."
+    },
+    {
+      "id": "QA-017",
+      "phase": 1,
+      "module": "native",
+      "title": "Native WinForms/WebView2 lifecycle: expired-session redirect UX, cookie retention, visible connection/runtime errors",
+      "mapped": false,
+      "placeholder": false,
+      "partial": false,
+      "manualRemainder": "Entirely manual (docs/testing.md native acceptance sections)",
+      "tests": [],
+      "notes": "Known scenario with no automated coverage. Must never be reported PASS."
+    },
+    { "id": "QA-018", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Fresh and repeated catalog migrations create the full catalog schema (variants, identifiers, capabilities, audit log) with foreign keys on, integrity ok, the protected default unit قطعة, and system SIZE/COLOR attributes at Ids 1/2", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogMigrationTests.Fresh_and_repeated_migration_create_catalog_schema_and_default_unit" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Assertion verified: exact SchemaVersion count (20), PRAGMA foreign_keys/integrity/foreign_key_check, default unit row, and system attribute rows." },
+    { "id": "QA-019", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Legacy pre-008 upgrade preserves product IDs and rounds scale-4 sale price exactly, leaves unknown purchase cost null, quarantines invalid sale price/blank name products into review_required with unresolved issues, and reconciles late-inserted legacy rows to review_required plus a 1/1 base unit on the next start without guessing values", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogMigrationTests.Upgrade_preserves_legacy_ids_prices_and_quarantines_invalid_rows" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogMigrationTests.Post_migration_legacy_rows_are_reconciled_on_next_start_without_guessing" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Assertions verified against raw SQLite rows after real Migrator.Run." },
+    { "id": "QA-020", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Upgrade from schema 009 backfills exact 1/1 base ProductUnits (sale+purchase enabled) for existing products with identifiers preserved; migration 010 preflight fails fast (InvalidOperationException, 'Migration 010 preflight failed') and rolls back so 010 is absent and ProductUnits does not exist when a product lacks a default variant", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogMigrationTests.Upgrade_from_009_backfills_base_product_units_and_preserves_identifiers" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogMigrationTests.Preflight_fails_fast_and_rolls_back_if_product_lacks_default_variant" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-021", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Product create/edit/search/state/archive screens in WebView2 (manual native acceptance)", "title": "Product lifecycle: idempotent create by operation key (same id on retry, operation_key_conflict on changed payload), exact scale-4 sale/purchase prices, search/category/active filtering, optimistic version conflict on stale update, deactivate then archive, and archived state/name/prices survive a new service instance against the same database with an IsDefault variant and 1/1 base ProductUnits row", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogPersistenceTests.Catalog_create_update_search_state_archive_and_idempotency_persist" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Service-level assertions verified; real OWIN API and screen flows remain a manual/browser remainder." },
+    { "id": "QA-022", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Catalog validations: category edit persists parent/sort/inactive, category cycle rejected (category_cycle), duplicate category and duplicate unit rejected, deactivating the protected default unit rejected (protected_unit), invalid product base unit rejected (invalid_unit), and scale money parsing rejects negative and thousands-separated amounts", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogPersistenceTests.Category_cycles_duplicates_unit_constraints_and_invalid_product_references_are_rejected" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-023", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Real browser interaction with product/category/unit screens and screen-permission editor (browser-only)", "title": "Catalog API over the real OWIN host: anonymous 401, missing CSRF 403, cashier create/update/state 403, screen-permission gating, excess-precision and negative purchase cost rejected at the API, variant summary serializes sizeValues/colorValues/variantCount/expiry tracking and detail serializes assignments, and catalog state persists across a real server restart", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogApiTests.Catalog_api_enforces_authentication_csrf_screen_permissions_and_restart_persistence" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Isolated temp database and temp frontend/screens.json; restart asserted against a real second AlKhayalServer instance." },
+    { "id": "QA-024", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Variant/SKU/barcode identity: globally unique SKU and barcode including retired rows (reusing a retired SKU or retired barcode is rejected), and the catalog audit log is immutable (catalog_audit_immutable abort on UPDATE and DELETE)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogVariantPersistenceTests.Global_sku_and_barcode_uniqueness_includes_retired_rows" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogVariantPersistenceTests.Audit_log_triggers_abort_on_update_and_delete" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-025", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Physical barcode-scanner input path (manual; scanner hardware not available in CI)", "title": "Barcode case-insensitive lookup returns exact active identity with product name, retired status, and effective scale-4 sale price, and returns null for unknown codes; a unit referenced by a barcode is locked (conversion_locked on ratio change, base_unit_locked on base change with barcodes); transitioning a simple product to variant mode converts the existing default row in place and locks variant mode (variant_mode_locked on revert)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogVariantPersistenceTests.Barcode_lookup_returns_exact_identity_and_retired_status" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogVariantPersistenceTests.Conversion_locks_when_barcode_references_unit" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogVariantPersistenceTests.Transition_from_simple_to_variant_converts_default_row_and_locks_variant_mode" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Note the retired-status path of the barcode lookup is exercised via the uniqueness test; scanner/hardware input remains manual." },
+    { "id": "QA-026", "phase": 2, "module": "catalog", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Product variant editor screens (size/color bars, inline rows) in WebView2 (manual native acceptance)", "title": "Aggregate product create with multi-unit boxes, attribute values, SKU/barcodes persists identifiers and overrides, survives process restart with unchanged variant IDs and primary barcode, and the whole aggregate rolls back on a child write failure (no partial product/variant/unit rows)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogVariantPersistenceTests.Configured_variant_product_persists_and_survives_process_restart" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CatalogVariantPersistenceTests.Transactionality_rolls_back_entire_aggregate_on_child_write_failure" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Frontend variant visibility VM regressions exist in frontend/tests but are not per-scenario runner scope." },
+    { "id": "QA-027", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Inventory posting validation and unit math: invalid quantity (negative/zero), invalid cost (negative/excess precision), missing/non-positive sale price, and missing cost are rejected with exact error codes and leave zero StockMovements and zero InventoryCostLayers; exact fractional unit conversion (3/2 box) snapshots converted cost to scaled integers (26667) while the entered cost stays 40000 and is not affected by later catalog reference-price edits; insufficient-conversion precision and money overflow (numeric_overflow) are rejected", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Invalid_receipt_never_posts_any_stock_or_cost" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Exact_unit_conversion_cost_snapshot_and_overflow_are_enforced" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Isolated temp GUID SQLite Fixture; operator database untouched by construction." },
+    { "id": "QA-028", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Receipt cost/sale pricing rules: receipt without actual purchase cost or sale price is rejected (cost_required/sale_price_required), posted prices are scaled to ledger integers, the caller's request object is never mutated, identical retry replays and changed payload conflicts, converted unit prices and sale overrides apply only to the selected variant without touching the default variant or other variants even when the same batch post fails", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Receipt_requires_actual_purchase_and_sale_prices_and_never_mutates_the_request" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Receipt_converts_selected_unit_prices_and_changes_only_selected_variant_atomically" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Receiving_a_size_color_variant_does_not_change_the_default_variant" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-029", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Warehouse directory/history screens in WebView2 (manual native acceptance)", "title": "Manual receipt/issue/transfer are atomic and idempotent with persisted documents and movements (exact balance quantities per warehouse), a failed multiline post rolls back every effect (no movements/documents), fresh migrations enforce foreign keys and immutable ledger (delete/update of movements, balances, posted documents, and document lines all abort), and the end-to-end OWIN API path requires auth/CSRF/existing screen permission with persisted posting and duplicate receipt replay (replayed:true)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Manual_stock_and_transfer_are_atomic_idempotent_and_persist" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Failed_multiline_post_rolls_back_every_effect" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Fresh_migration_has_foreign_keys_and_immutable_movements" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryApiTests.Inventory_api_requires_auth_csrf_and_existing_screen_permission" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). API test uses a real AlKhayalServer on a free loopback port with an isolated database; noting explicitly that any session-only/mocked frontend inventory actions must not be treated as persisted postings." },
+    { "id": "QA-030", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Inventory upgrade paths: upgrading from schema 010 preserves product/user IDs and keeps exactly one default warehouse; a pre-016 legacy ledger keeps its values and legacy RequestHash, marks the balance cost basis incomplete (CostBasisComplete=false, UnresolvedLayerId), blocks normal issue with unresolved_cost_basis until an owner-acknowledged opening-basis reconciliation with exact legacy value match (legacy_value_mismatch on wrong cost) succeeds exactly once (idempotent, then conflict on changed evidence), foreign keys clean at schema 20, and the old ledger rows remain untouched", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Upgrade_from_existing_010_schema_preserves_product_and_user_ids" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Fifo_migration_preserves_legacy_ledger_and_blocks_unknown_cost_until_documented_opening_basis" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-031", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Concurrency and projection integrity: two concurrent issues of the last unit admit exactly one and never drive stock negative, and an administrative projection rebuild succeeds, produces an existing verified backup file, records an InventoryAudit projection_rebuild event, and passes VerifyProjectionAsync", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Concurrent_issues_never_make_stock_negative" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Administrative_projection_rebuild_creates_verified_backup_and_audit" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). The backup file is deleted only inside the test." },
+    { "id": "QA-032", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Warehouse screen flows (create/edit/deactivate/reopen) in WebView2 (manual native acceptance)", "title": "Warehouse control: generated warehouse codes skip existing manual codes (WH-0004), edit normalizes codes (main-central stored MAIN-CENTRAL), duplicate codes rejected on create and edit, description/location/default state persist through reopen, deactivated then reactivated warehouse returns active non-default, and creating additional warehouses plus transfers follow the effective multiple-warehouses module flag (feature_disabled when off)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Generated_warehouse_codes_skip_existing_manual_codes" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Warehouse_edit_persists_normalized_code_rejects_duplicate_and_survives_reopen" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Additional_warehouse_and_transfer_follow_effective_module_flag" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-033", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Valuation display in WebView2 screens (manual native acceptance; exact integer math itself is automated)", "title": "FIFO quantity/value: issue consumes the oldest cost layer first with partial cross-receipt consumption (3 of 10 then 9 across two receipts), remaining layer quantity/value and allocation quantity/value equal exact scaled integers (7000000; aggregate 8000000/9600000 with CostBasisComplete), an identical issue replays, the balances survive a new store instance over the same database, movements are immutable (ledger edits abort), and VerifyProjectionAsync passes", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Fifo_consumes_oldest_layers_partially_across_receipts_and_survives_restart_and_retry" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-034", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "FIFO transfer: value moves with origin FIFO order and cost into Basis='transfer' destination layers (one movement row per side for the document), identical transfer replays, an injected destination failure rolls back both sides leaving source layers and no orphan document, the transfer history lists rows with the related warehouse name, and the projection verifies", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Fifo_transfer_preserves_origin_order_cost_and_allocations_and_rolls_back_both_sides" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-035", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Adjustment and count-shortage valuation: negative adjustments and count-recorded shortages consume existing FIFO layers in order (ending value exactly 9600000 at scaled scale-4), discovery of a new positive quantity requires an explicit cost (cost_required), and providing the cost posts exact value (12400000) with RecordedQuantity verification", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Fifo_adjustments_and_count_shortages_consume_layers_and_positive_counts_require_cost" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). (Count idempotency is QA-036; adjustment/reconciliation opening-basis legacy path is QA-030.)" },
+    { "id": "QA-036", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Physical count lifecycle: count draft captures one line per stored variant, posting a different counted quantity posts the exact difference (5→3), posted status and counted values are re-read exactly, an identical count post replays and a changed payload conflicts, stale capture against a moved-on balance version is rejected (stale_count), reversing an already-reversed document is rejected (already_reversed/reversal_conflict), a zero-stock variant can be counted/discovered (BalanceVersion 0) and a count draft can be canceled leaving no movements", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Physical_count_posts_difference_and_zero_difference_without_extra_movement" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Count_rejects_stale_capture_and_reversal_is_a_new_document" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Selected_zero_stock_variant_can_be_counted_and_draft_can_be_canceled" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Count_identical_replay_and_changed_payload_conflict" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-037", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Tracking: batch/expiry/serial/IMEI capabilities post through the same immutable ledger as ordinary stock (physical units move to the destination warehouse on tracked transfer, duplicate tracked receipt with same serials conflicts as inventory_conflict), tracked transfer preserves cost and invalid receipts roll back consumption, issued identifiers must exist in that tracked warehouse (identifier_not_in_stock), a batch without expiry remains issuable, the server-local-date expiry policy blocks yesterday-expiring lots for manual issue and transfer while a lot expiring today remains issuable/transferable (expired_batch)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Batch_expiry_and_serial_imei_follow_the_same_ledger" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Tracked_fifo_transfer_and_issue_preserve_cost_and_rejected_identifiers_roll_back_consumption" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Batch_without_expiry_can_be_issued" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Server_local_date_blocks_yesterday_expiry_for_issue_and_transfer_allows_today" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md). Note: expiry is exercised without sleeps via relative lot dates (expiry tomorrow/yesterday/today)." },
+    { "id": "QA-038", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Posting idempotency and hash protection: identical post replays with the same document id and a changed payload conflicts (operation_key_conflict), the canonical v2: request hash distinguishes delimiter/newline-swapped payloads that collide under the legacy hash (and enforcing the conflict leaves balances and row counts unchanged), and a seeded legacy unversioned OperationKey hash conflicts and does not repost (no extra document rows or movements)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Identical_post_replays_and_changed_payload_conflicts" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Canonical_v2_hash_distinguishes_delimiter_and_newline_payloads" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Legacy_unversioned_hash_conflicts_and_does_not_repost" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-039", "phase": 2, "module": "inventory", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Count and reversal hash identity: identical reversal replays with the same document and a changed reason conflicts; the count hash covers cost and physical unit identities, so changing only UnitCost or removing one IMEI from the discovered unit conflicts while counts of 5 stay one document/movement and exactly 1 InventoryPhysicalUnits/3 InventoryIdentifiers rows", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Reversal_identical_replay_and_changed_payload_conflict" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Count_hash_includes_cost_and_physical_unit_identities" }
+    ], "notes": "Mapped by QA Batch 3 (docs/qa/phase-2-coverage.md)." },
+    { "id": "QA-040", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Customer create screen (customer-add) and list flow in WebView2 (manual native acceptance)", "title": "Customer create persists the exact operative fields (code/name/phone/address/subscription/status, balance 25.00 with credit limit 500) and the full row survives a repository recreation over the same database", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CustomerPersistenceTests.Customer_address_and_fields_survive_repository_recreation" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). The test reopens the database through new repository instances; create/edit/delete screens remain a native/manual remainder." },
+    { "id": "QA-041", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Customer row edit (تعديل) and delete flow in WebView2 (manual native acceptance)", "title": "Customer edit rewrites descriptive fields only and ignores balance/credit-limit payloads so the persisted values stay 25.00/500.00, and delete removes a customer that has no statement transactions", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CustomerPersistenceTests.Customer_address_and_fields_survive_repository_recreation" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). Shares the QA-040 test; the edit-ignores-balance and delete-clears-row assertions are the phase-3 evidence here." },
+    { "id": "QA-042", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Legacy customer upgrade to the customer ledger: pre-015 real-typed balances upgrade without false failure (opening AmountScaled 1004000 for 100.40, legacy_payment 1000 for 0.10) and migrations reach schema 20 with CustomerTransactions populated", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CustomerLedgerMigrationPreflightTests.SQLite_numeric_real_values_at_scale_four_upgrade_without_false_failure" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). Asserted against raw SQLite rows after real Migrator.Run runs." },
+    { "id": "QA-043", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Legacy customer preflight guard: a genuinely sub-scale balance (1.00001) stops the migrator with the Arabic diagnostic (Customers رقم, raw value in message), preserves the original Balance exactly, and creates no CustomerTransactions table", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.CustomerLedgerMigrationPreflightTests.Genuine_sub_scale_legacy_value_stops_with_diagnostic_and_preserves_original" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). Fail-fast preflight is asserted before any ledger write." },
+    { "id": "QA-044", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "المعاملات المالية للعميل / customer-credit-payment screens in WebView2 (manual native acceptance)", "title": "Customer collection and balance-increase transactions inside the reconciled disposable financial dataset post exact scale-4 balances (collection 0.10 off 100.50 → 100.40; increase 0.99 on a 0.00 balance → 0.99) with foreign keys clean, projection verified and migrations rerun", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.InventoryPersistenceTests.Realistic_disposable_financial_dataset_reconciles_account_boundaries_and_preserves_fifo_residuals" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). Selector correction: the file tests/AlKhayal.IntegrationTests/PurchasingPersistenceTests.cs declares the tests inside partial class InventoryPersistenceTests, so the emitter FQN uses InventoryPersistenceTests despite the purchasing scope. The FQN is the shared realistic-dataset test; the direct phase-3 assertions are CustomerService.Create plus PostTransaction('collection'/'increase') and the exact Customers.Balance row checks." },
+    { "id": "QA-045", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "كشف حساب العميل (customer-statement) screen in WebView2 (manual native acceptance)", "title": "Customer account edges: validation rejections persist zero Customers rows, the exact opening balance posts an 'opening' CustomerTransactions row, an identical collection retry replays with the same transaction id and no duplicate row, the statement closes at exactly the persisted balance (100.25) with the collection as a credit movement, and a customer with a non-opening ledger row can no longer be deleted", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaPhase3EdgeTests.Customer_validation_duplicate_code_and_idempotent_collections_preserve_balances_and_statement" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). Focused edge test added by this batch for the previously untested idempotency/statement-reconciliation invariant; runs on a disposable explicit SQLite path. The same test is shared with QA-046." },
+    { "id": "QA-046", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Customer form Arabic validation messages in the browser (browser-only)", "title": "Customer create/edit validation and conflicts: missing code/name/phone, negative balance/credit limit and a 1.005 credit limit are rejected before any write, the case-insensitive duplicate code insert raises the SQLite constraint that the API maps to 409 customer_conflict with no second row, and edit ignores balance/credit-limit payloads so 100.50/500.00 stay persisted", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaPhase3EdgeTests.Customer_validation_duplicate_code_and_idempotent_collections_preserve_balances_and_statement" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). Shares the QA-045 edge test; the validation and duplicate-code assertions are the phase-3 evidence here. Changed-payload retry conflicts for customer statement transactions are NOT implemented (a changed amount replays the first operation); this is documented as a gap in docs/qa/phase-3-coverage.md." },
+    { "id": "QA-047", "phase": 3, "module": "customers", "mapped": false, "placeholder": false, "partial": false, "manualRemainder": "Login/CSRF refresh flows in customer screens (browser-only)", "title": "Customers API gating: anonymous callers receive 401 unauthorized and state-changing calls without a valid X-CSRF-Token receive 403 invalid_csrf on api/customers", "tests": [],
+      "notes": "BLOCKED (no automated test mapping; must never be reported PASS). CustomersController implements session/CSRF gating (verified in src/AlKhayal.Api/Controllers/CustomersController.cs), but no automated API integration test exists for api/customers (no CustomerApiTests in tests/AlKhayal.IntegrationTests). Adding a second new test exceeded this batch's one-test allowance, so the scenario stays unmapped with this precise reason (QA Batch 4, docs/qa/phase-3-coverage.md)." },
+    { "id": "QA-048", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Supplier list/edit screens (suppliers-list) in WebView2 (manual native acceptance)", "title": "Supplier create persists the full field set with an exact opening payable (500.00 paid 0.00), repository recreation returns the fields unchanged, edit rewrites descriptive fields but never mutates the payable (a 99999 payload stays 500.00), and foreign keys block deleting a supplier referenced by ledger data", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Supplier_fields_survive_repository_recreation_and_update_never_changes_payable" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Supplier_with_invoices_or_payments_cannot_be_deleted" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md)." },
+    { "id": "QA-049", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "supplier-payment / supplier-credit screens in WebView2 (manual native acceptance)", "title": "Supplier outstanding balances: an invoice raises the payable exactly (100 → 500), partial (150) then full (250) payments reduce payable/paid atomically and drive the invoice to مسدد جزئيًا then مسدد, and an on-account payment without an invoice reduces only the supplier balance", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Invoice_increases_payable_and_payment_on_invoice_reduces_supplier_and_invoice_atomically" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Payment_without_invoice_reduces_only_the_supplier_balance" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md)." },
+    { "id": "QA-050", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "supplier-payment Arabic validation messages in the browser (browser-only)", "title": "Supplier payment validation: over-payment, zero amount, a payment against another supplier's invoice and a payment for a missing supplier all throw and leave both payable values, both payment lists and the invoice PaidAmount unchanged", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Rejected_payments_leave_balances_and_payment_rows_unchanged" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md)." },
+    { "id": "QA-051", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Per-supplier invoice numbering: duplicate invoice numbers are rejected case-insensitively within a supplier without changing the payable, the same number is allowed across different suppliers, a null invoice number receives an SI- auto reference and the balance stays untouched", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Duplicate_invoice_numbers_are_rejected_per_supplier_without_changing_balance" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md)." },
+    { "id": "QA-052", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "supplier-balance (كشف حساب المورد) screen in WebView2 (manual native acceptance)", "title": "Supplier statement: movements order by date (OPEN → A → payment → B), full totals are 100 opening/460 invoices/150 paid/410 closing and the closing balance equals the live payable, a mid-period cut computes the opening balance 350 before 2026-10-06, and an unknown supplier returns null", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Statement_orders_movements_and_balance_matches_current_payable" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md)." },
+    { "id": "QA-053", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "Supplier payment repeat/confirm UX (supplier-payment-confirm) in WebView2 (manual native acceptance)", "title": "Unified supplier ledger payments: an exact 20.13 scale-4 payment records once, an identical retry replays (Replayed=true) with no double effect, a changed amount on the same operation key throws, and the statement/history include the legacy purchase invoice", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierPersistenceTests.Unified_supplier_ledger_includes_purchase_history_and_payment_replays_idempotently" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md)." },
+    { "id": "QA-054", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Legacy supplier history upgrade: pre-017 invoices/payments import once and the derived opening entries (-100000/+500000/+600000) preserve the exact 100.00 payable without double counting, and a 39.00 reconciliation mismatch stops the migrator before SupplierLedgerEntries exists, leaving historical rows untouched", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierLedgerMigrationTests.Reconciled_legacy_supplier_history_is_preserved_and_opening_is_not_double_counted" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierLedgerMigrationTests.Reconciliation_discrepancy_stops_before_supplier_ledger_migration_writes" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). The FQNs are shared assets also used by the phase-4 purchasing migration story; the supplier opening-balance assertions are the phase-3 evidence here." },
+    { "id": "QA-055", "phase": 3, "module": "suppliers", "mapped": true, "placeholder": false, "partial": false, "manualRemainder": null, "title": "Supplier API over the real OWIN host with auth/CSRF: created supplier 201 authorized via login cookie + X-CSRF-Token, purchase post and a 5.13 payment persist, a full dispose plus double migration rerun plus a fresh server keeps the supplier, posted invoice, 2 ledger entries and receipt layer with integrity/foreign-key checks clean, and payable 15.13/paid 5.13 serve back after restart", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.SupplierRestartApiTests.Authenticated_supplier_list_survives_purchase_payment_and_application_restart" }
+    ], "notes": "Mapped by QA Batch 4 (docs/qa/phase-3-coverage.md). Real AlKhayalServer on a free loopback port with an isolated database; the login/CSRF header flow exercises the implemented authentication and CSRF path." },
+    { "id": "QA-056", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3)." },
+    { "id": "QA-057", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3)." },
+    { "id": "QA-058", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3)." },
+    { "id": "QA-059", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3)." },
+    { "id": "QA-060", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3)." },
+    { "id": "QA-061", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3)." },
+    { "id": "QA-062", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3)." },
+    { "id": "QA-063", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-064", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-065", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-066", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-067", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-068", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-069", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-070", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-071", "phase": 4, "module": "purchasing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 4 purchases/returns range confirmed by Batch 3; moved out of the old sales range)." },
+    { "id": "QA-072", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns/printing range confirmed by Batch 3)." },
+    { "id": "QA-073", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns/printing range confirmed by Batch 3)." },
+    { "id": "QA-074", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns/printing range confirmed by Batch 3)." },
+    { "id": "QA-075", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns/printing range confirmed by Batch 3)." },
+    { "id": "QA-076", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns/printing range confirmed by Batch 3)." },
+    { "id": "QA-077", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns/printing range confirmed by Batch 3)." },
+    { "id": "QA-078", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns range confirmed by Batch 3; customer-facing POS entries live in phase 5 here while master-data customer screens are phase 3)." },
+    { "id": "QA-079", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns range confirmed by Batch 3)." },
+    { "id": "QA-080", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns range confirmed by Batch 3)." },
+    { "id": "QA-081", "phase": 5, "module": "sales", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 sales/returns range confirmed by Batch 3)." },
+    { "id": "QA-082", "phase": 5, "module": "printing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 printing range confirmed by Batch 3)." },
+    { "id": "QA-083", "phase": 5, "module": "printing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 printing range confirmed by Batch 3)." },
+    { "id": "QA-084", "phase": 5, "module": "printing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 printing range confirmed by Batch 3)." },
+    { "id": "QA-085", "phase": 5, "module": "printing", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 printing range confirmed by Batch 3)." },
+    { "id": "QA-086", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-087", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-088", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-089", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-090", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-091", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-092", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-093", "phase": 5, "module": "frontend", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (phase 5 frontend range confirmed by Batch 3)." },
+    { "id": "QA-094", "phase": 5, "module": "cross-module", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (cross-module; numeric phase set to 5 because the runner validates phase 1..5 — documented per Batch 3, owner batch may relabel later)." },
+    { "id": "QA-095", "phase": 5, "module": "cross-module", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (cross-module; numeric phase 5 required by the runner range validation)." },
+    { "id": "QA-096", "phase": 5, "module": "cross-module", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (cross-module; numeric phase 5 required by the runner range validation)." },
+    { "id": "QA-097", "phase": 5, "module": "cross-module", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (cross-module; numeric phase 5 required by the runner range validation)." },
+    { "id": "QA-098", "phase": 5, "module": "cross-module", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (cross-module; numeric phase 5 required by the runner range validation)." },
+    { "id": "QA-099", "phase": 5, "module": "cross-module", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (cross-module; numeric phase 5 required by the runner range validation)." },
+    { "id": "QA-100", "phase": 5, "module": "cross-module", "mapped": false, "placeholder": true, "partial": false, "manualRemainder": null, "tests": [], "notes": "Unmapped placeholder (cross-module; numeric phase 5 required by the runner range validation)." },
+    { "id": "QA-101", "phase": 3, "module": "customers", "mapped": true, "placeholder": false, "partial": true, "manualRemainder": "المعاملات المالية للعميل / customer-credit-payment screens in WebView2 (manual native acceptance); no screen-level duplicate posting is verified by these tests", "title": "Customer transaction operation key: an identical retry replays the same transaction id over the real OWIN API (HTTP 201 replayed:true) without a second ledger row or balance change, while any reuse of the key for a changed amount/type/date/notes or by another customer is rejected with HTTP 409 operation_key_conflict and zero changes to CustomerTransactions rows, opening amounts or Customers.Balance (repository-level contract pinned against a fresh GUID temp database per case)", "tests": [
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaCustomerOperationKeyTests.Customer_operation_key_replays_identical_retry_exactly_once" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaCustomerOperationKeyTests.Customer_operation_key_reuse_with_mismatched_payload_is_conflicted" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaCustomerOperationKeyTests.Customer_manual_operation_key_never_replays_payment_provenance_rows" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaCustomerOperationKeyTests.Customer_manual_key_starting_with_cp_or_sale_prefix_replays_and_legacy_payment_row_still_conflicts" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaCustomerOperationKeyTests.Customer_transaction_api_replays_identical_retry_exactly_once" },
+      { "project": "AlKhayal.IntegrationTests", "fullyQualifiedName": "AlKhayal.IntegrationTests.QaCustomerOperationKeyTests.Customer_transaction_api_returns_409_operation_key_conflict_for_changed_and_cross_customer_payloads" }
+    ], "notes": "Mapped by QA Batch 4A (docs/qa/confirmed-bugs.md CONFIRMED-002, repaired; docs/qa/phase-3-coverage.md updated). The mismatched-payload selector is an xUnit theory that materializes six independent cases (changed_amount / changed_type / changed_date / changed_notes / changed_notes_whitespace / other_customer), each in a fresh disposable GUID SQLite database; the screen flows remain a manual remainder. Replay ownership is decided from stored metadata only (sales provenance columns, CustomerPayments reference equality, RequestHash==OperationKey); no key prefix is reserved — manual keys starting with CP- or sale- replay identically (pinned by Customer_manual_key_starting_with_cp_or_sale_prefix_replays_and_legacy_payment_row_still_conflicts), while a colliding actual customer-payment row is rejected without a false replay. Id here matches the test-file header comment (verified gap previously recorded in docs/qa/phase-3-coverage.md)." }
+  ]
+}

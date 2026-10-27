@@ -9,8 +9,7 @@
       "items": [
         "customers-list",
         "customer-statement",
-        "customer-credit-payment",
-        "customers-export"
+        "customer-credit-payment"
       ]
     },
     {
@@ -23,9 +22,7 @@
         "supplier-credit",
         "supplier-balance",
         "supplier-payment",
-        "supplier-payment-confirm",
-        "supplier-reports",
-        "supplier-paid-report"
+        "supplier-payment-confirm"
       ]
     },
     {
@@ -48,10 +45,7 @@
       "items": [
         "pos",
         "sales-management",
-        "invoice-lookup",
-        "sales-list",
-        "sales-reports",
-        "sales-confirm"
+        "sales-list"
       ]
     },
     {
@@ -147,8 +141,8 @@
     }
   ],
   "quickAccess": [
-    { "route": "pos", "label": "نقطة بيع سريعة", "icon": "▣", "accent": true },
-    { "route": "sales-management", "label": "شاشة المبيعات", "icon": "◫" },
+    { "route": "pos", "label": "الكاشير اللمسي", "icon": "▣", "accent": true },
+    { "route": "sales-management", "label": "فواتير البيع", "icon": "◫" },
     { "route": "purchase-management", "label": "شاشة المشتريات", "icon": "▤" },
     {
       "route": "product-quick-add",
@@ -309,7 +303,8 @@
       "module": "العملاء",
       "title": "تصدير بيانات العملاء",
       "description": "هذه الشاشة قيد الإنشاء.",
-      "renderer": "under-construction"
+      "renderer": "under-construction",
+      "navigationHidden": true
     },
     {
       "route": "customer-subscriptions",
@@ -342,17 +337,17 @@
     {
       "route": "pos",
       "module": "المبيعات",
-      "title": "نقطة بيع سريعة",
-      "description": "محاكاة كاشير كاملة دون ترحيل دائم للمبيعات أو المخزون.",
+      "title": "الكاشير اللمسي",
+      "description": "واجهة لمس سريعة لبيع الأصناف وترحيلها إلى المخزون.",
       "renderer": "pos",
       "data": "products"
     },
     {
       "route": "sales-management",
       "module": "المبيعات",
-      "title": "إدارة المبيعات",
-      "description": "مراجعة الفواتير وحالات التأكيد وطرق السداد.",
-      "renderer": "entity-list",
+      "title": "فواتير البيع",
+      "description": "إنشاء مسودات البيع وترحيل الفواتير ومراجعة سجل SQLite.",
+      "renderer": "sales-invoices",
       "data": "sales"
     },
     {
@@ -361,14 +356,15 @@
       "title": "البحث السريع برقم الفاتورة للتعديل",
       "description": "البحث عن فاتورة وفتح معاينة تعديل تجريبية.",
       "renderer": "invoice-lookup",
-      "data": "sales"
+      "data": "sales",
+      "navigationHidden": true
     },
     {
       "route": "sales-list",
       "module": "المبيعات",
-      "title": "قائمة المبيعات",
-      "description": "سجل مبيعات قابل للبحث والفرز والتصفية.",
-      "renderer": "entity-list",
+      "title": "قائمة فواتير البيع",
+      "description": "سجل فواتير البيع المحفوظة وحالاتها.",
+      "renderer": "sales-invoices",
       "data": "sales"
     },
     {
@@ -378,7 +374,8 @@
       "description": "تحليل المبيعات حسب الفترة وطريقة السداد.",
       "renderer": "report",
       "data": "sales",
-      "report": "sales"
+      "report": "sales",
+      "navigationHidden": true
     },
     {
       "route": "sales-confirm",
@@ -387,7 +384,8 @@
       "description": "قائمة عمل للفواتير التي تحتاج مراجعة؛ التأكيد تجريبي.",
       "renderer": "workflow",
       "data": "sales",
-      "workflow": "sales-confirm"
+      "workflow": "sales-confirm",
+      "navigationHidden": true
     },
 
     {
@@ -447,14 +445,16 @@
       "module": "الموردين",
       "title": "تقارير الموردين",
       "description": "هذه الشاشة قيد الإنشاء.",
-      "renderer": "under-construction"
+      "renderer": "under-construction",
+      "navigationHidden": true
     },
     {
       "route": "supplier-paid-report",
       "module": "الموردين",
       "title": "تقرير مدفوعات الموردين",
       "description": "هذه الشاشة قيد الإنشاء.",
-      "renderer": "under-construction"
+      "renderer": "under-construction",
+      "navigationHidden": true
     },
    
     {
@@ -522,8 +522,8 @@
       "route": "sales-returns",
       "module": "المرتجعات",
       "title": "إدارة مرتجعات المبيعات",
-      "description": "بحث فاتورة واختيار أصناف وسبب وطريقة رد تجريبية.",
-      "renderer": "returns",
+      "description": "اختيار فاتورة البيع وتحديد الكمية المرتجعة مع إعادة المخزون ورد المبلغ أو تخفيض مديونية العميل.",
+      "renderer": "sales-returns",
       "data": "sales",
       "returnType": "sales"
     },

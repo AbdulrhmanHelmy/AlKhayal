@@ -23,9 +23,10 @@ namespace AlKhayal.Api.Controllers
         public SuppliersController(SupplierService suppliers, AuthService auth, SupplierAccountService accounts, SupplierLedgerService ledger) { _suppliers = suppliers; _auth = auth; _accounts = accounts; _ledger = ledger; }
 
         [HttpGet, Route("")]
-        public async Task<IHttpActionResult> GetAll(CancellationToken ct)
+        public async Task<IHttpActionResult> GetAll(string search=null,int? page=null,int? pageSize=null,CancellationToken ct=default(CancellationToken))
         {
             if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            if(page.HasValue||pageSize.HasValue)return Ok(ApiEnvelope<SupplierPage>.Ok(await _suppliers.ListAsync(search,page??1,pageSize??25,ct).ConfigureAwait(false)));
             return Ok(ApiEnvelope<object>.Ok(_suppliers.GetAll()));
         }
 

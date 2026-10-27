@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
 using AlKhayal.Application.Finance;
@@ -12,6 +14,8 @@ namespace AlKhayal.Application.Suppliers
         public SupplierService(ISupplierRepository suppliers) { _suppliers = suppliers; }
 
         public List<Supplier> GetAll() { return _suppliers.GetAll(); }
+        public Task<SupplierPage> ListAsync(string search, int page, int pageSize, CancellationToken ct)
+        { return _suppliers.ListAsync((search ?? string.Empty).Trim(), System.Math.Max(1, page), System.Math.Min(100, System.Math.Max(1, pageSize)), ct); }
         public Supplier GetById(long id) { return _suppliers.GetById(id); }
 
         public Supplier Create(Supplier supplier)

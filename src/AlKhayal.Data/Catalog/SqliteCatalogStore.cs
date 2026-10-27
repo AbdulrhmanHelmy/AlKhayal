@@ -30,15 +30,41 @@ namespace AlKhayal.Data.Catalog
             if(!query.IncludeArchived) where.Add("d.ArchivedUtc IS NULL");
             if(query.CategoryId.HasValue) where.Add("d.CategoryId=@CategoryId");
             if(query.IsActive.HasValue) where.Add("d.IsActive=@IsActive");
+            if(query.PosWarehouseId.HasValue)
+            {
+                where.Add("d.ProductType='stock' AND d.MigrationState='ready' AND d.IsActive=1 AND d.ArchivedUtc IS NULL");
+                where.Add("EXISTS (SELECT 1 FROM ProductVariants pv WHERE pv.ProductId=p.Id AND pv.IsActive=1 AND pv.ArchivedUtc IS NULL)");
+                where.Add("EXISTS (SELECT 1 FROM ProductUnits pu WHERE pu.ProductId=p.Id AND pu.IsActive=1 AND pu.IsSaleUnit=1)");
+            }
             if(!string.IsNullOrWhiteSpace(query.Search))
                 where.Add("(p.Name LIKE @Search ESCAPE '\\' OR IFNULL(d.Description,'') LIKE @Search ESCAPE '\\' OR EXISTS (SELECT 1 FROM ProductSkus ps WHERE ps.ProductId=p.Id AND ps.RetiredUtc IS NULL AND ps.Sku LIKE @Search ESCAPE '\\') OR EXISTS (SELECT 1 FROM ProductBarcodes pb WHERE pb.ProductId=p.Id AND pb.RetiredUtc IS NULL AND pb.Barcode LIKE @Search ESCAPE '\\'))");
             var predicate=where.Count==0?"":" WHERE "+string.Join(" AND ",where);
-            var parameters=new { query.CategoryId, query.IsActive, Search=Like(query.Search), query.Offset, query.Limit };
+            var parameters=new { query.CategoryId, query.IsActive, Search=Like(query.Search), query.Offset, query.Limit, query.PosWarehouseId, query.SinceDate };
             using(var connection=new SQLiteConnection(_connectionString))
             {
                 await connection.OpenAsync(ct).ConfigureAwait(false);
                 var count=await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM Products p JOIN ProductDetails d ON d.ProductId=p.Id"+predicate,parameters,cancellationToken:ct)).ConfigureAwait(false);
-                var items=(await connection.QueryAsync<CatalogProductRecord>(new CommandDefinition(ProductSelect+predicate+" ORDER BY p.Name, p.Id LIMIT @Limit OFFSET @Offset",parameters,cancellationToken:ct)).ConfigureAwait(false)).ToList();
+                var select=ProductSelect;
+                var order=" ORDER BY p.Name, p.Id";
+                if(query.PosWarehouseId.HasValue)
+                {
+                    select=select.Replace("d.SellPriceScaled, d.PurchasePriceScaled", "COALESCE((SELECT pv.SellPriceOverrideScaled FROM ProductVariants pv WHERE pv.ProductId=p.Id AND pv.IsDefault=1 AND pv.IsActive=1 AND pv.ArchivedUtc IS NULL),d.SellPriceScaled) SellPriceScaled, d.PurchasePriceScaled");
+                    select=select.Replace("d.IsActive, d.ArchivedUtc", @"COALESCE((SELECT SUM(ib.QuantityBaseScaled) FROM InventoryBalances ib JOIN ProductVariants av ON av.Id=ib.VariantId WHERE av.ProductId=p.Id AND av.IsActive=1 AND av.ArchivedUtc IS NULL AND ib.WarehouseId=@PosWarehouseId),0) AvailableQuantityScaled,
+            d.IsActive, d.ArchivedUtc");
+                    select+=@" LEFT JOIN (
+                        SELECT pv.ProductId,
+                          SUM((l.QuantityScaled-COALESCE(ret.ReturnedScaled,0)) * 1.0 * dl.ToBaseNumerator / dl.ToBaseDenominator) NetQuantity
+                        FROM SalesInvoices si
+                        JOIN SalesInvoiceLines l ON l.SalesInvoiceId=si.Id
+                        JOIN InventoryDocumentLines dl ON dl.Id=l.InventoryDocumentLineId
+                        JOIN ProductVariants pv ON pv.Id=l.VariantId
+                        LEFT JOIN (SELECT SalesInvoiceLineId,SUM(QuantityScaled) ReturnedScaled FROM SalesReturnLines GROUP BY SalesInvoiceLineId) ret ON ret.SalesInvoiceLineId=l.Id
+                        WHERE si.Status='posted' AND si.InvoiceDate>=@SinceDate
+                        GROUP BY pv.ProductId
+                    ) popularity ON popularity.ProductId=p.Id";
+                    order=" ORDER BY COALESCE(popularity.NetQuantity,0) DESC, p.Name, p.Id";
+                }
+                var items=(await connection.QueryAsync<CatalogProductRecord>(new CommandDefinition(select+predicate+order+" LIMIT @Limit OFFSET @Offset",parameters,cancellationToken:ct)).ConfigureAwait(false)).ToList();
                 await AttachProductSummariesAsync(connection,items,ct).ConfigureAwait(false);
                 return new ProductStorePage{Items=items,TotalCount=count};
             }

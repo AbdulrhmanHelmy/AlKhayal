@@ -120,6 +120,12 @@ namespace AlKhayal.IntegrationTests
                 var replay = await service.PostAsync(draft.Id, "purch-test-1", 1, CancellationToken.None);
                 Assert.True(replay.Succeeded); Assert.True(replay.Replayed);
                 Assert.Equal(8.33m, suppliers.GetById(supplierId).Payable);
+                var another = await service.CreateDraftAsync(new PurchaseDraftCommand
+                {
+                    SupplierId = supplierId, WarehouseId = 1, InvoiceNumber = "INV-PH4-OTHER", InvoiceDate = "2026-10-24", PaymentMode = "credit",
+                    Lines = new System.Collections.Generic.List<PurchaseInvoiceLine> { new PurchaseInvoiceLine { VariantId = f.VariantId, ProductUnitId = f.UnitId, Quantity = "1", PurchaseUnitPrice = "3.33", SaleUnitPrice = "5.25" } }
+                }, 1, CancellationToken.None);
+                Assert.Equal("operation_key_conflict", (await service.PostAsync(another.Id, "purch-test-1", 1, CancellationToken.None)).ErrorCode);
                 using (var c = new SQLiteConnection(f.Cs))
                 {
                     c.Open();
@@ -127,7 +133,7 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryCostLayers WHERE Basis='receipt'"));
                     Assert.Equal(83250, c.ExecuteScalar<long>("SELECT ValueScaled FROM InventoryCostLayers WHERE Basis='receipt'"));
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries WHERE PurchaseInvoiceId=@Id AND EntryType='purchase'", new { Id = draft.Id }));
-                    Assert.Equal(18, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(23, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));
                 }
                 Assert.True(await f.Store.VerifyProjectionAsync(CancellationToken.None));

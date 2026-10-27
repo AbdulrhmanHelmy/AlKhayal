@@ -18,7 +18,7 @@ namespace AlKhayal.IntegrationTests
             {
                 c.Open(); c.Execute("PRAGMA foreign_keys=ON; CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL)");
                 var assembly = typeof(Migrator).Assembly;
-                var scripts = assembly.GetManifestResourceNames().Where(x => x.EndsWith(".sql", StringComparison.Ordinal) && !x.EndsWith("017_integrated_purchasing.sql", StringComparison.Ordinal) && !x.EndsWith("018_purchasing_provenance_and_credit.sql", StringComparison.Ordinal)).OrderBy(x => x, StringComparer.Ordinal).ToList();
+                var scripts = assembly.GetManifestResourceNames().Where(x => x.EndsWith(".sql", StringComparison.Ordinal) && !x.EndsWith("017_integrated_purchasing.sql", StringComparison.Ordinal) && !x.EndsWith("018_purchasing_provenance_and_credit.sql", StringComparison.Ordinal) && !x.EndsWith("019_sales_foundation.sql", StringComparison.Ordinal) && !x.EndsWith("020_sales_lifecycle.sql", StringComparison.Ordinal) && !x.EndsWith("022_pos_browse_indexes.sql", StringComparison.Ordinal) && !x.EndsWith("023_directory_query_indexes.sql", StringComparison.Ordinal)).OrderBy(x => x, StringComparer.Ordinal).ToList();
                 foreach (var script in scripts)
                 {
                     using (var stream = assembly.GetManifestResourceStream(script)) using (var reader = new StreamReader(stream)) c.Execute(reader.ReadToEnd());
@@ -70,7 +70,7 @@ namespace AlKhayal.IntegrationTests
                 using (var c = new SQLiteConnection(cs))
                 {
                     c.Open();
-                    Assert.Equal(18, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(23, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(new long[] { -100000, 500000, 600000 }, c.Query<long>("SELECT AmountScaled FROM SupplierLedgerEntries ORDER BY AmountScaled").ToArray());
                     Assert.Equal(2, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierInvoices") + c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierPayments"));
                     Assert.Equal(1000000, c.ExecuteScalar<long>("SELECT SUM(AmountScaled) FROM SupplierLedgerEntries"));
@@ -92,7 +92,7 @@ namespace AlKhayal.IntegrationTests
                 using (var c = new SQLiteConnection(cs))
                 {
                     c.Open();
-                    Assert.Equal(16, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(17, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(0, c.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='SupplierLedgerEntries'"));
                     Assert.Equal(39m, c.ExecuteScalar<decimal>("SELECT Payable FROM Suppliers WHERE Code='LEGACY'"));
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierInvoices WHERE InvoiceNumber='OLD-1'"));
@@ -134,7 +134,7 @@ namespace AlKhayal.IntegrationTests
                 using (var c = new SQLiteConnection(cs))
                 {
                     c.Open();
-                    Assert.Equal(18, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(23, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(3, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries"));
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries e JOIN SupplierPayments p ON p.Id=e.LegacyPaymentId WHERE e.EntryType='legacy_payment' AND e.SupplierInvoiceId=p.InvoiceId"));
                     Assert.Equal(1000000, c.ExecuteScalar<long>("SELECT SUM(AmountScaled) FROM SupplierLedgerEntries"));
@@ -165,7 +165,7 @@ namespace AlKhayal.IntegrationTests
                 using (var c = new SQLiteConnection(cs))
                 {
                     c.Open();
-                    Assert.Equal(17, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(18, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(3, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries"));
                     Assert.Equal(2, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierPayments"));
                     Assert.Equal(0, c.ExecuteScalar<long>("SELECT COUNT(*) FROM pragma_table_info('SupplierLedgerEntries') WHERE name='LegacyPaymentId'"));

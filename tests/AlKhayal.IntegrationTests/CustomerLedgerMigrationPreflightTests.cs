@@ -17,7 +17,7 @@ namespace AlKhayal.IntegrationTests
             try
             {
                 var cs=CreatePre015(path,"100.40","0.10"); Migrator.Run(cs); Migrator.Run(cs);
-                using(var c=new SQLiteConnection(cs)) { c.Open(); Assert.Equal(1004000,c.ExecuteScalar<long>("SELECT SUM(CASE WHEN TransactionType='opening' THEN AmountScaled ELSE -AmountScaled END) FROM CustomerTransactions")); Assert.Equal("real",c.ExecuteScalar<string>("SELECT typeof(Balance) FROM Customers")); Assert.Equal(18,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion")); }
+                using(var c=new SQLiteConnection(cs)) { c.Open(); Assert.Equal(1004000,c.ExecuteScalar<long>("SELECT SUM(CASE WHEN TransactionType='opening' THEN AmountScaled ELSE -AmountScaled END) FROM CustomerTransactions")); Assert.Equal("real",c.ExecuteScalar<string>("SELECT typeof(Balance) FROM Customers")); Assert.Equal(23,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion")); }
             }
             finally { SQLiteConnection.ClearAllPools(); if(File.Exists(path))File.Delete(path); }
         }
@@ -40,7 +40,7 @@ namespace AlKhayal.IntegrationTests
             using(var c=new SQLiteConnection(cs))
             {
                 c.Open(); c.Execute("CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL)"); var assembly=typeof(Migrator).Assembly;
-                foreach(var script in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql",StringComparison.Ordinal)&&!x.EndsWith("015_customer_transactions.sql",StringComparison.Ordinal)&&!x.EndsWith("016_inventory_fifo.sql",StringComparison.Ordinal)&&!x.EndsWith("017_integrated_purchasing.sql",StringComparison.Ordinal)&&!x.EndsWith("018_purchasing_provenance_and_credit.sql",StringComparison.Ordinal)).OrderBy(x=>x,StringComparer.Ordinal))
+                foreach(var script in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql",StringComparison.Ordinal)&&!x.EndsWith("015_customer_transactions.sql",StringComparison.Ordinal)&&!x.EndsWith("016_inventory_fifo.sql",StringComparison.Ordinal)&&!x.EndsWith("017_integrated_purchasing.sql",StringComparison.Ordinal)&&!x.EndsWith("018_purchasing_provenance_and_credit.sql",StringComparison.Ordinal)&&!x.EndsWith("019_sales_foundation.sql",StringComparison.Ordinal)&&!x.EndsWith("020_sales_lifecycle.sql",StringComparison.Ordinal)&&!x.EndsWith("022_pos_browse_indexes.sql",StringComparison.Ordinal)).OrderBy(x=>x,StringComparer.Ordinal))
                 { using(var stream=assembly.GetManifestResourceStream(script))using(var reader=new StreamReader(stream))c.Execute(reader.ReadToEnd()); c.Execute("INSERT INTO SchemaVersion(Name,AppliedAt) VALUES(@Name,'2026-01-01')",new{Name=script}); }
                 c.Execute("INSERT INTO Customers(Code,Name,Phone,Balance,CreatedAt,UpdatedAt) VALUES('LEGACY-C','عميل قديم','010',CAST(@Balance AS NUMERIC),'2026-01-01','2026-01-01')",new{Balance=balance});
                 if(payment!=null)c.Execute("INSERT INTO CustomerPayments(CustomerId,Reference,Amount,PaymentDate,Method,Account,CreatedAt) VALUES(1,'CP-OLD',CAST(@Amount AS NUMERIC),'2026-01-02','cash','safe','2026-01-02')",new{Amount=payment});

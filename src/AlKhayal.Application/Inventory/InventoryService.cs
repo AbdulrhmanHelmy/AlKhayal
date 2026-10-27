@@ -19,6 +19,10 @@ namespace AlKhayal.Application.Inventory
 
         public Task<IReadOnlyList<WarehouseRecord>> WarehousesAsync(CancellationToken ct) { return _store.WarehousesAsync(ct); }
         public Task<IReadOnlyList<InventoryBalanceRecord>> BalancesAsync(long? warehouseId,long? productId,CancellationToken ct) { return _store.BalancesAsync(warehouseId,productId,ct); }
+        public Task<InventoryPage<InventoryBalanceRecord>> BalancePageAsync(long warehouseId,string search,int page,int pageSize,CancellationToken ct)
+        { if(warehouseId<=0)throw new ArgumentException("اختر مخزنًا صحيحًا.");return _store.BalancePageAsync(warehouseId,(search??string.Empty).Trim(),Math.Max(1,page),Math.Min(100,Math.Max(1,pageSize)),ct); }
+        public Task<InventoryValuation> ValuationAsync(long warehouseId,long? productId,CancellationToken ct)
+        { if(warehouseId<=0||productId.HasValue&&productId<=0)throw new ArgumentException("اختر مخزنًا وصنفًا صحيحين.");return _store.ValuationAsync(warehouseId,productId,ct); }
         public Task<InventoryPage<InventoryMovementRecord>> MovementsAsync(long? warehouseId,long? productId,string type,string reference,string from,string to,int page,int pageSize,CancellationToken ct)
         { return _store.MovementsAsync(warehouseId,productId,type,reference,from,to,Math.Max(1,page),Math.Min(100,Math.Max(1,pageSize)),ct); }
         public Task<bool> VerifyProjectionAsync(CancellationToken ct) { return _store.VerifyProjectionAsync(ct); }
