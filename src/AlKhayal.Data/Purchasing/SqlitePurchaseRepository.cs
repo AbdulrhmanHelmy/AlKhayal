@@ -10,6 +10,8 @@ using AlKhayal.Application.Finance;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
 using AlKhayal.Data.Inventory;
+using AlKhayal.Application.Treasury;
+using AlKhayal.Data.Treasury;
 using Dapper;
 
 namespace AlKhayal.Data.Purchasing
@@ -26,8 +28,9 @@ namespace AlKhayal.Data.Purchasing
             using (var c = Open()) using (var tx = c.BeginTransaction())
             {
                 var now = Now(); var number = NormalizeNumber(command.InvoiceNumber);
-                await c.ExecuteAsync(Cmd(@"INSERT INTO PurchaseInvoices(SupplierId,WarehouseId,InvoiceNumber,InvoiceDate,PaymentMode,Status,Notes,TotalScaled,CreatedByUserId,UpdatedByUserId,CreatedUtc,UpdatedUtc)
-                    VALUES(@SupplierId,@WarehouseId,@InvoiceNumber,@InvoiceDate,@PaymentMode,'draft',@Notes,@Total,@UserId,@UserId,@Now,@Now)", new { command.SupplierId, command.WarehouseId, InvoiceNumber = number, command.InvoiceDate, command.PaymentMode, Notes = command.Notes ?? "", Total = totalScaled, UserId = userId, Now = now }, tx, ct)).ConfigureAwait(false);
+                await ValidateTreasuryAccountAsync(c,tx,command,ct).ConfigureAwait(false);
+                await c.ExecuteAsync(Cmd(@"INSERT INTO PurchaseInvoices(SupplierId,WarehouseId,InvoiceNumber,InvoiceDate,PaymentMode,TreasuryAccountId,Status,Notes,TotalScaled,CreatedByUserId,UpdatedByUserId,CreatedUtc,UpdatedUtc)
+                    VALUES(@SupplierId,@WarehouseId,@InvoiceNumber,@InvoiceDate,@PaymentMode,@TreasuryAccountId,'draft',@Notes,@Total,@UserId,@UserId,@Now,@Now)", new { command.SupplierId, command.WarehouseId, InvoiceNumber = number, command.InvoiceDate, command.PaymentMode, command.TreasuryAccountId, Notes = command.Notes ?? "", Total = totalScaled, UserId = userId, Now = now }, tx, ct)).ConfigureAwait(false);
                 var id = await c.ExecuteScalarAsync<long>(Cmd("SELECT last_insert_rowid()", null, tx, ct)).ConfigureAwait(false);
                 await SaveLinesAsync(c, tx, id, command.Lines, ct).ConfigureAwait(false);
                 await AuditAsync(c, tx, id, userId, "created", now, "إنشاء مسودة", ct).ConfigureAwait(false);
@@ -42,9 +45,10 @@ namespace AlKhayal.Data.Purchasing
                 var row = await c.QuerySingleOrDefaultAsync<PurchaseInvoice>(Cmd("SELECT * FROM PurchaseInvoices WHERE Id=@Id", new { Id = id }, tx, ct)).ConfigureAwait(false);
                 if (row == null) return null;
                 if (row.Status != "draft") throw new InvalidOperationException("الفاتورة المنشورة غير قابلة للتعديل.");
+                await ValidateTreasuryAccountAsync(c,tx,command,ct).ConfigureAwait(false);
                 var now = Now();
-                var changed = await c.ExecuteAsync(Cmd(@"UPDATE PurchaseInvoices SET SupplierId=@SupplierId,WarehouseId=@WarehouseId,InvoiceNumber=@InvoiceNumber,InvoiceDate=@InvoiceDate,PaymentMode=@PaymentMode,Notes=@Notes,TotalScaled=@Total,Version=Version+1,UpdatedByUserId=@UserId,UpdatedUtc=@Now WHERE Id=@Id AND Status='draft' AND Version=@Version",
-                    new { command.SupplierId, command.WarehouseId, InvoiceNumber = NormalizeNumber(command.InvoiceNumber), command.InvoiceDate, command.PaymentMode, Notes = command.Notes ?? "", Total = totalScaled, UserId = userId, Now = now, Id = id, row.Version }, tx, ct)).ConfigureAwait(false);
+                var changed = await c.ExecuteAsync(Cmd(@"UPDATE PurchaseInvoices SET SupplierId=@SupplierId,WarehouseId=@WarehouseId,InvoiceNumber=@InvoiceNumber,InvoiceDate=@InvoiceDate,PaymentMode=@PaymentMode,TreasuryAccountId=@TreasuryAccountId,Notes=@Notes,TotalScaled=@Total,Version=Version+1,UpdatedByUserId=@UserId,UpdatedUtc=@Now WHERE Id=@Id AND Status='draft' AND Version=@Version",
+                    new { command.SupplierId, command.WarehouseId, InvoiceNumber = NormalizeNumber(command.InvoiceNumber), command.InvoiceDate, command.PaymentMode, command.TreasuryAccountId, Notes = command.Notes ?? "", Total = totalScaled, UserId = userId, Now = now, Id = id, row.Version }, tx, ct)).ConfigureAwait(false);
                 if (changed != 1) throw new InvalidOperationException("تغيرت المسودة أثناء التعديل. حدّث الشاشة ثم أعد المحاولة.");
                 await c.ExecuteAsync(Cmd("DELETE FROM PurchaseInvoiceLineImeis WHERE PurchaseInvoiceLineUnitId IN (SELECT Id FROM PurchaseInvoiceLineUnits WHERE PurchaseInvoiceLineId IN (SELECT Id FROM PurchaseInvoiceLines WHERE PurchaseInvoiceId=@Id))", new { Id = id }, tx, ct)).ConfigureAwait(false);
                 await c.ExecuteAsync(Cmd("DELETE FROM PurchaseInvoiceLineUnits WHERE PurchaseInvoiceLineId IN (SELECT Id FROM PurchaseInvoiceLines WHERE PurchaseInvoiceId=@Id)", new { Id = id }, tx, ct)).ConfigureAwait(false);
@@ -59,7 +63,7 @@ namespace AlKhayal.Data.Purchasing
         {
             using (var c = Open())
             {
-                var invoice = await c.QuerySingleOrDefaultAsync<PurchaseInvoice>(Cmd(@"SELECT p.*,s.Name SupplierName,w.Name WarehouseName FROM PurchaseInvoices p JOIN Suppliers s ON s.Id=p.SupplierId JOIN Warehouses w ON w.Id=p.WarehouseId WHERE p.Id=@Id", new { Id = id }, null, ct)).ConfigureAwait(false);
+                var invoice = await c.QuerySingleOrDefaultAsync<PurchaseInvoice>(Cmd(@"SELECT p.*,EXISTS(SELECT 1 FROM PurchaseReturns pr WHERE pr.PurchaseInvoiceId=p.Id AND pr.Status='posted') HasReturns, EXISTS(SELECT 1 FROM PurchaseReturns pr WHERE pr.PurchaseInvoiceId=p.Id AND pr.Status='posted') AND NOT EXISTS(SELECT 1 FROM PurchaseInvoiceLines pl WHERE pl.PurchaseInvoiceId=p.Id AND pl.QuantityScaled>COALESCE((SELECT SUM(rl.QuantityScaled) FROM PurchaseReturnLines rl JOIN PurchaseReturns pr ON pr.Id=rl.PurchaseReturnId WHERE rl.PurchaseInvoiceLineId=pl.Id AND pr.Status='posted'),0)) IsFullyReturned,s.Name SupplierName,w.Name WarehouseName,a.Name TreasuryAccountName FROM PurchaseInvoices p JOIN Suppliers s ON s.Id=p.SupplierId JOIN Warehouses w ON w.Id=p.WarehouseId LEFT JOIN TreasuryAccounts a ON a.Id=p.TreasuryAccountId WHERE p.Id=@Id", new { Id = id }, null, ct)).ConfigureAwait(false);
                 if (invoice == null) return null;
                 invoice.TotalFormatted = FormatScaled(invoice.TotalScaled, 4);
                 var lines = (await c.QueryAsync<PurchaseInvoiceLine>(Cmd(@"SELECT l.Id,l.VariantId,v.ProductId,p.Name ProductName,v.Name VariantName,l.ProductUnitId,u.Name UnitName,
@@ -82,8 +86,8 @@ namespace AlKhayal.Data.Purchasing
         {
             using (var c = Open())
             {
-                var rows = (await c.QueryAsync<PurchaseInvoice>(new CommandDefinition(@"SELECT p.Id,p.SupplierId,s.Name SupplierName,p.WarehouseId,w.Name WarehouseName,p.InvoiceNumber,p.InvoiceDate,p.PaymentMode,p.Status,p.Notes,p.TotalScaled,p.InventoryDocumentId,p.Version,p.CreatedUtc,p.UpdatedUtc
-                    FROM PurchaseInvoices p JOIN Suppliers s ON s.Id=p.SupplierId JOIN Warehouses w ON w.Id=p.WarehouseId
+                var rows = (await c.QueryAsync<PurchaseInvoice>(new CommandDefinition(@"SELECT EXISTS(SELECT 1 FROM PurchaseReturns pr WHERE pr.PurchaseInvoiceId=p.Id AND pr.Status='posted') HasReturns, EXISTS(SELECT 1 FROM PurchaseReturns pr WHERE pr.PurchaseInvoiceId=p.Id AND pr.Status='posted') AND NOT EXISTS(SELECT 1 FROM PurchaseInvoiceLines pl WHERE pl.PurchaseInvoiceId=p.Id AND pl.QuantityScaled>COALESCE((SELECT SUM(rl.QuantityScaled) FROM PurchaseReturnLines rl JOIN PurchaseReturns pr ON pr.Id=rl.PurchaseReturnId WHERE rl.PurchaseInvoiceLineId=pl.Id AND pr.Status='posted'),0)) IsFullyReturned,p.Id,p.SupplierId,s.Name SupplierName,p.WarehouseId,w.Name WarehouseName,p.InvoiceNumber,p.InvoiceDate,p.PaymentMode,p.TreasuryAccountId,p.TreasuryMovementId,a.Name TreasuryAccountName,p.Status,p.Notes,p.TotalScaled,p.InventoryDocumentId,p.Version,p.CreatedUtc,p.UpdatedUtc
+                    FROM PurchaseInvoices p JOIN Suppliers s ON s.Id=p.SupplierId JOIN Warehouses w ON w.Id=p.WarehouseId LEFT JOIN TreasuryAccounts a ON a.Id=p.TreasuryAccountId
                     WHERE (@SupplierId IS NULL OR p.SupplierId=@SupplierId) AND (@From IS NULL OR p.InvoiceDate>=@From) AND (@To IS NULL OR p.InvoiceDate<=@To)
                     ORDER BY p.InvoiceDate DESC,p.Id DESC LIMIT 500", new { SupplierId = supplierId, From = from, To = to }, cancellationToken: ct)).ConfigureAwait(false)).ToList();
                 foreach (var row in rows) row.TotalFormatted = FormatScaled(row.TotalScaled, 4);
@@ -106,6 +110,18 @@ namespace AlKhayal.Data.Purchasing
                             ? PurchasePostResult.Ok(invoice, true)
                             : PurchasePostResult.Fail("already_posted", "الفاتورة منشورة بالفعل.");
                     if (invoice.Version != expectedVersion) return PurchasePostResult.Fail("draft_changed", "تغيرت المسودة. حدّث الشاشة ثم أعد النشر.");
+                    if (invoice.PaymentMode == "cash" && !invoice.TreasuryAccountId.HasValue)
+                        return PurchasePostResult.Fail("treasury_required", "اختر الخزنة أو البنك واحفظ المسودة قبل نشر الفاتورة النقدية.");
+
+                    long? treasuryMovementId = null;
+                    if (invoice.PaymentMode == "cash")
+                    {
+                        var movement = await SqliteTreasuryStore.PostWithinTransactionAsync(c, tx,
+                            new TreasuryMovementCommand { AccountId = invoice.TreasuryAccountId.Value, Amount = MoneyPolicy.FormatForUser(invoice.TotalScaled),
+                                Notes = "فاتورة شراء " + invoice.InvoiceNumber + " / PUR-" + invoice.Id, OperationKey = "purchase-treasury:" + invoice.Id },
+                            "withdraw", invoice.TotalScaled, "purchase:" + requestHash, userId, ct).ConfigureAwait(false);
+                        treasuryMovementId = movement.Id;
+                    }
 
                     var inventoryCommand = new InventoryPostCommand
                     {
@@ -129,8 +145,8 @@ namespace AlKhayal.Data.Purchasing
                     var now = Now();
                     await c.ExecuteAsync(Cmd(@"UPDATE PurchaseInvoiceLines SET InventoryDocumentLineId=(SELECT l.Id FROM InventoryDocumentLines l WHERE l.DocumentId=@DocumentId AND l.LineNumber=PurchaseInvoiceLines.LineNumber)
                         WHERE PurchaseInvoiceId=@InvoiceId", new { DocumentId = inventoryResult.Value.DocumentId, InvoiceId = id }, tx, ct)).ConfigureAwait(false);
-                    var updated = await c.ExecuteAsync(Cmd(@"UPDATE PurchaseInvoices SET Status='posted',InventoryDocumentId=@InventoryDocumentId,PostedUtc=@Now,PostOperationKey=@OperationKey,PostRequestHash=@Hash,UpdatedByUserId=@UserId,UpdatedUtc=@Now WHERE Id=@Id AND Status='draft' AND Version=@Version",
-                        new { InventoryDocumentId = inventoryResult.Value.DocumentId, Now = now, OperationKey = operationKey, Hash = requestHash, UserId = userId, Id = id, Version = expectedVersion }, tx, ct)).ConfigureAwait(false);
+                    var updated = await c.ExecuteAsync(Cmd(@"UPDATE PurchaseInvoices SET Status='posted',TreasuryMovementId=@treasuryMovementId,InventoryDocumentId=@InventoryDocumentId,PostedUtc=@Now,PostOperationKey=@OperationKey,PostRequestHash=@Hash,UpdatedByUserId=@UserId,UpdatedUtc=@Now WHERE Id=@Id AND Status='draft' AND Version=@Version",
+                        new { treasuryMovementId, InventoryDocumentId = inventoryResult.Value.DocumentId, Now = now, OperationKey = operationKey, Hash = requestHash, UserId = userId, Id = id, Version = expectedVersion }, tx, ct)).ConfigureAwait(false);
                     if (updated != 1) return PurchasePostResult.Fail("draft_changed", "تغيرت المسودة قبل النشر.");
                     var total = invoice.TotalScaled;
                     await AddLedgerEntryAsync(c, tx, invoice.SupplierId, "purchase", total, invoice.InvoiceDate, "PUR-" + invoice.Id, invoice.Id, null, null, requestHash, now, ct).ConfigureAwait(false);
@@ -147,6 +163,7 @@ namespace AlKhayal.Data.Purchasing
                     return PurchasePostResult.Ok(invoice, false);
                 }
             }
+            catch (TreasuryException ex) { return PurchasePostResult.Fail("treasury_" + ex.Code, ex.Message); }
             catch (SQLiteException ex) when (ex.ResultCode == SQLiteErrorCode.Busy || ex.ResultCode == SQLiteErrorCode.Locked)
             { return PurchasePostResult.Fail("database_busy", "قاعدة البيانات مشغولة. أعد المحاولة بالمفتاح نفسه."); }
             catch (OverflowException) { return PurchasePostResult.Fail("numeric_overflow", "تجاوزت قيمة الفاتورة الحد المسموح."); }
@@ -263,14 +280,16 @@ namespace AlKhayal.Data.Purchasing
                     var entryType = command.ReturnMode == "cash_refund" ? "purchase_return_refund" : "purchase_return_credit";
                     await c.ExecuteAsync(Cmd(@"INSERT INTO SupplierLedgerEntries(SupplierId,EntryType,AmountScaled,OccurredOn,Reference,PurchaseInvoiceId,Notes,OperationKey,RequestHash,CreatedUtc)
                         VALUES(@SupplierId,@Type,@Amount,@Date,@Reference,@InvoiceId,@Notes,@Key,@Hash,@Now)", new { invoice.SupplierId, Type = entryType, Amount = -total, Date = invoice.InvoiceDate, Reference = "PUR-RET-" + returnId, InvoiceId = id,
-                        Notes = command.ReturnMode == "cash_refund" ? "مبلغ مسترد من المورد نقدًا؛ لا يمثل حركة خزينة" : "رصيد دائن لدى المورد", Key = "purchase-return-ledger:" + operationKey, Hash = requestHash, Now = now }, tx, ct)).ConfigureAwait(false);
+                        Notes = command.ReturnMode == "cash_refund" ? "مبلغ مسترد نقدًا إلى خزنة مرتجعات الشراء" : "رصيد دائن لدى المورد", Key = "purchase-return-ledger:" + operationKey, Hash = requestHash, Now = now }, tx, ct)).ConfigureAwait(false);
                     await ChangePayableAsync(c, tx, invoice.SupplierId, -total, ct).ConfigureAwait(false);
+                    if(command.ReturnMode == "cash_refund") await AlKhayal.Data.Treasury.SqliteReturnTreasury.PostAsync(c,tx,false,returnId,total,operationKey,requestHash,userId,ct).ConfigureAwait(false);
                     await c.ExecuteAsync(Cmd("INSERT INTO PurchaseReturnAudit(PurchaseReturnId,ActorUserId,EventType,EventUtc,Details) VALUES(@Id,@UserId,'posted',@Now,@Details)", new { Id = returnId, UserId = userId, Now = now, Details = "inventoryDocumentId=" + inventoryResult.Value.DocumentId }, tx, ct)).ConfigureAwait(false);
                     tx.Commit();
                     var result = await GetReturnAsync(returnId, ct).ConfigureAwait(false); result.Replayed = false; return PurchaseReturn.Ok(result);
                 }
             }
             catch (SQLiteException ex) when (ex.ResultCode == SQLiteErrorCode.Busy || ex.ResultCode == SQLiteErrorCode.Locked) { return PurchaseReturn.Fail("database_busy", "قاعدة البيانات مشغولة. أعد المحاولة بالمفتاح نفسه."); }
+            catch (AlKhayal.Application.Treasury.TreasuryException ex) { return PurchaseReturn.Fail("treasury_"+ex.Code, ex.Message); }
             catch (OverflowException) { return PurchaseReturn.Fail("numeric_overflow", "قيمة المرتجع تتجاوز الحد المسموح."); }
             catch (SQLiteException ex) when (ex.ResultCode == SQLiteErrorCode.Constraint) { return PurchaseReturn.Fail("purchase_return_conflict", "تعارض المرتجع مع حركة مخزون أو إرجاع سابق."); }
         }
@@ -323,6 +342,12 @@ namespace AlKhayal.Data.Purchasing
         private sealed class PhysicalIdentifier { public long PhysicalUnitId { get; set; } public string Kind { get; set; } public string Value { get; set; } }
         private sealed class ReturnBatch { public string LotNumber { get; set; } public string ExpirationDate { get; set; } }
         private sealed class ReturnPostingLine { public ReturnSource Source { get; set; } public string Quantity { get; set; } public long QuantityScaled { get; set; } public long BaseQuantityScaled { get; set; } public long AccountAmountScaled { get; set; } public ReturnBatch Batch { get; set; } public System.Collections.Generic.List<PurchasePhysicalUnit> PhysicalUnits { get; set; } }
+
+        private static async Task ValidateTreasuryAccountAsync(SQLiteConnection c, SQLiteTransaction tx, PurchaseDraftCommand command, CancellationToken ct)
+        {
+            if (command.PaymentMode == "cash" && await c.ExecuteScalarAsync<long>(Cmd("SELECT COUNT(*) FROM TreasuryAccounts WHERE Id=@Id AND IsDeleted=0", new { Id=command.TreasuryAccountId },tx,ct)).ConfigureAwait(false) != 1)
+                throw new ArgumentException("الخزنة أو البنك المحدد غير متاح.");
+        }
 
         private async Task<PurchaseInvoice> LoadForPostAsync(SQLiteConnection c, SQLiteTransaction tx, long id, CancellationToken ct)
         {

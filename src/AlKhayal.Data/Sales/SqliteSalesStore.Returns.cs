@@ -67,10 +67,11 @@ namespace AlKhayal.Data.Sales
                     var netPaid=await c.ExecuteScalarAsync<long>(Cmd("SELECT COALESCE(SUM(CASE WHEN EventType IN ('cash_sale','customer_collection') THEN AmountScaled WHEN EventType='refund' AND PaymentMethod<>'credit_adjustment' THEN -AmountScaled ELSE 0 END),0) FROM SalesPayments WHERE SalesInvoiceId=@Id",new{Id=id},tx,ct)).ConfigureAwait(false);
                     var cash=Math.Min(total,Math.Max(0,netPaid));var credit=total-cash;
                     if(credit>0&&(invoice.PaymentMode!="credit"||!invoice.CustomerId.HasValue))return new SaleReturnResult{ErrorCode="refund_unfunded",ErrorMessage="قيمة الإرجاع تتجاوز المدفوع ولا يوجد رصيد آجل للعميل."};
-                    if(credit>0)
+                    if(invoice.PaymentMode=="credit" && invoice.CustomerId.HasValue)
                     {
                         var balance=await c.ExecuteScalarAsync<long>(Cmd("SELECT CAST(ROUND(Balance*10000) AS INTEGER) FROM Customers WHERE Id=@Id",new{Id=invoice.CustomerId},tx,ct)).ConfigureAwait(false);
-                        if(balance<credit)return new SaleReturnResult{ErrorCode="refund_unfunded",ErrorMessage="لا يمكن تخفيض مديونية العميل بقيمة تتجاوز رصيده الحالي."};
+                        var settlement=SalesRefundPolicy.CapDebtReduction(total,balance);
+                        cash=settlement.Cash; credit=settlement.Credit;
                     }
                     var now=Now();var returnNumber="RET-"+DateTime.UtcNow.ToString("yyyyMMdd",CultureInfo.InvariantCulture)+"-"+Guid.NewGuid().ToString("N").Substring(0,8).ToUpperInvariant();
                     await c.ExecuteAsync(Cmd(@"INSERT INTO InventoryDocuments(DocumentType,Status,SourceWarehouseId,Reason,Notes,CreatedByUserId,CreatedUtc,OperationKey,RequestHash)
@@ -131,11 +132,13 @@ namespace AlKhayal.Data.Sales
                         await c.ExecuteAsync(Cmd("UPDATE Customers SET Balance=Balance-@Amount,UpdatedAt=@Now WHERE Id=@Id",new{Amount=credit/10000m,Now=now,Id=invoice.CustomerId},tx,ct)).ConfigureAwait(false);
                     }
                     await c.ExecuteAsync(Cmd("UPDATE SalesInvoices SET PaidScaled=MAX(0,PaidScaled-@Amount) WHERE Id=@Id",new{Amount=cash,Id=id},tx,ct)).ConfigureAwait(false);
+                    await AlKhayal.Data.Treasury.SqliteReturnTreasury.PostAsync(c,tx,true,returnId,cash,command.OperationKey,hash,userId,ct).ConfigureAwait(false);
                     tx.Commit();return new SaleReturnResult{Succeeded=true,ReturnId=returnId,ReturnNumber=returnNumber,InventoryDocumentId=documentId,TotalScaled=total,CashRefundScaled=cash,CreditReductionScaled=credit};
                 }
             }
             catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Busy||e.ResultCode==SQLiteErrorCode.Locked){return new SaleReturnResult{ErrorCode="database_busy",ErrorMessage="قاعدة البيانات مشغولة. أعد المحاولة بالمفتاح نفسه."};}
             catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Constraint){return new SaleReturnResult{ErrorCode="sales_conflict",ErrorMessage="تعارض الإرجاع مع حركة أخرى؛ حدّث البيانات ثم أعد المحاولة."};}
+            catch(AlKhayal.Application.Treasury.TreasuryException e){return new SaleReturnResult{ErrorCode="treasury_"+e.Code,ErrorMessage=e.Message};}
             catch(OverflowException){return new SaleReturnResult{ErrorCode="numeric_overflow",ErrorMessage="قيمة الإرجاع تتجاوز الحد المسموح."};}
         }
 

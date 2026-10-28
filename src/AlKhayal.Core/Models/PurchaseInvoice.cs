@@ -12,7 +12,13 @@ namespace AlKhayal.Core.Models
         public string InvoiceNumber { get; set; }
         public string InvoiceDate { get; set; }
         public string PaymentMode { get; set; }
+        public long? TreasuryAccountId { get; set; }
+        public string TreasuryAccountName { get; set; }
+        public long? TreasuryMovementId { get; set; }
         public string Status { get; set; }
+        public bool HasReturns { get; set; }
+        public bool IsFullyReturned { get; set; }
+        public string ReturnStatus => !HasReturns ? "none" : IsFullyReturned ? "full" : "partial";
         public string Notes { get; set; }
         public long TotalScaled { get; set; }
         public string TotalFormatted { get; set; }
@@ -57,6 +63,7 @@ namespace AlKhayal.Core.Models
         public string InvoiceNumber { get; set; }
         public string InvoiceDate { get; set; }
         public string PaymentMode { get; set; }
+        public long? TreasuryAccountId { get; set; }
         public string Notes { get; set; }
         public List<PurchaseInvoiceLine> Lines { get; set; } = new List<PurchaseInvoiceLine>();
     }

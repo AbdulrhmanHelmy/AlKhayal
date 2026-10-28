@@ -28,7 +28,7 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='CompanyProfile'"));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ApplicationSettings'"));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='SettingsAuditLog'"));
-                    Assert.Equal(23, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(31, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                 }
             }
             finally { SQLiteConnection.ClearAllPools(); if (File.Exists(path)) File.Delete(path); }

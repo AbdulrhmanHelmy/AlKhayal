@@ -4,6 +4,8 @@ using System.Globalization;
 using AlKhayal.Core.Interfaces;
 using AlKhayal.Core.Models;
 using AlKhayal.Application.Finance;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AlKhayal.Application.Suppliers
 {
@@ -12,7 +14,7 @@ namespace AlKhayal.Application.Suppliers
         private readonly ISupplierAccountRepository _accounts;
         public SupplierAccountService(ISupplierAccountRepository accounts) { _accounts = accounts; }
 
-        public SupplierInvoice AddInvoice(long supplierId, SupplierInvoice invoice)
+        public SupplierInvoice AddInvoice(long supplierId, SupplierInvoice invoice, string operationKey = null, long? actorUserId = null)
         {
             if (invoice == null) throw new ArgumentException("بيانات الفاتورة مطلوبة.");
             if (supplierId <= 0) throw new ArgumentException("اختر موردًا صحيحًا.");
@@ -25,7 +27,16 @@ namespace AlKhayal.Application.Suppliers
             var number = string.IsNullOrWhiteSpace(invoice.InvoiceNumber) ? null : invoice.InvoiceNumber.Trim();
             if (number != null && number.Length > 60) throw new ArgumentException("رقم الفاتورة يجب ألا يتجاوز 60 حرفًا.");
             if (invoice.Notes != null && invoice.Notes.Length > 1000) throw new ArgumentException("الملاحظات يجب ألا تتجاوز 1000 حرف.");
-            return _accounts.AddInvoice(supplierId, number, invoiceDate, dueDate, total, invoice.Notes);
+            if (operationKey != null && (string.IsNullOrWhiteSpace(operationKey) || operationKey.Length > 120)) throw new ArgumentException("مفتاح إضافة الفاتورة غير صالح.");
+            string hash = null;
+            if (operationKey != null)
+            {
+                var text = new StringBuilder("supplier-invoice-v1:");
+                foreach (var field in new[] { supplierId.ToString(CultureInfo.InvariantCulture), number ?? "", invoiceDate, dueDate ?? "", checked((long)(total * 10000m)).ToString(CultureInfo.InvariantCulture), invoice.Notes ?? "", actorUserId?.ToString(CultureInfo.InvariantCulture) ?? "" })
+                    text.Append(field.Length).Append(':').Append(field);
+                using (var sha = SHA256.Create()) hash = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(text.ToString())));
+            }
+            return _accounts.AddInvoice(supplierId, number, invoiceDate, dueDate, total, invoice.Notes, operationKey?.Trim(), hash, actorUserId);
         }
 
         public SupplierPayment AddPayment(long supplierId, SupplierPayment payment)

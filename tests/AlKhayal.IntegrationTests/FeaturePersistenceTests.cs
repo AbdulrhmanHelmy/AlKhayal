@@ -54,7 +54,7 @@ namespace AlKhayal.IntegrationTests
                 {
                     Assert.Equal(0L, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM ModuleConfiguration"));
                     Assert.Equal(0L, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM FeatureAuditLog"));
-                    Assert.Equal(23L, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(31L, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM SchemaVersion"));
                 }
             }
             finally { SQLiteConnection.ClearAllPools(); if (File.Exists(path)) File.Delete(path); }

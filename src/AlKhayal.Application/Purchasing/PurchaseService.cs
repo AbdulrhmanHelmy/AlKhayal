@@ -75,6 +75,10 @@ namespace AlKhayal.Application.Purchasing
             if (command == null || userId <= 0 || command.SupplierId <= 0 || command.WarehouseId <= 0) throw new ArgumentException("اختر المورد والمخزن.");
             ValidateDate(command.InvoiceDate, true);
             if (command.PaymentMode != "cash" && command.PaymentMode != "credit") throw new ArgumentException("اختر نقدي أو آجل.");
+            if (command.PaymentMode == "cash" && (!command.TreasuryAccountId.HasValue || command.TreasuryAccountId <= 0))
+                throw new ArgumentException("اختر الخزنة أو البنك للدفع النقدي.");
+            if (command.PaymentMode == "credit" && command.TreasuryAccountId.HasValue)
+                throw new ArgumentException("الفاتورة الآجلة لا تخصم من خزنة أو بنك.");
             if (command.InvoiceNumber != null && command.InvoiceNumber.Trim().Length > 80) throw new ArgumentException("رقم الفاتورة طويل جدًا.");
             if (command.Notes != null && command.Notes.Length > 1000) throw new ArgumentException("الملاحظات يجب ألا تتجاوز 1000 حرف.");
             if (command.Lines == null || command.Lines.Count == 0 || command.Lines.Count > 500) throw new ArgumentException("أضف بندًا واحدًا على الأقل.");
@@ -117,6 +121,8 @@ namespace AlKhayal.Application.Purchasing
         {
             var text = new StringBuilder("purchase-post-v1|");
             text.Append(invoice.Id).Append('|').Append(invoice.TotalScaled).Append('|').Append(invoice.SupplierId).Append('|').Append(invoice.WarehouseId).Append('|').Append(invoice.PaymentMode).Append('|').Append(key).Append('|').Append(userId);
+            // Preserve replay hashes for historical invoices that predate treasury integration.
+            if (invoice.TreasuryAccountId.HasValue) text.Append("|treasury:").Append(invoice.TreasuryAccountId.Value);
             foreach (var line in invoice.Lines.OrderBy(x => x.Id))
             {
                 text.Append('|').Append(line.Id).Append(':').Append(line.VariantId).Append(':').Append(line.ProductUnitId).Append(':').Append(line.Quantity).Append(':').Append(line.PurchaseUnitPrice).Append(':').Append(line.SaleUnitPrice).Append(':').Append(line.LotNumber).Append(':').Append(line.ExpirationDate);

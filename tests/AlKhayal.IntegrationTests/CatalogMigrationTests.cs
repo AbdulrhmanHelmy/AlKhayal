@@ -22,7 +22,7 @@ namespace AlKhayal.IntegrationTests
                 using (var connection = new SQLiteConnection(cs))
                 {
                     connection.Open();
-                    Assert.Equal(23, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(31, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal("قطعة", connection.ExecuteScalar<string>("SELECT Name FROM Units WHERE Id=1"));
                     Assert.Equal(1, connection.ExecuteScalar<long>("PRAGMA foreign_keys"));
                     Assert.Equal("ok", connection.ExecuteScalar<string>("PRAGMA integrity_check"));
@@ -149,7 +149,7 @@ namespace AlKhayal.IntegrationTests
                 using (var connection = new SQLiteConnection(cs))
                 {
                     connection.Open();
-                    Assert.Equal(23, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(31, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     var baseUnit = connection.QuerySingleOrDefault<dynamic>("SELECT UnitId, ToBaseNumerator, ToBaseDenominator, IsBase, IsSaleUnit, IsPurchaseUnit FROM ProductUnits WHERE ProductId=101");
                     Assert.NotNull(baseUnit);
                     Assert.Equal(1L, (long)baseUnit.UnitId);

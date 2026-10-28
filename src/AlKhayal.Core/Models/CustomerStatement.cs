@@ -11,6 +11,7 @@ namespace AlKhayal.Core.Models
         public decimal TotalDebit { get; set; }
         public decimal TotalCredit { get; set; }
         public decimal ClosingBalance { get; set; }
+        public decimal CurrentBalance { get; set; }
         public decimal CreditLimit { get; set; }
         public List<CustomerStatementMovement> Movements { get; set; } = new List<CustomerStatementMovement>();
     }
@@ -23,5 +24,6 @@ namespace AlKhayal.Core.Models
         public decimal Credit { get; set; }
         public decimal Balance { get; set; }
         public string Kind { get; set; }
+        public string Notes { get; set; }
     }
 }

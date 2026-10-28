@@ -47,6 +47,12 @@ namespace AlKhayal.Data.Database
                         sql = reader.ReadToEnd();
                     }
 
+                    if (script.EndsWith("031_sales_refund_overdraft.sql", StringComparison.Ordinal))
+                    {
+                        ApplyRefundOverdraft(conn, script, sql);
+                        continue;
+                    }
+
                     using (var tx = conn.BeginTransaction())
                     {
                         if (script.EndsWith("010_product_variants_and_identifiers.sql", StringComparison.Ordinal))
@@ -58,7 +64,13 @@ namespace AlKhayal.Data.Database
                         if (script.EndsWith("018_purchasing_provenance_and_credit.sql", StringComparison.Ordinal))
                             SupplierLedgerLegacyPaymentCompatibility.Run(conn, tx);
 
+                        if (script.EndsWith("024_treasury.sql", StringComparison.Ordinal))
+                            TreasuryLegacyCompatibility.Prepare(conn, tx);
+
                         Execute(conn, tx, sql);
+
+                        if (script.EndsWith("024_treasury.sql", StringComparison.Ordinal))
+                            TreasuryLegacyCompatibility.Import(conn, tx);
 
                         if (script.EndsWith("008_product_catalog_foundation.sql", StringComparison.Ordinal))
                             CatalogLegacyBackfill.Run(conn, tx);
@@ -83,6 +95,28 @@ namespace AlKhayal.Data.Database
                     tx.Commit();
                 }
             }
+        }
+
+        private static void ApplyRefundOverdraft(SQLiteConnection conn, string script, string sql)
+        {
+            // SQLite's table-rebuild procedure requires this pragma outside the transaction.
+            Execute(conn, null, "PRAGMA foreign_keys=OFF;");
+            try
+            {
+                using (var tx = conn.BeginTransaction())
+                {
+                    Execute(conn, tx, sql);
+                    using (var check = new SQLiteCommand("PRAGMA foreign_key_check", conn, tx))
+                    using (var reader = check.ExecuteReader())
+                        if (reader.Read()) throw new InvalidOperationException("Treasury migration found a broken foreign key; all schema changes were rolled back.");
+                    using (var cmd = new SQLiteCommand("INSERT INTO SchemaVersion(Name,AppliedAt) VALUES(@name,@at)", conn, tx))
+                    {
+                        cmd.Parameters.AddWithValue("@name", script); cmd.Parameters.AddWithValue("@at", DateTime.UtcNow.ToString("o")); cmd.ExecuteNonQuery();
+                    }
+                    tx.Commit();
+                }
+            }
+            finally { Execute(conn, null, "PRAGMA foreign_keys=ON;"); }
         }
 
         private static bool IsApplied(SQLiteConnection conn, string name)

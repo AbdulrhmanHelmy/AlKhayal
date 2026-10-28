@@ -9,6 +9,9 @@ using AlKhayal.Api.Contracts;
 using AlKhayal.Application.Authentication;
 using AlKhayal.Application.Suppliers;
 using AlKhayal.Core.Models;
+using AlKhayal.Application.Users;
+using AlKhayal.Application.Features;
+using AlKhayal.Application.Treasury;
 
 namespace AlKhayal.Api.Controllers
 {
@@ -20,7 +23,9 @@ namespace AlKhayal.Api.Controllers
         private readonly AuthService _auth;
         private readonly SupplierAccountService _accounts;
         private readonly SupplierLedgerService _ledger;
-        public SuppliersController(SupplierService suppliers, AuthService auth, SupplierAccountService accounts, SupplierLedgerService ledger) { _suppliers = suppliers; _auth = auth; _accounts = accounts; _ledger = ledger; }
+        private readonly UserManagementService _users;
+        private readonly FeatureService _features;
+        public SuppliersController(SupplierService suppliers, AuthService auth, SupplierAccountService accounts, SupplierLedgerService ledger, UserManagementService users, FeatureService features) { _suppliers = suppliers; _auth = auth; _accounts = accounts; _ledger = ledger; _users=users; _features=features; }
 
         [HttpGet, Route("")]
         public async Task<IHttpActionResult> GetAll(string search=null,int? page=null,int? pageSize=null,CancellationToken ct=default(CancellationToken))
@@ -94,11 +99,15 @@ namespace AlKhayal.Api.Controllers
             if (!await HasValidCsrf(ct)) return CsrfResult();
             try
             {
-                var invoice = _accounts.AddInvoice(id, new SupplierInvoice { InvoiceNumber = request == null ? null : request.InvoiceNumber, InvoiceDate = request == null ? null : request.InvoiceDate, DueDate = request == null ? null : request.DueDate, Total = request == null ? 0 : request.Total, Notes = request == null ? null : request.Notes });
+                var actor = await _auth.GetCurrentUserAsync(ReadCookie(), ct).ConfigureAwait(false);
+                if (actor == null) return UnauthorizedResult();
+                var invoice = _accounts.AddInvoice(id, new SupplierInvoice { InvoiceNumber = request == null ? null : request.InvoiceNumber, InvoiceDate = request == null ? null : request.InvoiceDate, DueDate = request == null ? null : request.DueDate, Total = request == null ? 0 : request.Total, Notes = request == null ? null : request.Notes }, request?.OperationKey, actor.Id);
                 return Content(HttpStatusCode.Created, ApiEnvelope<SupplierInvoice>.Ok(invoice));
             }
             catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
             catch (KeyNotFoundException ex) { return NotFoundResult(ex.Message); }
+            catch (InvalidOperationException ex) { return Content(HttpStatusCode.Conflict, ApiEnvelope<object>.Fail("operation_conflict", ex.Message)); }
+            catch (OverflowException) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", "المبلغ يتجاوز الحد المسموح.")); }
         }
 
         [HttpPost, Route("{id:long}/payments")]
@@ -106,12 +115,21 @@ namespace AlKhayal.Api.Controllers
         {
             if (!await IsAuthenticated(ct)) return UnauthorizedResult();
             if (!await HasValidCsrf(ct)) return CsrfResult();
+            var actor=await _auth.GetCurrentUserAsync(ReadCookie(),ct).ConfigureAwait(false);
+            if(actor==null)return UnauthorizedResult();
+            if(actor.Role!=UserRoles.Administrator)
+            {
+                var access=await _users.GetEffectiveAccessAsync(actor,await _features.GetEffectiveAsync(ct).ConfigureAwait(false),ct).ConfigureAwait(false);
+                if(!access.ScreenIds.Contains("supplier-payment",StringComparer.OrdinalIgnoreCase))return Content(HttpStatusCode.Forbidden,ApiEnvelope<object>.Fail("screen_forbidden","لا تملك صلاحية سداد حسابات الموردين."));
+            }
             try
             {
                 if (request == null) throw new ArgumentException("بيانات الدفع غير مكتملة.");
-                var entry = await _ledger.AddPaymentAsync(id, request.InvoiceId, request.PurchaseInvoiceId, request.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), request.PaymentDate, request.Method, request.Account, request.Notes, request.OperationKey, ct);
+                var entry = await _ledger.AddTreasuryPaymentAsync(id, request.InvoiceId, request.PurchaseInvoiceId, request.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), request.PaymentDate, request.Method, request.Account, request.Notes, request.OperationKey, request.TreasuryAccountId,actor.Id,ct);
                 return Content(HttpStatusCode.Created, ApiEnvelope<SupplierLedgerEntry>.Ok(entry));
             }
+            catch (TreasuryException ex) { return Content(HttpStatusCode.Conflict,ApiEnvelope<object>.Fail("treasury_"+ex.Code,ex.Message)); }
+            catch (System.Data.SQLite.SQLiteException ex) { System.Diagnostics.Trace.TraceError("Supplier payment database failure: SQLite code {0}",ex.ResultCode);return Content(HttpStatusCode.ServiceUnavailable,ApiEnvelope<object>.Fail("database_unavailable","تعذر إتمام السداد. أعد المحاولة بنفس البيانات للتحقق من الحفظ.")); }
             catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
             catch (KeyNotFoundException ex) { return NotFoundResult(ex.Message); }
             catch (InvalidOperationException ex) { return Content(HttpStatusCode.Conflict, ApiEnvelope<object>.Fail("operation_conflict", ex.Message)); }

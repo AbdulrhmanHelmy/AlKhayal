@@ -22,7 +22,14 @@ namespace AlKhayal.Application.Suppliers
             return _repository.StatementAsync(supplierId, from, to, ct);
         }
         public Task<IReadOnlyList<SupplierLedgerEntry>> HistoryAsync(long supplierId, CancellationToken ct) { return _repository.HistoryAsync(supplierId, ct); }
-        public Task<SupplierLedgerEntry> AddPaymentAsync(long supplierId, long? supplierInvoiceId, long? purchaseInvoiceId, string amount, string paymentDate, string method, string account, string notes, string operationKey, CancellationToken ct)
+        public Task<SupplierLedgerEntry> AddTreasuryPaymentAsync(long supplierId, long? supplierInvoiceId, long? purchaseInvoiceId, string amount, string paymentDate, string method, string account, string notes, string operationKey, long? treasuryAccountId, long actorUserId, CancellationToken ct)
+        {
+            if (!treasuryAccountId.HasValue || treasuryAccountId.Value <= 0 || actorUserId <= 0)
+                throw new ArgumentException("اختر الخزنة أو البنك الذي سيتم السداد منه.");
+            return AddPaymentAsync(supplierId,supplierInvoiceId,purchaseInvoiceId,amount,paymentDate,method,account,notes,operationKey,ct,treasuryAccountId,actorUserId);
+        }
+        // The account-only path is retained for historical service callers; HTTP uses AddTreasuryPaymentAsync.
+        public Task<SupplierLedgerEntry> AddPaymentAsync(long supplierId, long? supplierInvoiceId, long? purchaseInvoiceId, string amount, string paymentDate, string method, string account, string notes, string operationKey, CancellationToken ct, long? treasuryAccountId = null, long actorUserId = 0)
         {
             long scaled;
             if (supplierId <= 0 || supplierInvoiceId.HasValue && supplierInvoiceId <= 0 || purchaseInvoiceId.HasValue && purchaseInvoiceId <= 0 || supplierInvoiceId.HasValue && purchaseInvoiceId.HasValue || !MoneyPolicy.TryParseUserAmount(amount, false, out scaled) || scaled <= 0)
@@ -32,7 +39,7 @@ namespace AlKhayal.Application.Suppliers
                 throw new ArgumentException("أدخل طريقة الدفع ومرجعًا صحيحًا.");
             if (string.IsNullOrWhiteSpace(operationKey) || operationKey.Length > 120) throw new ArgumentException("مفتاح الدفع غير صالح؛ أعد المحاولة.");
             var command = new SupplierLedgerPaymentCommand { SupplierId = supplierId, SupplierInvoiceId = supplierInvoiceId, PurchaseInvoiceId = purchaseInvoiceId, AmountScaled = scaled,
-                PaymentDate = paymentDate, Method = method.Trim(), Account = (account ?? "").Trim(), Notes = notes ?? "", OperationKey = operationKey.Trim() };
+                PaymentDate = paymentDate, Method = method.Trim(), Account = (account ?? "").Trim(), Notes = notes ?? "", OperationKey = operationKey.Trim(), TreasuryAccountId=treasuryAccountId, ActorUserId=actorUserId };
             command.RequestHash = Hash(command);
             return _repository.AddPaymentAsync(command, ct);
         }
@@ -43,6 +50,13 @@ namespace AlKhayal.Application.Suppliers
         }
         private static string Hash(SupplierLedgerPaymentCommand c)
         {
+            if (c.TreasuryAccountId.HasValue)
+            {
+                var canonical = new StringBuilder("supplier-treasury-payment-v1:");
+                foreach (var field in new[] { c.SupplierId.ToString(CultureInfo.InvariantCulture), c.SupplierInvoiceId?.ToString(CultureInfo.InvariantCulture)??"", c.PurchaseInvoiceId?.ToString(CultureInfo.InvariantCulture)??"", c.AmountScaled.ToString(CultureInfo.InvariantCulture), c.PaymentDate, c.Method, c.Account, c.Notes, c.OperationKey, c.TreasuryAccountId.Value.ToString(CultureInfo.InvariantCulture), c.ActorUserId.ToString(CultureInfo.InvariantCulture) })
+                    canonical.Append(field.Length).Append(':').Append(field);
+                using (var sha = SHA256.Create()) return "v3:"+Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString())));
+            }
             var text = new StringBuilder("supplier-payment-v1|").Append(c.SupplierId).Append('|').Append(c.SupplierInvoiceId).Append('|').Append(c.PurchaseInvoiceId).Append('|').Append(c.AmountScaled).Append('|').Append(c.PaymentDate).Append('|').Append(c.Method).Append('|').Append(c.Account).Append('|').Append(c.Notes).Append('|').Append(c.OperationKey);
             using (var sha = SHA256.Create()) return "v2:" + BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(text.ToString()))).Replace("-", "");
         }

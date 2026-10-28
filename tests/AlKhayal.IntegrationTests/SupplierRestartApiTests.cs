@@ -77,8 +77,9 @@ namespace AlKhayal.IntegrationTests
                     var posted = await Send(client, HttpMethod.Post, "api/purchases/" + purchaseId + "/post", csrf, "{\"operationKey\":\"restart-purchase-post\"}");
                     Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
 
+                    var treasuryAccountId=await TreasuryApiTests.FundSupplierPaymentAccount(connectionString);
                     var payment = await Send(client, HttpMethod.Post, "api/suppliers/" + supplierId + "/payments", csrf,
-                        "{\"purchaseInvoiceId\":" + purchaseId + ",\"operationKey\":\"restart-purchase-payment\",\"amount\":5.13,\"paymentDate\":\"2026-10-24\",\"method\":\"cash\"}");
+                        "{\"treasuryAccountId\":"+treasuryAccountId+",\"purchaseInvoiceId\":" + purchaseId + ",\"operationKey\":\"restart-purchase-payment\",\"amount\":5.13,\"paymentDate\":\"2026-10-24\",\"method\":\"cash\"}");
                     Assert.Equal(HttpStatusCode.Created, payment.StatusCode);
                 }
 
@@ -91,7 +92,7 @@ namespace AlKhayal.IntegrationTests
                 using (var connection = new SQLiteConnection(connectionString))
                 {
                     connection.Open();
-                    Assert.Equal(23, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(31, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM Suppliers WHERE Id=@Id", new { Id = supplierId }));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM PurchaseInvoices WHERE Id=@Id AND Status='posted'", new { Id = purchaseId }));
                     Assert.Equal(2, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries WHERE PurchaseInvoiceId=@Id", new { Id = purchaseId }));

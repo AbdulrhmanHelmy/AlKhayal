@@ -120,7 +120,9 @@ namespace AlKhayal.Api
                     (Application.Authentication.AuthService)_get(
                         typeof(Application.Authentication.AuthService)),
                     (Application.Customers.CustomerAccountService)_get(
-                        typeof(Application.Customers.CustomerAccountService)));
+                        typeof(Application.Customers.CustomerAccountService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
 
             if (t == typeof(Controllers.SuppliersController))
                 return new Controllers.SuppliersController(
@@ -131,7 +133,9 @@ namespace AlKhayal.Api
                     (Application.Suppliers.SupplierAccountService)_get(
                         typeof(Application.Suppliers.SupplierAccountService)),
                     (Application.Suppliers.SupplierLedgerService)_get(
-                        typeof(Application.Suppliers.SupplierLedgerService)));
+                        typeof(Application.Suppliers.SupplierLedgerService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
 
             if (t == typeof(Controllers.PurchasesController))
                 return new Controllers.PurchasesController(
@@ -143,6 +147,29 @@ namespace AlKhayal.Api
             if (t == typeof(Controllers.SalesController))
                 return new Controllers.SalesController(
                     (Application.Sales.SalesService)_get(typeof(Application.Sales.SalesService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.ReturnsController))
+                return new Controllers.ReturnsController(
+                    (Application.Returns.ReturnService)_get(typeof(Application.Returns.ReturnService)),
+                    (Application.Sales.SalesService)_get(typeof(Application.Sales.SalesService)),
+                    (Application.Purchasing.PurchaseService)_get(typeof(Application.Purchasing.PurchaseService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.ExpensesController))
+                return new Controllers.ExpensesController(
+                    (Application.Expenses.ExpenseService)_get(typeof(Application.Expenses.ExpenseService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.TreasuryController))
+                return new Controllers.TreasuryController(
+                    (Application.Treasury.TreasuryService)_get(typeof(Application.Treasury.TreasuryService)),
                     (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
                     (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
                     (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));

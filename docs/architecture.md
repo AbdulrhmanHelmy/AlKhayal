@@ -1,6 +1,24 @@
-﻿# Architecture
+# Architecture
+
+Sales refund overdraft is an explicit scoped treasury-writer capability. Application `SalesRefundPolicy` prioritizes reducing current credit-customer debt to zero and allocates any remaining return value to cash. Return transactions never touch shift revenue. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
+
+Unified Returns uses `ReturnService`/`IReturnReadStore` and existing Sales/Purchase posting services. Both return writers share their transaction with treasury cash effects, source links and sales-return withdrawal solely from the returns cashbox. See [returns-management.md](returns-management.md).
+
+Cash Sales posting now shares its writer transaction with the treasury deposit, account provisioning and immutable source link for `إيراد الوردية`; credit sales retain the customer-ledger boundary. See [sales-shift-revenue.md](sales-shift-revenue.md).
+
+Expenses follow `ExpenseService` → `IExpenseStore` → `SqliteExpenseStore` with authenticated HTTP adapters. Posting a voucher shares the treasury writer transaction for source withdrawal, audit and account version. See [expenses.md](expenses.md).
 
 Phase 2.3 product tracking configuration and the deferred physical-stock boundary are specified in [phase-2-task-3-tracking.md](phase-2-task-3-tracking.md).
+
+## Persisted treasury boundary
+
+Customer Statement now owns the customer account-operation UI for persisted increases and collections. It reuses `CustomerAccountService`/`ICustomerAccountRepository`, requires effective statement access, preserves transactional/idempotent posting, and distinguishes full current debt from a period closing balance. Its existing unfiltered-ledger double-counting and missing render-context defects are fixed without changing historical data. See [customer-statement.md](customer-statement.md).
+
+Supplier settlement now shares the treasury writer in the supplier-ledger transaction. Application `SupplierPaymentAllocator` orders invoice allocations by due date (invoice date fallback), then original creation time. Immutable allocation and treasury-link tables let reads project invoice paid/remaining without modifying posted purchase invoices. See [supplier-payment-treasury.md](supplier-payment-treasury.md).
+
+Supplier Accounts reuses the existing Supplier Application services and SQLite account/ledger ports. The directory is unchanged; `supplier-payment` groups each supplier's invoices and exposes new debt invoices and payments. Invoice creation atomically records an idempotent, actor-bound ledger operation with the supplier balance/credit projection. Source invoice identity separates account invoices from purchase invoices, and posted returns reduce payment eligibility. See [supplier-accounts.md](supplier-accounts.md).
+
+`TreasuryService` -> `ITreasuryStore` -> `SqliteTreasuryStore` implements cashbox/bank CRUD and atomic idempotent manual deposits/withdrawals. `TreasuryController` enforces authentication, CSRF and treasury screen permissions. The frontend calls only this HTTP boundary. Immutable ledger movements derive balances; metadata, deletion tombstones and postings retain transactional audit. Cash purchase posting shares the treasury ledger writer and the purchase SQLite transaction; its withdrawal, stock/FIFO, supplier settlement and audit commit atomically. Other sales/customer/supplier financial events keep their existing separate boundaries. See [purchase-treasury.md](purchase-treasury.md). See [treasury.md](treasury.md).
 
 ## Phase 2.1 catalog vertical slice
 

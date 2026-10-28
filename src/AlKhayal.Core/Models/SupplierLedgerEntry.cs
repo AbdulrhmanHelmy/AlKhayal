@@ -15,10 +15,14 @@ namespace AlKhayal.Core.Models
         public string PaymentMethod { get; set; }
         public string RequestHash { get; set; }
         public bool Replayed { get; set; }
+        public long? TreasuryAccountId { get; set; }
+        public long? TreasuryMovementId { get; set; }
     }
 
     public sealed class SupplierLedgerPaymentCommand
     {
+        public long? TreasuryAccountId { get; set; }
+        public long ActorUserId { get; set; }
         public long SupplierId { get; set; }
         public long? SupplierInvoiceId { get; set; }
         public long? PurchaseInvoiceId { get; set; }

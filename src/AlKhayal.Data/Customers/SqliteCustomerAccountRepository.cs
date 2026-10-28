@@ -56,7 +56,7 @@ namespace AlKhayal.Data.Customers
                 bool hasFrom = DateTime.TryParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out fromDate);
                 bool hasTo = DateTime.TryParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out toDate);
                 var startBalance = openingTotal - payments.Where(p => hasFrom && string.CompareOrdinal(p.PaymentDate, fromDate.ToString("yyyy-MM-dd")) < 0).Sum(p => p.Amount);
-                var statement = new CustomerStatement { CustomerId = customer.Id, CustomerName = customer.Name, From = hasFrom ? fromDate.ToString("yyyy-MM-dd") : null, To = hasTo ? toDate.ToString("yyyy-MM-dd") : null, OpeningBalance = startBalance, CreditLimit = customer.CreditLimit };
+                var statement = new CustomerStatement { CustomerId = customer.Id, CustomerName = customer.Name, From = hasFrom ? fromDate.ToString("yyyy-MM-dd") : null, To = hasTo ? toDate.ToString("yyyy-MM-dd") : null, OpeningBalance = startBalance, CurrentBalance = customer.Balance, CreditLimit = customer.CreditLimit };
                 statement.Movements.Add(new CustomerStatementMovement { Date = hasFrom ? fromDate.ToString("yyyy-MM-dd") : DateTime.UtcNow.ToString("yyyy-MM-dd"), Reference = "OPEN", Description = "رصيد مرحل من قبل الفترة", Debit = 0, Credit = 0, Balance = startBalance });
                 var inRange = payments.Where(p => (!hasFrom || string.CompareOrdinal(p.PaymentDate, fromDate.ToString("yyyy-MM-dd")) >= 0) && (!hasTo || string.CompareOrdinal(p.PaymentDate, toDate.ToString("yyyy-MM-dd")) <= 0)).OrderBy(p => p.PaymentDate).ThenBy(p => p.Id).ToList();
                 var balance = startBalance;
@@ -112,10 +112,10 @@ namespace AlKhayal.Data.Customers
                     var total=connection.ExecuteScalar<long>("SELECT COALESCE(SUM(CASE WHEN TransactionType IN ('opening','increase') THEN AmountScaled ELSE -AmountScaled END),0) FROM CustomerTransactions WHERE CustomerId=@Id",new{Id=customerId},tx);
                     var scaled=checked((long)(amount*10000m));
                     if((type=="collection"||type=="reduction")&&total<scaled)throw new ArgumentException("المبلغ أكبر من رصيد العميل الحالي.");
+                    var next=type=="increase"?checked(total+scaled):checked(total-scaled);
                     var now=DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture);
                     connection.Execute("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc) VALUES(@CustomerId,@OperationKey,@OperationKey,@Type,@Scaled,@OccurredOn,@Notes,@Now)",new{CustomerId=customerId,OperationKey=operationKey,Type=type,Scaled=scaled,OccurredOn=occurredOn,Notes=notes??string.Empty,Now=now},tx);
                     var id=connection.ExecuteScalar<long>("SELECT last_insert_rowid()",transaction:tx);
-                    var next=type=="increase"?total+scaled:total-scaled;
                     connection.Execute("UPDATE Customers SET Balance=@Balance,UpdatedAt=@Now WHERE Id=@Id",new{Balance=next/10000m,Now=now,Id=customerId},tx);
                     tx.Commit();return new CustomerStatementTransaction{Id=id,CustomerId=customerId,Type=type,Amount=amount,OccurredOn=occurredOn,Notes=notes??string.Empty};
                 }
@@ -126,14 +126,14 @@ namespace AlKhayal.Data.Customers
         {
             DateTime fromDate,toDate;var hasFrom=DateTime.TryParseExact(from,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out fromDate);var hasTo=DateTime.TryParseExact(to,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out toDate);
             var all=connection.Query<LedgerRow>("SELECT Id,TransactionType Type,AmountScaled,OccurredOn,Notes,Reference FROM CustomerTransactions WHERE CustomerId=@Id ORDER BY OccurredOn,Id",new{Id=customer.Id}).ToList();
-            var cutoff=hasFrom?fromDate.ToString("yyyy-MM-dd"):null;long running=all.Where(x=>cutoff==null||string.CompareOrdinal(x.OccurredOn,cutoff)<0).Sum(Signed);
-            var statement=new CustomerStatement{CustomerId=customer.Id,CustomerName=customer.Name,From=hasFrom?cutoff:null,To=hasTo?toDate.ToString("yyyy-MM-dd"):null,OpeningBalance=running/10000m,CreditLimit=customer.CreditLimit};
+            var cutoff=hasFrom?fromDate.ToString("yyyy-MM-dd"):null;long running=all.Where(x=>cutoff!=null&&string.CompareOrdinal(x.OccurredOn,cutoff)<0).Sum(Signed);
+            var statement=new CustomerStatement{CustomerId=customer.Id,CustomerName=customer.Name,CurrentBalance=all.Sum(Signed)/10000m,From=hasFrom?cutoff:null,To=hasTo?toDate.ToString("yyyy-MM-dd"):null,OpeningBalance=running/10000m,CreditLimit=customer.CreditLimit};
             statement.Movements.Add(new CustomerStatementMovement{Date=hasFrom?cutoff:"—",Description="رصيد افتتاحي",Balance=statement.OpeningBalance,Kind="opening"});
             foreach(var row in all.Where(x=>(!hasFrom||string.CompareOrdinal(x.OccurredOn,cutoff)>=0)&&(!hasTo||string.CompareOrdinal(x.OccurredOn,toDate.ToString("yyyy-MM-dd"))<=0)))
             {
-                var add=row.Type=="opening"||row.Type=="increase";running+=Signed(row);var amount=row.AmountScaled/10000m;
+                var add=row.Type=="opening"||row.Type=="increase";running=checked(running+Signed(row));var amount=row.AmountScaled/10000m;
                 if(add)statement.TotalDebit+=amount;else statement.TotalCredit+=amount;
-                statement.Movements.Add(new CustomerStatementMovement{Date=row.OccurredOn,Reference=row.Reference,Description=row.Type=="reduction"&&row.Notes!=null&&row.Notes.StartsWith("إلغاء فاتورة بيع",StringComparison.Ordinal)?"إلغاء فاتورة بيع":Description(row.Type,row.Reference),Debit=add?amount:0,Credit=add?0:amount,Balance=running/10000m,Kind=row.Type});
+                statement.Movements.Add(new CustomerStatementMovement{Date=row.OccurredOn,Reference=row.Reference,Notes=row.Notes,Description=row.Type=="reduction"&&row.Notes!=null&&row.Notes.StartsWith("إلغاء فاتورة بيع",StringComparison.Ordinal)?"إلغاء فاتورة بيع":Description(row.Type,row.Reference),Debit=add?amount:0,Credit=add?0:amount,Balance=running/10000m,Kind=row.Type});
             }
             statement.ClosingBalance=running/10000m;return statement;
         }

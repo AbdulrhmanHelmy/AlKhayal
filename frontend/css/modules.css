@@ -193,10 +193,19 @@
 .inventory-warehouse-choices [hidden] { display: none; }
 /* Integrated purchasing: compact, bounded RTL forms and invoice lines. */
 .purchase-head .card-body { padding: 16px; }
+.supplier-account-card { margin-top: 12px; min-width: 0; min-height: 0; }
+.supplier-account-card .card-head > div { min-width: 0; }
+@media (max-width: 760px) { .supplier-account-card .card-head { align-items: stretch; flex-direction: column; } }
 .purchase-search { position: relative; width: min(100%, 360px); }
-.purchase-results { position: absolute; z-index: 4; inset-inline: 0; top: calc(100% + 4px); max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-md); }
+.purchase-results { position: absolute; z-index: 4; inset-inline: 0; top: calc(100% + 4px); max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-2); }
 .purchase-result { display: block; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); text-align: start; cursor: pointer; }
-.purchase-result:hover, .purchase-result:focus-visible { background: var(--surface-raised); }
+.purchase-result:hover, .purchase-result:focus-visible { background: var(--surface-2); }
+.purchase-product-picker { width: 100%; min-width: 0; min-height: 0; margin-bottom: 16px; }
+.purchase-product-picker > label { display: block; margin-bottom: 8px; }
+.purchase-product-picker .purchase-results { position: static; margin-top: 8px; max-height: 260px; min-width: 0; min-height: 0; box-shadow: none; }
+.purchase-product-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; min-height: 0; }
+.purchase-product-options .purchase-result { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .purchase-product-options { grid-template-columns: minmax(0, 1fr); } }
 .purchase-total { display: flex; justify-content: space-between; margin-block: 16px 4px; font-size: 1.05rem; }
 .purchase-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-block: 16px; }
 .purchase-actions > div { display: flex; flex-wrap: wrap; gap: 8px; }

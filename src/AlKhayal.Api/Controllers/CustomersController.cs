@@ -8,6 +8,8 @@ using AlKhayal.Api.Contracts;
 using AlKhayal.Application.Authentication;
 using AlKhayal.Application.Customers;
 using AlKhayal.Core.Models;
+using AlKhayal.Application.Users;
+using AlKhayal.Application.Features;
 
 namespace AlKhayal.Api.Controllers
 {
@@ -18,7 +20,9 @@ namespace AlKhayal.Api.Controllers
         private readonly CustomerService _customers;
         private readonly AuthService _auth;
         private readonly CustomerAccountService _accounts;
-        public CustomersController(CustomerService customers, AuthService auth, CustomerAccountService accounts) { _customers = customers; _auth = auth; _accounts = accounts; }
+        private readonly UserManagementService _users;
+        private readonly FeatureService _features;
+        public CustomersController(CustomerService customers, AuthService auth, CustomerAccountService accounts, UserManagementService users, FeatureService features) { _customers = customers; _auth = auth; _accounts = accounts; _users=users; _features=features; }
 
         [HttpGet, Route("")]
         public async Task<IHttpActionResult> GetAll(CancellationToken ct)
@@ -66,6 +70,7 @@ namespace AlKhayal.Api.Controllers
         public async Task<IHttpActionResult> GetStatement(long id, string from = null, string to = null, CancellationToken ct = default(CancellationToken))
         {
             if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            if(!await CanUseStatement(ct))return Content(HttpStatusCode.Forbidden,ApiEnvelope<object>.Fail("screen_forbidden","لا تملك صلاحية كشف حساب العميل."));
             try
             {
                 var statement = _accounts.GetStatement(id, from, to);
@@ -93,13 +98,23 @@ namespace AlKhayal.Api.Controllers
         {
             if (!await IsAuthenticated(ct)) return UnauthorizedResult();
             if (!await HasValidCsrf(ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("invalid_csrf", "تعذر التحقق من الطلب. حدّث الصفحة وحاول مرة أخرى."));
+            if(!await CanUseStatement(ct))return Content(HttpStatusCode.Forbidden,ApiEnvelope<object>.Fail("screen_forbidden","لا تملك صلاحية كشف حساب العميل."));
             try { return Content(HttpStatusCode.Created, ApiEnvelope<CustomerStatementTransaction>.Ok(_accounts.PostTransaction(id,request == null ? null : request.Type,request == null ? 0 : request.Amount,request == null ? null : request.OccurredOn,request == null ? null : request.Notes,request == null ? null : request.OperationKey))); }
             catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
             // QA-101: a reused operation key with a changed payload is a conflict, not a replay.
             catch (CustomerOperationKeyConflictException ex) { return Content(HttpStatusCode.Conflict, ApiEnvelope<object>.Fail("operation_key_conflict", ex.Message)); }
+            catch (OverflowException) { return Content(HttpStatusCode.BadRequest,ApiEnvelope<object>.Fail("validation","المبلغ يتجاوز الحد المسموح لمديونية العميل.")); }
+            catch (System.Data.SQLite.SQLiteException ex) { System.Diagnostics.Trace.TraceError("Customer account transaction failed: SQLite code {0}",ex.ResultCode);return Content(HttpStatusCode.ServiceUnavailable,ApiEnvelope<object>.Fail("database_unavailable","تعذر تأكيد حفظ العملية. أعد المحاولة بنفس البيانات للتحقق من الحفظ.")); }
             catch (System.Collections.Generic.KeyNotFoundException ex) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", ex.Message)); }
         }
 
+        private async Task<bool> CanUseStatement(CancellationToken ct)
+        {
+            var user=await _auth.GetCurrentUserAsync(ReadCookie(),ct).ConfigureAwait(false);
+            if(user==null)return false;if(user.Role==UserRoles.Administrator)return true;
+            var access=await _users.GetEffectiveAccessAsync(user,await _features.GetEffectiveAsync(ct).ConfigureAwait(false),ct).ConfigureAwait(false);
+            return access.ScreenIds.Contains("customer-statement",StringComparer.OrdinalIgnoreCase);
+        }
         private async Task<bool> IsAuthenticated(CancellationToken ct) { var token = ReadCookie(); return await _auth.GetCurrentUserAsync(token, ct) != null; }
         private async Task<bool> HasValidCsrf(CancellationToken ct) { return await _auth.ValidateCsrfAsync(ReadCookie(), ReadCsrf(), ct); }
         private IHttpActionResult UnauthorizedResult() { return Content(HttpStatusCode.Unauthorized, ApiEnvelope<object>.Fail("unauthorized", "يرجى تسجيل الدخول أولاً.")); }

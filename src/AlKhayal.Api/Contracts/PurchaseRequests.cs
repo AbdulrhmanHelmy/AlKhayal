@@ -9,6 +9,7 @@ namespace AlKhayal.Api.Contracts
         public string InvoiceNumber { get; set; }
         public string InvoiceDate { get; set; }
         public string PaymentMode { get; set; }
+        public long? TreasuryAccountId { get; set; }
         public string Notes { get; set; }
         public List<PurchaseLineRequest> Lines { get; set; }
     }

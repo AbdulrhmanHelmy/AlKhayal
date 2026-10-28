@@ -1,6 +1,30 @@
-﻿# Database
+# Database
+
+Migration `031_sales_refund_overdraft.sql` transactionally rebuilds the treasury ledger to allow narrowly scoped signed sales-refund post-balances, retaining all row IDs/history/source FKs. The migrator performs FK integrity checks before commit and restores FK enforcement after rollback or success. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
+
+Invoice return-state flags are read projections over saved return headers/lines. Complete return requires all original line quantities to be returned; purchase drafts do not count. This requires no migration or invoice/history rewrite. See [returns-management.md](returns-management.md).
+
+Migration `030_returns_management.sql` adds immutable named return-cashbox identities and real sales/purchase return-to-treasury source links. Historical return rows are retained without retroactive cash posting. See [returns-management.md](returns-management.md).
+
+Migration `029_sales_treasury.sql` adds immutable shift-revenue account identity and sales receipt source links. New cash sales atomically deposit into the named cashbox; historical posted sales are unchanged. See [sales-shift-revenue.md](sales-shift-revenue.md).
+
+Migration `028_expenses.sql` adds persisted expense types and immutable vouchers with exact scale-4 money, actor/time snapshots, unique operation identity and treasury source links. Voucher and treasury writes commit atomically. See [expenses.md](expenses.md).
+
+## Migration 024 — treasury
+
+Migrations 026–027 add immutable supplier-payment treasury source links and invoice allocations. Supplier ledger, allocations, treasury movement/audit/version and supplier projections commit atomically. Legacy and purchase invoice read projections include account-payment allocations without double-counting direct invoice payments. Old financial rows remain unchanged. See [supplier-payment-treasury.md](supplier-payment-treasury.md).
+
+Migration `025_purchase_treasury.sql` adds nullable `PurchaseInvoices.TreasuryAccountId` and `TreasuryMovementId` foreign keys, a unique movement-source index and an account lookup index. Existing rows remain unchanged. New cash purchases persist their chosen account; posting links exactly one immutable treasury withdrawal in the same transaction as inventory/FIFO/supplier/audit writes. See [purchase-treasury.md](purchase-treasury.md).
+
+`024_treasury.sql` adds `TreasuryAccounts`, `TreasuryMovements` and `TreasuryAudit` without editing earlier scripts or importing mock balances. Codes are normalized/unique; metadata is versioned and unused-account deletion retains a tombstone. Amounts and historical post-balances are checked scale-4 integers restricted to piastres. Unique operation keys plus canonical hashes prevent duplicate posting. Actor, source account and UTC time are retained. Movement/audit rows cannot be updated or deleted; account-indexed ledger totals derive balances. One writer transaction checks funds, posts money, increments account version and appends audit. See [treasury.md](treasury.md).
 
 ## Monetary precision policy
+
+Customer Statement requires no migration. Its unfiltered read starts at zero before replaying the ledger once; filtered opening balances include only entries strictly before `from`. `currentBalance` derives from the full exact ledger while period totals/closing honor filters. Existing movement notes are exposed. Manual increases check signed-64-bit overflow before the insert; entry and balance projection remain one transaction. See [customer-statement.md](customer-statement.md).
+
+Supplier Accounts adds no schema migration. New debt invoices now populate the existing immutable ledger `SupplierInvoiceId`, `OperationKey` and `RequestHash` columns and retain actor attribution in the entry description. Invoice, ledger and payable/credit projection writes share a transaction; existing credit offsets the new debt. Invoice read projections subtract posted purchase returns and parse invariant monetary text in C# to avoid mixed SQLite UNION provider types. See [supplier-accounts.md](supplier-accounts.md).
+
+For deployed databases containing the recorded older `019_treasury.sql`, pending 024 runs a transactional compatibility adapter: it retains the original account table as `LegacyTreasuryAccounts019`, preserves the old transaction/audit tables and FK links, imports exact balances/history into 024, and adds immutable `TreasuryLegacyImports` source links. Unknown or incompatible historical data stops the migration with original schema/rows retained. See [treasury.md](treasury.md#retained-legacy-migration-019).
 
 User-entered EGP amounts are limited to two fractional digits. The Application boundary converts them exactly to the existing signed 64-bit scale-4 representation, so a piastre is always a multiple of 100 internal units. Finalized invoice lines and supplier-account return amounts round to the nearest piastre with `MidpointRounding.AwayFromZero`; half-piastre ties therefore round away from zero. Quantity remains scale 6.
 
@@ -71,7 +95,7 @@ Adds persistent receipt/transfer layers, immutable movement allocations and docu
 
 `017_integrated_purchasing.sql` creates append-only `SupplierLedgerEntries`, purchase invoices/lines/physical units, draft audit, and return records. It imports each legacy invoice/payment once, preserving source tables and IDs. Per supplier, it adds a labeled opening entry equal to current `Payable - legacy invoice totals + legacy payment totals`, preventing old documents from being counted twice. Preflight runs before 017 SQL inside the migration transaction and checks scale-4 representability, invoice/payment ownership, paid-total reconciliation, and a nonnegative opening. Any mismatch throws before migration writes and leaves legacy rows unchanged.
 
-`018_purchasing_provenance_and_credit.sql` links purchase lines to their actual inventory document lines, adds supplier-payment operation keys/hashes, links imported legacy payments back to historical invoices, and adds the supplier-credit projection. It adds immutable return audit and posted-return protections. Monetary ledger values are signed integers at scale 4. Positive entries increase the payable; payments/returns reduce it and may yield supplier credit. Cash purchases record equal payable/payment entries. Refund and supplier-credit returns use distinct types, but neither creates a treasury movement or balance.
+`018_purchasing_provenance_and_credit.sql` links purchase lines to their actual inventory document lines, adds supplier-payment operation keys/hashes, links imported legacy payments back to historical invoices, and adds the supplier-credit projection. It adds immutable return audit and posted-return protections. Monetary ledger values are signed integers at scale 4. Positive entries increase the payable; payments/returns reduce it and may yield supplier credit. Cash purchases record equal payable/payment entries and, after migration 025, an atomic withdrawal from their selected treasury account. Refund and supplier-credit returns use distinct types, but neither creates a treasury movement or balance.
 
 Before applying pending 018, the migrator checks the recorded-017 ledger schema. Current 017 already contains `LegacyPaymentId`; no change is made in that case. A representative older ledger schema without the column makes 018's `UPDATE SupplierLedgerEntries ... p.Id=SupplierLedgerEntries.LegacyPaymentId` fail with `no such column`. For that schema only, the migrator adds the nullable column and unique index inside 018's transaction and links historical payments by an exact, unique supplier/reference/date/scale-4-amount match. Missing or ambiguous matches abort the transaction rather than guessing or changing balances. The historical 017 and 018 scripts are unchanged; repeat startup sees the applied SchemaVersion and does not duplicate rows. Startup SQL exceptions are written to `%LOCALAPPDATA%\AlKhayal\Logs\startup.log` and are not shown verbatim in the Arabic desktop error state.
 

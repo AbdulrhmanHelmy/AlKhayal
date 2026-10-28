@@ -39,6 +39,9 @@ namespace AlKhayal.Application.Sales
         public long CashierUserId { get; set; }
         public string CashierName { get; set; }
         public string Status { get; set; }
+        public bool HasReturns { get; set; }
+        public bool IsFullyReturned { get; set; }
+        public string ReturnStatus => !HasReturns ? "none" : IsFullyReturned ? "full" : "partial";
         public string PaymentMode { get; set; }
         public long SubtotalScaled { get; set; }
         public long DiscountScaled { get; set; }
@@ -49,6 +52,9 @@ namespace AlKhayal.Application.Sales
         public long OutstandingScaled { get; set; }
         public List<SaleReturnSummary> Returns { get; set; } = new List<SaleReturnSummary>();
         public long? InventoryDocumentId { get; set; }
+        public long? TreasuryAccountId { get; set; }
+        public string TreasuryAccountName { get; set; }
+        public long? TreasuryMovementId { get; set; }
         public string OperationKey { get; set; }
         public string RequestHash { get; set; }
         public long Version { get; set; }

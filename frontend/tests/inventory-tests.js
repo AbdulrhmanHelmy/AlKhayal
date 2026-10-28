@@ -78,4 +78,6 @@ async function verifyCountRetry(){
   h.pending[2].reject(new Error("فقد الرد"));await settle();counted.value="3";counted.oninput();assert.equal(row.querySelector("[data-cost]").hidden,false);row.querySelector("[data-cost]").value="100";save.onclick();var changed=JSON.parse(h.posts()[3].options.body);assert.notEqual(changed.operationKey,first.operationKey);assert.equal(changed.lines[0].unitCost,"100");
 }
 module.exports=async function(){await verifyReceipt();await verifyConditionalFields();await verifyOtherOperationsAndValuation();await verifyCountRetry();console.log("Warehouse handler, count, tracking, unit/variant, retry, direct-save and exact valuation tests passed.");};
+// Reuse the deterministic DOM for other persisted workflow handler tests.
+module.exports.Element=Element;
 if(require.main===module)module.exports().catch(function(error){console.error(error);process.exitCode=1;});

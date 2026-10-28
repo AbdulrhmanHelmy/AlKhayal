@@ -76,7 +76,7 @@ namespace AlKhayal.UnitTests
         private sealed class FakeAccounts : ISupplierAccountRepository
         {
             public int InvoiceCalls, PaymentCalls; public decimal LastInvoiceTotal, LastPaymentAmount; public string LastInvoiceNumber, LastMethod; public long? LastInvoiceId;
-            public SupplierInvoice AddInvoice(long supplierId, string invoiceNumber, string invoiceDate, string dueDate, decimal total, string notes) { InvoiceCalls++; LastInvoiceTotal = total; LastInvoiceNumber = invoiceNumber; return new SupplierInvoice { SupplierId = supplierId, Total = total }; }
+            public SupplierInvoice AddInvoice(long supplierId, string invoiceNumber, string invoiceDate, string dueDate, decimal total, string notes, string operationKey = null, string requestHash = null, long? actorUserId = null) { InvoiceCalls++; LastInvoiceTotal = total; LastInvoiceNumber = invoiceNumber; return new SupplierInvoice { SupplierId = supplierId, Total = total }; }
             public SupplierPayment AddPayment(long supplierId, long? invoiceId, decimal amount, string paymentDate, string method, string account, string notes) { PaymentCalls++; LastInvoiceId = invoiceId; LastPaymentAmount = amount; LastMethod = method; return new SupplierPayment { SupplierId = supplierId, Amount = amount }; }
             public List<SupplierInvoice> GetInvoices(long supplierId) { return new List<SupplierInvoice>(); }
             public List<SupplierPayment> GetPayments(long supplierId) { return new List<SupplierPayment>(); }

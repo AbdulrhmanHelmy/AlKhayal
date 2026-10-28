@@ -1,0 +1,144 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using AlKhayal.Application.Treasury;
+using AlKhayal.Core.Interfaces;
+using AlKhayal.Core.Models;
+using Xunit;
+
+namespace AlKhayal.UnitTests
+{
+    public sealed class TreasuryServiceTests
+    {
+        private sealed class FakeRepository : ITreasuryRepository
+        {
+            public TreasuryAccountCommand Created; public TreasuryEntryCommand Entry; public TreasuryTransferCommand Transfer; public TreasuryMovementQuery Query;
+            public Task<IReadOnlyList<TreasuryAccount>> ListAccountsAsync(bool includeInactive, CancellationToken ct)
+            {
+                IReadOnlyList<TreasuryAccount> list = new List<TreasuryAccount>
+                {
+                    new TreasuryAccount { Id = 1, AccountType = "cash", BalanceScaled = 1000000, IsActive = true },
+                    new TreasuryAccount { Id = 2, AccountType = "bank", BalanceScaled = 2500000, IsActive = true }
+                };
+                return Task.FromResult(list);
+            }
+            public Task<TreasuryAccount> GetAccountAsync(long id, CancellationToken ct) { return Task.FromResult<TreasuryAccount>(null); }
+            public Task<TreasuryAccount> CreateAccountAsync(TreasuryAccountCommand command, long actorUserId, CancellationToken ct) { Created = command; return Task.FromResult(new TreasuryAccount { Id = 9 }); }
+            public Task<TreasuryAccount> UpdateAccountAsync(long id, TreasuryAccountCommand command, long actorUserId, CancellationToken ct) { Created = command; return Task.FromResult(new TreasuryAccount { Id = id }); }
+            public Task<TreasuryAccount> SetActiveAsync(long id, bool isActive, long actorUserId, CancellationToken ct) { return Task.FromResult(new TreasuryAccount { Id = id, IsActive = isActive }); }
+            public Task<TreasuryTransaction> AddEntryAsync(TreasuryEntryCommand command, CancellationToken ct) { Entry = command; return Task.FromResult(new TreasuryTransaction()); }
+            public Task<TreasuryTransferResult> TransferAsync(TreasuryTransferCommand command, CancellationToken ct) { Transfer = command; return Task.FromResult(new TreasuryTransferResult()); }
+            public Task<IReadOnlyList<TreasuryTransaction>> MovementsAsync(TreasuryMovementQuery query, CancellationToken ct) { Query = query; IReadOnlyList<TreasuryTransaction> none = new List<TreasuryTransaction>(); return Task.FromResult(none); }
+            public Task<TreasuryStatement> StatementAsync(long accountId, string from, string to, CancellationToken ct) { return Task.FromResult<TreasuryStatement>(null); }
+        }
+
+        private static readonly Func<DateTime> Clock = () => new DateTime(2026, 10, 28, 10, 0, 0, DateTimeKind.Utc);
+        private static TreasuryService Service(FakeRepository repo) { return new TreasuryService(repo, Clock); }
+        private static TreasuryAccountInput Cash(string name = "الخزنة الرئيسية") { return new TreasuryAccountInput { Name = name, AccountType = "cash" }; }
+        private static TreasuryAccountInput Bank() { return new TreasuryAccountInput { Name = "بنك مصر — جاري", AccountType = "bank", BankName = "بنك مصر", AccountNumber = "1234567890", Iban = "eg12 0002 0001 0000 0000 0012 3456 7" }; }
+
+        [Fact]
+        public async Task Cash_account_drops_bank_fields_and_defaults_opening_to_zero_today()
+        {
+            var repo = new FakeRepository(); var input = Cash(); input.BankName = "يجب تجاهله"; input.AccountNumber = "999";
+            await Service(repo).CreateAccountAsync(input, 1, CancellationToken.None);
+            Assert.Null(repo.Created.BankName); Assert.Null(repo.Created.AccountNumber); Assert.Equal(0, repo.Created.OpeningBalanceScaled); Assert.Equal("2026-10-28", repo.Created.OpeningDate);
+        }
+
+        [Fact]
+        public async Task Bank_account_normalizes_iban_and_scales_opening_balance()
+        {
+            var repo = new FakeRepository(); var input = Bank(); input.OpeningBalance = "1250.75"; input.OpeningDate = "2026-10-01";
+            await Service(repo).CreateAccountAsync(input, 1, CancellationToken.None);
+            Assert.Equal("EG120002000100000000001234567", repo.Created.Iban); Assert.Equal(12507500, repo.Created.OpeningBalanceScaled); Assert.Equal("2026-10-01", repo.Created.OpeningDate);
+        }
+
+        [Theory]
+        [InlineData("", "cash")]
+        [InlineData("x", "cash")]
+        [InlineData("حساب", "wallet")]
+        [InlineData("حساب", null)]
+        public async Task Invalid_name_or_type_is_rejected(string name, string type)
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => Service(new FakeRepository()).CreateAccountAsync(new TreasuryAccountInput { Name = name, AccountType = type }, 1, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task Bank_account_requires_bank_name_and_valid_iban_and_account_number()
+        {
+            var service = Service(new FakeRepository());
+            var noBank = Bank(); noBank.BankName = " ";
+            var badIban = Bank(); badIban.Iban = "12345";
+            var badNumber = Bank(); badNumber.AccountNumber = "رقم عربي";
+            await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAccountAsync(noBank, 1, CancellationToken.None));
+            await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAccountAsync(badIban, 1, CancellationToken.None));
+            await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAccountAsync(badNumber, 1, CancellationToken.None));
+        }
+
+        [Theory]
+        [InlineData("-5")]
+        [InlineData("10.005")]
+        [InlineData("abc")]
+        public async Task Opening_balance_must_be_non_negative_with_two_decimals(string opening)
+        {
+            var input = Cash(); input.OpeningBalance = opening;
+            await Assert.ThrowsAsync<ArgumentException>(() => Service(new FakeRepository()).CreateAccountAsync(input, 1, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task Deposit_scales_amount_and_builds_stable_request_hash()
+        {
+            var repo = new FakeRepository(); var service = Service(repo);
+            await service.DepositAsync(1, "100.25", "2026-10-28", " إيداع ", "key-1", 7, CancellationToken.None);
+            var first = repo.Entry;
+            Assert.Equal(1002500, first.AmountScaled); Assert.Equal("deposit", first.EntryType); Assert.Equal("إيداع", first.Description); Assert.Equal(7, first.ActorUserId);
+            await service.DepositAsync(1, "100.25", "2026-10-28", "إيداع", "key-1", 7, CancellationToken.None);
+            Assert.Equal(first.RequestHash, repo.Entry.RequestHash);
+            await service.DepositAsync(1, "100.26", "2026-10-28", "إيداع", "key-1", 7, CancellationToken.None);
+            Assert.NotEqual(first.RequestHash, repo.Entry.RequestHash);
+        }
+
+        [Theory]
+        [InlineData("0", "2026-10-28", "بيان", "k")]
+        [InlineData("-1", "2026-10-28", "بيان", "k")]
+        [InlineData("1.234", "2026-10-28", "بيان", "k")]
+        [InlineData("5", "28/10/2026", "بيان", "k")]
+        [InlineData("5", "2026-10-30", "بيان", "k")]
+        [InlineData("5", "2026-10-28", "", "k")]
+        [InlineData("5", "2026-10-28", "بيان", "")]
+        public async Task Invalid_entries_are_rejected_before_reaching_the_repository(string amount, string date, string description, string key)
+        {
+            var repo = new FakeRepository();
+            await Assert.ThrowsAsync<ArgumentException>(() => Service(repo).WithdrawAsync(1, amount, date, description, key, 1, CancellationToken.None));
+            Assert.Null(repo.Entry);
+        }
+
+        [Fact]
+        public async Task Transfer_rejects_same_account_and_accepts_optional_description()
+        {
+            var repo = new FakeRepository(); var service = Service(repo);
+            await Assert.ThrowsAsync<ArgumentException>(() => service.TransferAsync(1, 1, "10", "2026-10-28", null, "k", 1, CancellationToken.None));
+            await service.TransferAsync(1, 2, "10", "2026-10-28", null, "k", 1, CancellationToken.None);
+            Assert.Equal(100000, repo.Transfer.AmountScaled); Assert.Equal(string.Empty, repo.Transfer.Description); Assert.Equal(2, repo.Transfer.ToAccountId);
+        }
+
+        [Fact]
+        public async Task Summary_totals_cash_and_bank_separately()
+        {
+            var summary = await Service(new FakeRepository()).SummaryAsync(false, CancellationToken.None);
+            Assert.Equal(100m, summary.CashTotal); Assert.Equal(250m, summary.BankTotal); Assert.Equal(350m, summary.GrandTotal);
+        }
+
+        [Fact]
+        public async Task Movement_filters_are_validated_and_future_report_dates_are_allowed()
+        {
+            var repo = new FakeRepository(); var service = Service(repo);
+            await service.MovementsAsync(null, "2026-10-01", "2026-12-31", " IN ", null, CancellationToken.None);
+            Assert.Equal("in", repo.Query.Direction); Assert.Equal(200, repo.Query.Limit);
+            await Assert.ThrowsAsync<ArgumentException>(() => service.MovementsAsync(null, "2026-10-05", "2026-10-01", null, null, CancellationToken.None));
+            await Assert.ThrowsAsync<ArgumentException>(() => service.MovementsAsync(null, null, null, "sideways", null, CancellationToken.None));
+            await Assert.ThrowsAsync<ArgumentException>(() => service.MovementsAsync(null, null, null, null, 501, CancellationToken.None));
+        }
+    }
+}

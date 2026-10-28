@@ -15,5 +15,8 @@ namespace AlKhayal.Core.Models
         public string CreatedAt { get; set; }
         public string InvoiceType { get; set; }
         public long? PurchaseInvoiceId { get; set; }
+        public string DocumentStatus { get; set; }
+        public decimal ReturnedAmount { get; set; }
+        public bool Replayed { get; set; }
     }
 }

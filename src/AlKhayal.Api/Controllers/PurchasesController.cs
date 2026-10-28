@@ -126,7 +126,7 @@ namespace AlKhayal.Api.Controllers
         private static PurchaseDraftCommand Map(PurchaseDraftRequest request)
         {
             if (request == null) return null;
-            return new PurchaseDraftCommand { SupplierId = request.SupplierId, WarehouseId = request.WarehouseId, InvoiceNumber = request.InvoiceNumber, InvoiceDate = request.InvoiceDate, PaymentMode = request.PaymentMode, Notes = request.Notes,
+            return new PurchaseDraftCommand { SupplierId = request.SupplierId, WarehouseId = request.WarehouseId, InvoiceNumber = request.InvoiceNumber, InvoiceDate = request.InvoiceDate, PaymentMode = request.PaymentMode, TreasuryAccountId = request.TreasuryAccountId, Notes = request.Notes,
                 Lines = (request.Lines ?? new List<PurchaseLineRequest>()).Select(x => x == null ? null : new PurchaseInvoiceLine { VariantId = x.VariantId, ProductUnitId = x.ProductUnitId, Quantity = x.Quantity, PurchaseUnitPrice = x.PurchaseUnitPrice, SaleUnitPrice = x.SaleUnitPrice, LotNumber = x.LotNumber, ExpirationDate = x.ExpirationDate,
                     PhysicalUnits = (x.PhysicalUnits ?? new List<PurchasePhysicalUnitRequest>()).Select(u => u == null ? null : new PurchasePhysicalUnit { Serial = u.Serial, Imeis = u.Imeis ?? new List<string>() }).ToList() }).ToList() };
         }

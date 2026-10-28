@@ -17,6 +17,9 @@ var dashboardJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "
 var renderersJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "renderers.js"), "utf8");
 var catalogJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "catalog.js"), "utf8");
 var inventoryJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "inventory.js"), "utf8");
+var returnsJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "returns.js"), "utf8");
+var expensesJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "expenses.js"), "utf8");
+var treasuryJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "treasury.js"), "utf8");
 var uiJs = fs.readFileSync(path.join(root, "frontend", "js", "components", "ui.js"), "utf8");
 var settingsHubJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "settings-hub.js"), "utf8");
 var generalSettingsJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "general-settings.js"), "utf8");
@@ -27,7 +30,7 @@ var loginHtml = fs.readFileSync(path.join(root, "frontend", "login.html"), "utf8
 var loginJs = fs.readFileSync(path.join(root, "frontend", "js", "login.js"), "utf8");
 var mainFormCs = fs.readFileSync(path.join(root, "src", "AlKhayal.UI", "MainForm.cs"), "utf8");
 var serverHostCs = fs.readFileSync(path.join(root, "src", "AlKhayal.Server.Host", "AlKhayalServer.cs"), "utf8");
-var allowedRenderers = new Set(["dashboard", "settings", "settings-hub", "legacy-redirect", "under-construction", "business-activities", "feature-management", "user-management", "company-settings", "general-settings", "appearance-settings", "database-settings", "catalog-products", "catalog-product-form", "catalog-categories", "catalog-units", "warehouse-directory", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "sales-invoices", "sales-returns", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services", "purchase-management", "purchase-list", "purchase-returns"]);
+var allowedRenderers = new Set(["dashboard", "settings", "settings-hub", "legacy-redirect", "under-construction", "business-activities", "feature-management", "user-management", "company-settings", "general-settings", "appearance-settings", "database-settings", "catalog-products", "catalog-product-form", "catalog-categories", "catalog-units", "warehouse-directory", "treasury-accounts", "treasury-movement", "expense-categories", "expense-voucher", "returns-management", "return-details", "entity-list", "entity-form", "statement", "payment", "export", "report", "pos", "sales-invoices", "sales-returns", "invoice-lookup", "workflow", "invoice-editor", "picker", "returns", "printer", "barcode", "expense-form", "alerts", "threshold", "adjustment", "transfer", "manufacturing", "attendance", "permissions", "installments", "maintenance-intake", "maintenance-tracking", "cash-services", "purchase-management", "purchase-list", "purchase-returns"]);
 
 assert.ok(loginHtml.indexOf("مرحبًا بك في الخيال. يجب إنشاء حساب المدير للبدء.") >= 0, "login must contain the first-run Arabic message");
 assert.ok(loginHtml.indexOf("إنشاء حساب المدير") >= 0, "login must expose the first Admin action");
@@ -42,7 +45,14 @@ assert.strictEqual(new Set(sidebarRoutes).size,sidebarRoutes.length,"main sideba
 assert.deepStrictEqual(registry.modules.find(function(module){return module.id==="inventory";}).items,["products-list","warehouses-list"],"inventory sidebar must contain only the product and warehouse directories");
 assert.ok(indexHtml.indexOf('js/modules/inventory.js')>=0&&inventoryJs.indexOf('R["warehouse-directory"]=directory')>=0,"real warehouse renderer must load after catalog module");
 assert.ok(indexHtml.indexOf('js/modules/purchasing.js')>=0&&purchasingJs.indexOf('global.AlKhayalRenderers["purchase-management"]')>=0&&purchasingJs.indexOf('global.AlKhayalRenderers["purchase-returns"]')>=0,"purchasing and traceable return screens must load real renderers");
-assert.ok(purchasingJs.indexOf('"imei-tracking"')>=0&&purchasingJs.indexOf('returnMode: state.mode')>=0&&purchasingJs.indexOf('لا توجد حركة خزينة فعلية')>=0,"purchase UI must collect tracking identities and clearly distinguish refund recording from treasury posting");
+assert.deepStrictEqual(registry.modules.find(function (module) { return module.id === "purchases"; }).items, ["purchase-management", "purchases-list"], "purchases sidebar must retain only the original first and third pages");
+["purchase-supplier", "purchase-reports", "purchase-expiry", "purchase-confirm"].forEach(function (route) {
+  var screen = registry.screens.find(function (item) { return item.route === route; });
+  assert.strictEqual(screen.navigationHidden, true, "removed purchase page must be hidden: " + route);
+  assert.strictEqual(screen.renderer, "legacy-redirect");
+  assert.strictEqual(screen.redirectTo, route === "purchase-reports" ? "purchases-list" : "purchase-management");
+});
+assert.ok(purchasingJs.indexOf('"imei-tracking"')>=0&&purchasingJs.indexOf('returnMode: state.mode')>=0&&purchasingJs.indexOf('خزنة مرتجعات الشراء')>=0,"purchase UI must collect tracking identities and explain the cash refund destination");
 assert.ok(indexHtml.indexOf('js/modules/sales.js')>=0&&salesJs.indexOf('/api/sales/drafts')>=0&&salesJs.indexOf('/api/sales/')>=0&&salesJs.indexOf('/api/catalog/barcodes/lookup')>=0,"standard sales and touch cashier must use persistent invoice, posting, and barcode APIs");
 assert.ok(salesJs.indexOf('R["sales-returns"]=salesReturns')>=0&&salesJs.indexOf('/payments')>=0&&salesJs.indexOf('/returns')>=0,"sales collections and returns must use persisted APIs and dedicated renderers");
 assert.ok(salesJs.indexOf('الكاشير اللمسي')>=0&&salesJs.indexOf('data-checkout')<0&&modulesCss.indexOf('.touch-pos')>=0&&modulesCss.indexOf('touch-cashier-active')>=0,"touch cashier must use a dedicated bounded layout rather than the demonstration checkout");
@@ -142,8 +152,8 @@ assert.ok(catalogJs.indexOf('id="catalogResults"')>=0&&catalogJs.indexOf('id="ca
 assert.ok(uiJs.indexOf("beforeClose")>=0&&uiJs.indexOf("focusSelector")>=0&&uiJs.indexOf("event.key === \"Escape\"")>=0,"shared modal behavior must support close guards, initial focus, Escape, and focus trapping");
 var inventoryModule=registry.modules.find(function(module){return module.id==="inventory";});
 var customerModule=registry.modules.find(function(module){return module.id==="customers";});
-assert.deepStrictEqual(Array.from(customerModule.items),["customers-list","customer-statement","customer-credit-payment"],"customer sidebar must omit the requested export entry");
-["customers-list","customer-statement","customer-credit-payment"].forEach(function(route){assert.ok(customerModule.items.indexOf(route)>=0,"customer sidebar must keep "+route);});
+assert.deepStrictEqual(Array.from(customerModule.items),["customers-list","customer-statement"],"customer sidebar must expose customer management and the unified statement only");
+["customers-list","customer-statement"].forEach(function(route){assert.ok(customerModule.items.indexOf(route)>=0,"customer sidebar must keep "+route);});
 ["customer-add","customer-edit","customer-subscriptions"].forEach(function(route){assert.ok(customerModule.items.indexOf(route)<0,"customer sidebar must not expose the standalone "+route+" entry");assert.ok(sidebarRoutes.indexOf(route)<0,"removed customer entry must not stay in any sidebar group: "+route);});
 ["customer-add","customer-edit","customer-subscriptions"].forEach(function(route){var screen=registry.screens.find(function(item){return item.route===route;});assert.ok(screen,"customer route must remain registered: "+route);assert.ok(screen.navigationHidden,"customer action route must stay out of navigation and search: "+route);});
 ["customers-export","supplier-reports","supplier-paid-report","invoice-lookup","sales-reports","sales-confirm"].forEach(function(route){var screen=registry.screens.find(function(item){return item.route===route;});assert.ok(screen&&screen.navigationHidden,"requested sidebar removal must preserve a hidden compatibility route: "+route);assert.ok(sidebarRoutes.indexOf(route)<0,"requested route must not remain in a sidebar group: "+route);});
@@ -184,7 +194,7 @@ settingsEntries.forEach(function(screen){assert.ok(routes.indexOf(screen.route)>
 assert.ok(appJs.indexOf("typeof renderers[screen.renderer]")>=0,"startup must fail visibly when registry renderer code is missing");
 assert.ok(mainFormCs.indexOf("Network.clearBrowserCache")>=0&&serverHostCs.indexOf("no-store, no-cache, must-revalidate")>=0,"desktop startup and static serving must prevent shell/registry cache version skew");
 assert.ok(appJs.indexOf("resolveRoute")>=0&&appJs.indexOf("screen.redirectTo")>=0,"legacy route compatibility must use centralized route resolution");
-function verifyRuntimeRendererResolution(){var context={window:{AlKhayalUtils:{},AlKhayalUI:{},AlKhayalServices:{},AlKhayalCalculations:{},AlKhayalApi:{},AlKhayalFeatures:{},AlKhayalSettings:{},AlKhayalTheme:{}}};context.window.window=context.window;[renderersJs,catalogJs,inventoryJs,activityJs,featureJs,settingsHubJs,generalSettingsJs,userManagementJs,dashboardJs,salesJs,purchasingJs].forEach(function(source,index){vm.runInNewContext(source,context,{filename:"renderer-"+index+".js"});});registry.screens.forEach(function(screen){assert.strictEqual(typeof context.window.AlKhayalRenderers[screen.renderer],"function","route must resolve to executable renderer: "+screen.route+" -> "+screen.renderer);});}
+function verifyRuntimeRendererResolution(){var context={window:{AlKhayalUtils:{},AlKhayalUI:{},AlKhayalServices:{},AlKhayalCalculations:{},AlKhayalApi:{},AlKhayalFeatures:{},AlKhayalSettings:{},AlKhayalTheme:{}}};context.window.window=context.window;[renderersJs,catalogJs,inventoryJs,treasuryJs,expensesJs,returnsJs,activityJs,featureJs,settingsHubJs,generalSettingsJs,userManagementJs,dashboardJs,salesJs,purchasingJs].forEach(function(source,index){vm.runInNewContext(source,context,{filename:"renderer-"+index+".js"});});registry.screens.forEach(function(screen){assert.strictEqual(typeof context.window.AlKhayalRenderers[screen.renderer],"function","route must resolve to executable renderer: "+screen.route+" -> "+screen.renderer);});}
 verifyRuntimeRendererResolution();
 function verifyRepeatedAdministrationRendering(){var requests=0;var utils={normalize:function(value){return String(value||"").toLowerCase();},escape:function(value){return String(value==null?"":value);}};var ui={pageHeader:function(){return "";},field:function(){return "";}};var context={window:{AlKhayalUtils:utils,AlKhayalUI:ui,AlKhayalFeatures:{routeEnabled:function(){return true;}},AlKhayalApi:{request:function(){requests+=1;return new Promise(function(){});}},AlKhayalRenderers:{},confirm:function(){return true;}}};context.window.window=context.window;vm.runInNewContext(settingsHubJs,context,{filename:"settings-hub-repeat.js"});vm.runInNewContext(userManagementJs,context,{filename:"user-management-repeat.js"});function container(){var input={focus:function(){},setSelectionRange:function(){}};return{innerHTML:"",querySelector:function(selector){return selector==="[data-settings-search]"?input:null;},querySelectorAll:function(){return[];}};}var renderContext={registry:registry,user:{role:"administrator",id:"admin"},canNavigate:function(){return true;},navigate:function(){},isActive:function(){return true;}};var settings=registry.screens.find(function(screen){return screen.route==="settings-program";}),users=registry.screens.find(function(screen){return screen.route==="users-list";});for(var index=0;index<5;index+=1){context.window.AlKhayalRenderers["settings-hub"](settings,container(),renderContext);context.window.AlKhayalRenderers["user-management"](users,container(),renderContext);}assert.strictEqual(requests,5,"five User Management reopen cycles must issue one bounded list request each without recursive loads");}
 verifyRepeatedAdministrationRendering();
@@ -242,6 +252,10 @@ async function verifyAccessStateLifecycle() {
   resolveRequest({role:"cashier",screenIds:["dashboard"]});await Promise.all([first,second]);assert.strictEqual(notifications,0,"screen-owned access loads must not notify the shell");
   context.window.AlKhayalAccess.setSnapshot({role:"cashier",screenIds:["dashboard"]});assert.strictEqual(notifications,0,"unchanged access must not trigger reconciliation");
   context.window.AlKhayalAccess.setSnapshot({role:"cashier",screenIds:["dashboard","pos"]});assert.strictEqual(notifications,1,"an access change must notify exactly once");
+  var detail=registry.screens.find(function(screen){return screen.route==="return-details";});
+  assert.strictEqual(context.window.AlKhayalAccess.routeEnabled(detail),false,"returns details must require the management permission");
+  context.window.AlKhayalAccess.setSnapshot({role:"cashier",screenIds:["returns-overview"]});
+  assert.strictEqual(context.window.AlKhayalAccess.routeEnabled(detail),true,"contextual returns details inherit management access");
 }
 
 async function verifySettingsStateLifecycle() {
@@ -602,6 +616,10 @@ async function verifySalesSearchMountedInput() {
   assert.ok(posBox.node.querySelector(".touch-product-grid").innerHTML.indexOf('data-product="6"')>=0,"pasting a search term must update results without removing the input");
   assert.strictEqual(posBox.node.querySelector("[data-search]"),pasteInput,"paste search must preserve the focused input node");
   assert.strictEqual(posState.lines.length,1,"paste must not be misread as a scanner sale");
+  assert.ok(posBox.innerHTML().includes("خزنة إيراد الوردية"), "touch POS must explain the automatic cash receipt destination");
+  posState.invoice={id:99,status:"posted",paymentMode:"cash",totalScaled:100000,paidScaled:100000,treasuryMovementId:7,treasuryAccountName:"إيراد الوردية"};
+  test.draw();
+  assert.ok(posBox.innerHTML().includes("تم إيداع") && posBox.innerHTML().includes("إيراد الوردية"), "posted POS must confirm the persisted treasury receipt");
   // --- Invoice history: typing refreshes only the dedicated results region. ---
   var listContext = buildContext();
   runModule(listContext);
@@ -641,4 +659,4 @@ async function verifySupplierPagedSearch(){
   assert.ok(host.innerHTML.indexOf("NEW")>=0&&host.innerHTML.indexOf("OLD")<0,"late supplier results cannot overwrite the newer search");
 }
 
-Promise.all([require("./inventory-tests.js")(),verifyFeatureStateLifecycle(),verifyAccessStateLifecycle(),verifySettingsStateLifecycle(),verifyCustomerManagementCreateAndEdit(),verifyEntityListSearchKeepsFocus(),verifySalesSearchMountedInput(),verifySearchInputFocusSurvival(),verifySupplierPagedSearch()]).then(function () { console.log("Frontend registry, settings/feature/access lifecycle, user management, customer management, entity-list and settings/catalog search focus, and calculation tests passed (" + routes.length + " screens)."); }).catch(function (error) { console.error(error); process.exitCode = 1; });
+Promise.all([require("./invoice-return-badges-tests.js")(),require("./returns-tests.js")(),require("./expense-tests.js")(),require("./customer-statement-tests.js")(),require("./supplier-accounts-tests.js")(),require("./purchasing-tests.js")(),require("./treasury-tests.js")(),require("./inventory-tests.js")(),verifyFeatureStateLifecycle(),verifyAccessStateLifecycle(),verifySettingsStateLifecycle(),verifyCustomerManagementCreateAndEdit(),verifyEntityListSearchKeepsFocus(),verifySalesSearchMountedInput(),verifySearchInputFocusSurvival(),verifySupplierPagedSearch()]).then(function () { console.log("Frontend registry, settings/feature/access lifecycle, user management, customer management, entity-list and settings/catalog search focus, and calculation tests passed (" + routes.length + " screens)."); }).catch(function (error) { console.error(error); process.exitCode = 1; });

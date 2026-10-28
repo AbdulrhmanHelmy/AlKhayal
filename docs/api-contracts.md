@@ -1,10 +1,40 @@
-﻿# API contracts
+# API contracts
+
+Sales return posting may now make the sales-returns cashbox negative. For credit invoices it reduces current customer debt first (never below zero), then refunds the residual cash, including general-account collections. This changes existing return behavior without changing request contracts. Other withdrawal endpoints retain no-overdraft rules. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
+
+Purchase/sales invoice GET and list responses include `hasReturns`, `isFullyReturned` and `returnStatus` (`none` / `partial` / `full`), derived from persisted return quantities without changing `status`. See [returns-management.md](returns-management.md).
+
+`/api/returns` now exposes the unified persisted list/post contract, `/invoice` exact original-invoice lookup and `/{type}/{id}` detail. Session, `returns-overview` permission and mutation CSRF are enforced. Sales cash returns withdraw only from the sales-returns cashbox without touching shift revenue; purchase cash returns deposit into the purchase-returns cashbox. See [returns-management.md](returns-management.md).
+
+Sales invoice/list/post responses expose nullable `treasuryAccountId`, `treasuryAccountName` and `treasuryMovementId`. Cash posting automatically deposits in the shift-revenue cashbox in the same transaction; POS permission suffices without manual treasury access. See [sales-shift-revenue.md](sales-shift-revenue.md).
+
+`/api/expenses/categories` supports GET/POST for saved types; `/api/expenses/vouchers` supports GET/POST for immutable idempotent expense documents with selected treasury withdrawals. Session/screen checks protect reads and writes; CSRF protects mutations. Full contracts: [expenses.md](expenses.md).
 
 Unauthenticated first-run routes are limited to `GET /api/auth/bootstrap-status` and `POST /api/auth/bootstrap`. Status returns `{ required: true|false }`. Bootstrap accepts only `{ username, password, confirmPassword }`; the server fixes the role to `administrator`, requires a nonblank password with matching confirmation, atomically requires an empty `Users` table, and returns the normal session cookie on success. Any existing active or inactive user makes the POST return `409 bootstrap_unavailable`.
 
 New monetary request fields accept invariant decimal text with at most two fractional digits. Quantity fields keep their existing scale-6 contract. Catalog price DTOs and formatted purchasing/inventory financial fields use two display digits; scaled integer fields remain scale 4 for exact auditing. Finalized invoice and supplier-account totals use nearest-piastre, midpoint-away-from-zero rounding.
 
 Product configuration accepts `batch-tracking`, `expiry-dates`, `serial-numbers`, and `imei-tracking` in `capabilityKeys`. Application automatically includes batch when expiry is selected and serial when IMEI is selected. Catalog summaries include `hasBatchTracking` alongside the existing tracking flags. Physical intake endpoints are deferred; see [phase-2-task-3-tracking.md](phase-2-task-3-tracking.md).
+
+## Treasury and bank accounts
+
+Customer statement GET and transaction POST now enforce `customer-statement` screen access for cashiers in addition to session/CSRF rules. `GET /api/customers/{id}/statement` includes unfiltered `currentBalance` and movement `notes`; `closingBalance` still represents the selected period. The existing transaction API supports both inline statement actions (`increase`, `collection`); historical idempotency rules are unchanged. Overflow returns 400 validation and logged database failures return 503 with retry identity preserved. See [customer-statement.md](customer-statement.md).
+
+`POST /api/suppliers/{id}/payments` now requires `treasuryAccountId` and effective `supplier-payment` permission plus the session/CSRF checks. It withdraws the amount from that account atomically with supplier settlement and invoice allocations; responses/history include `treasuryAccountId` and `treasuryMovementId`. Omitting invoice IDs automatically allocates by due date (invoice date fallback), then creation timestamp. Reads reflect allocated `paidAmount`/`remaining`. Missing source returns 400, insufficient funds/source conflict returns 409 with a `treasury_*` code, and logged database failures return 503 while preserving retry identity. Existing financial rows are not retroactively charged. See [supplier-payment-treasury.md](supplier-payment-treasury.md).
+
+Supplier Accounts extends the existing `POST /api/suppliers/{id}/invoices` with optional `operationKey` (required by the new UI). Identical actor-bound requests replay the original invoice; changed supplier/payload/actor or a key owned by another financial operation returns `409 operation_conflict`. Invoice creation, the linked immutable supplier ledger entry and payable/credit projection are atomic. `GET /api/suppliers/{id}/invoices` additionally returns `documentStatus`, `returnedAmount` and return-adjusted nonnegative `remaining`. Purchase drafts cannot receive payments; payment DTOs select either `invoiceId` or `purchaseInvoiceId`. New debt invoice and payment inputs may use exact decimal text. See [supplier-accounts.md](supplier-accounts.md).
+
+Cash purchase drafts now require `treasuryAccountId`; credit drafts require it to be null. Invoice reads include `treasuryAccountId`, `treasuryAccountName`, and nullable `treasuryMovementId`. `POST /api/purchases/{id}/post` atomically withdraws the full total from that account with stock receipt/FIFO, supplier settlement and audit. Missing account/funds return a `treasury_*` conflict and leave the draft/funds/stock unchanged. Purchase Management screen access permits account lookup and purchase-bound payment without granting manual treasury mutation permissions. Historical posted invoices are not retroactively charged. See [purchase-treasury.md](purchase-treasury.md).
+
+All `/api/treasury/*` endpoints require the session cookie and return `{ success, data, error }`; mutations require `X-CSRF-Token`. Reading accepts any effective `accounts-list`, `account-deposit` or `account-withdraw` grant. Account management requires `accounts-list`; deposit and withdrawal each require their own screen grant. Administrators retain full access.
+
+- `GET /api/treasury/accounts`: all nondeleted cash/bank accounts with `id`, `code`, `name`, `type` (`cash`/`bank`), `notes`, `version`, exact `balance` text and internal `balanceScaled`. The frontend displays the exact string.
+- `POST /api/treasury/accounts`: `{ code, name, type, notes? }`; returns `201` with the zero-balance account.
+- `PUT /api/treasury/accounts/{id}`: those fields plus current `version`; returns the saved account. This cannot edit money.
+- `DELETE /api/treasury/accounts/{id}?version=N`: deletes only unused accounts, retaining the tombstone/audit; returns `{ deleted: true }`.
+- `POST /api/treasury/deposit` and `POST /api/treasury/withdraw`: `{ accountId, amount, notes?, operationKey }`, with positive invariant amount text and at most two decimals. Returns `201` with `id`, `accountId`, `type`, exact `amount`/`balanceAfter` text, underlying scale-4 fields, UTC `createdUtc`, `notes`, and `replayed`. A replay returns the original historical post-balance; read accounts for current balances. Request hashes are internal.
+
+Errors include `400 validation`, `404 not_found`, `409 duplicate_code`, `version_conflict`, `account_in_use`, `insufficient_balance`, `balance_overflow`, and `operation_conflict`, plus authentication/CSRF/screen denial. Database errors are logged and return Arabic `503 database_unavailable`; the client retains retry identity. See [treasury.md](treasury.md) for atomicity and integration boundaries.
 
 ## Product catalog
 

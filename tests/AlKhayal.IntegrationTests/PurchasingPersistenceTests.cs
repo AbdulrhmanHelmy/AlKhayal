@@ -53,7 +53,7 @@ namespace AlKhayal.IntegrationTests
                 Assert.Equal(12700, draft.TotalScaled);
                 var posted = await purchaseService.PostAsync(draft.Id,"real-post-1",1,CancellationToken.None); Assert.True(posted.Succeeded,posted.ErrorMessage);
                 Assert.True((await purchaseService.PostAsync(draft.Id,"real-post-1",1,CancellationToken.None)).Replayed);
-                var cashDraft = await purchaseService.CreateDraftAsync(new PurchaseDraftCommand { SupplierId=secondSupplier.Id, WarehouseId=1, InvoiceNumber="REAL-CASH-1", InvoiceDate="2026-10-24", PaymentMode="cash", Lines=new System.Collections.Generic.List<PurchaseInvoiceLine> {
+                var cashDraft = await purchaseService.CreateDraftAsync(new PurchaseDraftCommand { SupplierId=secondSupplier.Id, WarehouseId=1, InvoiceNumber="REAL-CASH-1", InvoiceDate="2026-10-24", PaymentMode="cash", TreasuryAccountId=await FundPurchaseAccount(f), Lines=new System.Collections.Generic.List<PurchaseInvoiceLine> {
                     new PurchaseInvoiceLine { VariantId=f.VariantId, ProductUnitId=f.UnitId, Quantity="1", PurchaseUnitPrice="0.99", SaleUnitPrice="1.25" }
                 } }, 1, CancellationToken.None);
                 Assert.Equal(9900, cashDraft.TotalScaled);
@@ -133,7 +133,7 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryCostLayers WHERE Basis='receipt'"));
                     Assert.Equal(83250, c.ExecuteScalar<long>("SELECT ValueScaled FROM InventoryCostLayers WHERE Basis='receipt'"));
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries WHERE PurchaseInvoiceId=@Id AND EntryType='purchase'", new { Id = draft.Id }));
-                    Assert.Equal(23, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(31, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));
                 }
                 Assert.True(await f.Store.VerifyProjectionAsync(CancellationToken.None));
@@ -141,14 +141,14 @@ namespace AlKhayal.IntegrationTests
         }
 
         [Fact]
-        public async Task Cash_purchase_creates_equal_payable_and_payment_entries_without_treasury_rows()
+        public async Task Cash_purchase_creates_equal_payable_and_payment_entries_with_treasury_withdrawal()
         {
             using (var f = new Fixture())
             {
                 var suppliers = new SqliteSupplierRepository(f.Cs);
                 var supplierId = suppliers.Add(new Supplier { Code = "CASH-" + Guid.NewGuid().ToString("N").Substring(0, 8), Name = "مورد نقدي", Phone = "01000000000", Status = "نشط" });
                 var service = new PurchaseService(new SqlitePurchaseRepository(f.Cs), suppliers);
-                var draft = await service.CreateDraftAsync(new PurchaseDraftCommand { SupplierId = supplierId, WarehouseId = 1, InvoiceNumber = "CASH-1", InvoiceDate = "2026-10-24", PaymentMode = "cash", Lines = new System.Collections.Generic.List<PurchaseInvoiceLine> { new PurchaseInvoiceLine { VariantId = f.VariantId, ProductUnitId = f.UnitId, Quantity = "1", PurchaseUnitPrice = "10.13", SaleUnitPrice = "15" } } }, 1, CancellationToken.None);
+                var draft = await service.CreateDraftAsync(new PurchaseDraftCommand { SupplierId = supplierId, WarehouseId = 1, InvoiceNumber = "CASH-1", InvoiceDate = "2026-10-24", PaymentMode = "cash", TreasuryAccountId = await FundPurchaseAccount(f), Lines = new System.Collections.Generic.List<PurchaseInvoiceLine> { new PurchaseInvoiceLine { VariantId = f.VariantId, ProductUnitId = f.UnitId, Quantity = "1", PurchaseUnitPrice = "10.13", SaleUnitPrice = "15" } } }, 1, CancellationToken.None);
                 var result = await service.PostAsync(draft.Id, "cash-post-1", 1, CancellationToken.None);
                 Assert.True(result.Succeeded, result.ErrorMessage);
                 Assert.Equal(0m, suppliers.GetById(supplierId).Payable);

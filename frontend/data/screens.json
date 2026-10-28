@@ -8,22 +8,14 @@
       "icon": "ع",
       "items": [
         "customers-list",
-        "customer-statement",
-        "customer-credit-payment"
+        "customer-statement"
       ]
     },
     {
       "id": "suppliers",
       "title": "إدارة الموردين",
       "icon": "م",
-      "items": [
-        "suppliers-list",
-        "supplier-purchases",
-        "supplier-credit",
-        "supplier-balance",
-        "supplier-payment",
-        "supplier-payment-confirm"
-      ]
+      "items": ["suppliers-list", "supplier-payment"]
     },
     {
       "id": "purchases",
@@ -31,11 +23,7 @@
       "icon": "ش",
       "items": [
         "purchase-management",
-        "purchase-supplier",
-        "purchases-list",
-        "purchase-reports",
-        "purchase-expiry",
-        "purchase-confirm"
+        "purchases-list"
       ]
     },
     {
@@ -52,7 +40,7 @@
       "id": "returns",
       "title": "المرتجعات",
       "icon": "ر",
-      "items": ["returns-overview", "sales-returns", "purchase-returns"]
+      "items": ["returns-overview", "return-details"]
     },
     {
       "id": "inventory",
@@ -66,9 +54,8 @@
       "icon": "ن",
       "items": [
         "accounts-list",
-        "account-add",
-        "accounts-balance",
-        "account-movements"
+        "account-deposit",
+        "account-withdraw"
       ]
     },
     {
@@ -77,9 +64,7 @@
       "icon": "ص",
       "items": [
         "expenses-list",
-        "expense-categories",
-        "expense-add",
-        "financial-movement"
+        "expense-add"
       ]
     },
     {
@@ -151,10 +136,10 @@
     },
     { "route": "product-add", "label": "إضافة منتجات", "icon": "◇" },
     { "route": "customer-statement", "label": "حسابات العملاء", "icon": "ع" },
-    { "route": "supplier-balance", "label": "حسابات الموردين", "icon": "م" },
+    { "route": "supplier-payment", "label": "حسابات الموردين", "icon": "م" },
     { "route": "returns-overview", "label": "المرتجعات", "icon": "↶" },
     { "route": "accounts-balance", "label": "الرصيد", "icon": "ج" },
-    { "route": "financial-movement", "label": "حركة مالية", "icon": "⇄" },
+    { "route": "expense-add", "label": "سند صرف", "icon": "⇄" },
     { "route": "low-stock", "label": "النواقص", "icon": "!" },
     { "route": "dashboard", "label": "المزيد", "icon": "•••", "more": true }
   ],
@@ -319,7 +304,7 @@
       "route": "customer-statement",
       "module": "العملاء",
       "title": "كشف حساب العميل",
-      "description": "كشف تجريبي بالحركات والرصيد الجاري.",
+      "description": "مديونية العميل وحركات حسابه المحفوظة، مع التحصيل وإضافة المديونية.",
       "renderer": "statement",
       "data": "customers",
       "party": "customer"
@@ -328,10 +313,10 @@
       "route": "customer-credit-payment",
       "module": "العملاء",
       "title": "دفع آجل للعميل",
-      "description": "محاكاة تحصيل دفعة من رصيد عميل آجل.",
-      "renderer": "payment",
-      "data": "customers",
-      "party": "customer"
+      "description": "رابط قديم يحوّل إلى كشف حساب العميل.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "customer-statement"
     },
 
     {
@@ -401,34 +386,36 @@
       "route": "supplier-credit",
       "module": "الموردين",
       "title": "حسابات الموردين آجلاً",
-      "description": "حساب كل مورد وفواتيره الآجلة مع زر الدفع الآجل، من قاعدة البيانات.",
-      "renderer": "statement",
-      "data": "suppliers",
-      "party": "supplier"
+      "description": "رابط قديم يحوّل إلى حسابات الموردين.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "supplier-payment"
     },
 
     {
       "route": "supplier-purchases",
       "module": "الموردين",
       "title": "مشتريات الموردين",
-      "description": "هذه الشاشة قيد الإنشاء.",
-      "renderer": "under-construction"
+      "description": "رابط قديم يحوّل إلى حسابات الموردين.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "supplier-payment"
     },
     {
       "route": "supplier-balance",
       "module": "الموردين",
       "title": "أرصدة الموردين",
-      "description": "اختر موردًا لمراجعة كشف حسابه المحفوظ.",
-      "renderer": "statement",
-      "data": "suppliers",
-      "party": "supplier"
+      "description": "رابط قديم يحوّل إلى حسابات الموردين.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "supplier-payment"
     },
 
     {
       "route": "supplier-payment",
       "module": "الموردين",
-      "title": "سداد حساب المورد",
-      "description": "تسجيل دفعة للمورد (على فاتورة أو على الحساب) وتحديث رصيده في قاعدة البيانات.",
+      "title": "حسابات الموردين",
+      "description": "كل مورد وفواتيره، وإضافة فاتورة مديونية جديدة وسداد المستحق في قاعدة البيانات.",
       "renderer": "payment",
       "data": "suppliers",
       "party": "supplier"
@@ -437,24 +424,28 @@
       "route": "supplier-payment-confirm",
       "module": "الموردين",
       "title": "مراجعة سداد الموردين",
-      "description": "هذه الشاشة قيد الإنشاء.",
-      "renderer": "under-construction"
+      "description": "رابط قديم يحوّل إلى حسابات الموردين.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "supplier-payment"
     },
     {
       "route": "supplier-reports",
       "module": "الموردين",
       "title": "تقارير الموردين",
-      "description": "هذه الشاشة قيد الإنشاء.",
-      "renderer": "under-construction",
-      "navigationHidden": true
+      "description": "رابط قديم يحوّل إلى حسابات الموردين.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "supplier-payment"
     },
     {
       "route": "supplier-paid-report",
       "module": "الموردين",
       "title": "تقرير مدفوعات الموردين",
-      "description": "هذه الشاشة قيد الإنشاء.",
-      "renderer": "under-construction",
-      "navigationHidden": true
+      "description": "رابط قديم يحوّل إلى حسابات الموردين.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "supplier-payment"
     },
    
     {
@@ -470,9 +461,10 @@
       "route": "purchase-supplier",
       "module": "المشتريات",
       "title": "إدارة الموردين أثناء الشراء",
-      "description": "اختيار مورد ومراجعة رصيده قبل الفاتورة.",
-      "renderer": "picker",
-      "data": "suppliers"
+      "description": "اختيار المورد يتم من إدارة المشتريات.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "purchase-management"
     },
     {
       "route": "purchases-list",
@@ -486,54 +478,62 @@
       "route": "purchase-reports",
       "module": "المشتريات",
       "title": "تقارير المشتريات",
-      "description": "تحليل المشتريات حسب المورد والفترة.",
-      "renderer": "report",
-      "data": "purchases",
-      "report": "purchases"
+      "description": "مراجعة الفواتير من قائمة المشتريات.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "purchases-list"
     },
     {
       "route": "purchase-expiry",
       "module": "المشتريات",
       "title": "تعيين تاريخ صلاحية المنتجات",
-      "description": "تحديد تواريخ صلاحية أصناف فاتورة الشراء تجريبيًا.",
-      "renderer": "workflow",
-      "data": "products",
-      "workflow": "expiry"
+      "description": "تحديد صلاحية الأصناف يتم من فاتورة الشراء.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "purchase-management"
     },
     {
       "route": "purchase-confirm",
       "module": "المشتريات",
       "title": "تأكيد عملية الشراء",
-      "description": "معاينة الفاتورة قبل تأكيد تجريبي لا يرحّل المخزون.",
-      "renderer": "workflow",
-      "data": "purchases",
-      "workflow": "purchase-confirm"
+      "description": "تأكيد الفاتورة يتم من إدارة المشتريات.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "purchase-management"
     },
 
     {
       "route": "returns-overview",
       "module": "المرتجعات",
-      "title": "نظرة عامة على المرتجعات",
-      "description": "ملخص موحد لمرتجعات البيع والشراء.",
-      "renderer": "entity-list",
-      "data": "returns"
+      "title": "إدارة المرتجعات",
+      "description": "المرتجعات المحفوظة وإضافة مرتجع برقم فاتورة البيع أو الشراء.",
+      "renderer": "returns-management"
+    },
+    {
+      "route": "return-details",
+      "module": "المرتجعات",
+      "title": "تفاصيل المرتجع",
+      "description": "اختيار مرتجع وعرض أصنافه وتسويته وحركات الخزنة المرتبطة.",
+      "renderer": "return-details",
+      "permissionRoute": "returns-overview"
     },
     {
       "route": "sales-returns",
       "module": "المرتجعات",
       "title": "إدارة مرتجعات المبيعات",
       "description": "اختيار فاتورة البيع وتحديد الكمية المرتجعة مع إعادة المخزون ورد المبلغ أو تخفيض مديونية العميل.",
-      "renderer": "sales-returns",
-      "data": "sales",
-      "returnType": "sales"
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "returns-overview"
     },
     {
       "route": "purchase-returns",
       "module": "المرتجعات",
       "title": "إدارة مرتجعات المشتريات",
       "description": "إرجاع بضاعة من إيصال الشراء الأصلي مع تحديد تسوية المورد وتكلفة FIFO.",
-      "renderer": "purchase-returns",
-      "data": "purchases"
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "returns-overview"
     },
 
     {
@@ -612,70 +612,83 @@
     {
       "route": "expenses-list",
       "module": "المصروفات والسندات",
-      "title": "قائمة المصروفات والسندات",
-      "description": "سجل المصروفات وحالات الاعتماد.",
-      "renderer": "entity-list",
-      "data": "expenses"
+      "title": "إدارة المصروفات",
+      "description": "إضافة أنواع المصروفات وحفظها لاستخدامها في سندات الصرف.",
+      "renderer": "expense-categories"
     },
     {
       "route": "expense-categories",
       "module": "المصروفات والسندات",
       "title": "أنواع المصروفات",
-      "description": "إدارة تصنيفات المصروفات داخل الجلسة.",
-      "renderer": "workflow",
-      "data": "expenses",
-      "workflow": "expense-categories"
+      "description": "تم نقل أنواع المصروفات إلى إدارة المصروفات.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "expenses-list"
     },
     {
       "route": "expense-add",
       "module": "المصروفات والسندات",
-      "title": "إضافة مصروف",
-      "description": "سند مصروف تجريبي لا يرحّل إلى حسابات فعلية.",
-      "renderer": "expense-form",
-      "data": "expenses"
+      "title": "سند صرف",
+      "description": "تسجيل مصروف من نوع محفوظ وخصمه من الخزنة أو البنك.",
+      "renderer": "expense-voucher"
     },
     {
       "route": "financial-movement",
       "module": "المصروفات والسندات",
       "title": "حركة مالية",
-      "description": "سجل موحد للحركات المالية التجريبية.",
-      "renderer": "entity-list",
-      "data": "transactions"
+      "description": "تم نقل تسجيل المصروفات إلى سند صرف.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "expense-add"
     },
 
     {
       "route": "accounts-list",
       "module": "الخزنة والبنك",
       "title": "قائمة الخزنة والبنك",
-      "description": "الخزن والحسابات البنكية وأرصدة العرض.",
-      "renderer": "entity-list",
-      "data": "accounts"
+      "description": "إدارة الخزن والبنوك وأرصدتها المحفوظة.",
+      "renderer": "treasury-accounts"
+    },
+    {
+      "route": "account-deposit",
+      "module": "الخزنة والبنك",
+      "title": "إيداع رصيد",
+      "description": "إيداع رصيد في خزنة أو بنك مع حفظ الحركة.",
+      "renderer": "treasury-movement"
+    },
+    {
+      "route": "account-withdraw",
+      "module": "الخزنة والبنك",
+      "title": "سحب رصيد",
+      "description": "سحب رصيد من خزنة أو بنك مع حفظ الحركة.",
+      "renderer": "treasury-movement"
     },
     {
       "route": "account-add",
       "module": "الخزنة والبنك",
       "title": "إضافة خزنة جديدة",
-      "description": "إضافة خزنة مؤقتة إلى جلسة العرض.",
-      "renderer": "entity-form",
-      "data": "accounts",
-      "mode": "add"
+      "description": "رابط قديم يحول إلى قائمة الخزنة والبنك.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "accounts-list"
     },
     {
       "route": "accounts-balance",
       "module": "الخزنة والبنك",
       "title": "الرصيد الحالي للخزنة والبنك",
-      "description": "ملخص أرصدة تجريبي دون ادعاء مطابقة مصرفية.",
-      "renderer": "report",
-      "data": "accounts",
-      "report": "balances"
+      "description": "رابط قديم يحول إلى قائمة الخزنة والبنك.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "accounts-list"
     },
     {
       "route": "account-movements",
       "module": "الخزنة والبنك",
       "title": "حركة الخزنة والبنك",
-      "description": "تصفية الحركات حسب الحساب والاتجاه.",
-      "renderer": "entity-list",
-      "data": "transactions"
+      "description": "رابط قديم يحول إلى قائمة الخزنة والبنك.",
+      "renderer": "legacy-redirect",
+      "navigationHidden": true,
+      "redirectTo": "accounts-list"
     },
 
     {

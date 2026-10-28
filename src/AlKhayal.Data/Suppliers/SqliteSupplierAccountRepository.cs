@@ -17,14 +17,26 @@ namespace AlKhayal.Data.Suppliers
         private readonly string _connectionString;
         public SqliteSupplierAccountRepository(string connectionString) { _connectionString = connectionString; }
 
-        public SupplierInvoice AddInvoice(long supplierId, string invoiceNumber, string invoiceDate, string dueDate, decimal total, string notes)
+        public SupplierInvoice AddInvoice(long supplierId, string invoiceNumber, string invoiceDate, string dueDate, decimal total, string notes, string operationKey = null, string requestHash = null, long? actorUserId = null)
         {
             using (var connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
                 using (var tx = connection.BeginTransaction())
                 {
-                    var supplier = connection.QuerySingleOrDefault<Supplier>("SELECT Id, Name, Payable FROM Suppliers WHERE Id=@Id", new { Id = supplierId }, tx);
+                    if (operationKey != null)
+                    {
+                        var previous = connection.QuerySingleOrDefault<SupplierLedgerEntry>("SELECT * FROM SupplierLedgerEntries WHERE OperationKey=@operationKey", new { operationKey }, tx);
+                        if (previous != null)
+                        {
+                            if (previous.SupplierId != supplierId || previous.EntryType != "legacy_invoice" || !previous.SupplierInvoiceId.HasValue || previous.RequestHash != requestHash)
+                                throw new InvalidOperationException("مفتاح العملية مستخدم لفاتورة أو حركة مختلفة.");
+                            var saved = connection.QuerySingle<SupplierInvoice>("SELECT * FROM SupplierInvoices WHERE Id=@Id AND SupplierId=@supplierId", new { Id = previous.SupplierInvoiceId.Value, supplierId }, tx);
+                            saved.Replayed = true; saved.DocumentStatus = "posted"; saved.InvoiceType = "legacy";
+                            tx.Commit(); return Shape(saved);
+                        }
+                    }
+                    var supplier = connection.QuerySingleOrDefault<Supplier>("SELECT Id, Name, Payable, SupplierCredit FROM Suppliers WHERE Id=@Id", new { Id = supplierId }, tx);
                     if (supplier == null) throw new KeyNotFoundException("المورد غير موجود.");
                     if (total <= 0) throw new ArgumentException("إجمالي الفاتورة يجب أن يكون أكبر من صفر.");
                     var number = string.IsNullOrWhiteSpace(invoiceNumber) ? "SI-" + Guid.NewGuid().ToString("N").Substring(0, 10).ToUpperInvariant() : invoiceNumber;
@@ -32,12 +44,13 @@ namespace AlKhayal.Data.Suppliers
                     if (duplicates > 0) throw new ArgumentException("رقم الفاتورة مسجل بالفعل لهذا المورد.");
                     var now = DateTime.UtcNow.ToString("o");
                     var id = connection.ExecuteScalar<long>("INSERT INTO SupplierInvoices(SupplierId, InvoiceNumber, InvoiceDate, DueDate, Total, PaidAmount, Notes, CreatedAt) VALUES(@SupplierId,@Number,@InvoiceDate,@DueDate,@Total,0,@Notes,@Now); SELECT last_insert_rowid();", new { SupplierId = supplierId, Number = number, InvoiceDate = invoiceDate, DueDate = dueDate, Total = total, Notes = notes ?? string.Empty, Now = now }, tx);
-                    var newPayable = Math.Round(supplier.Payable + total, 2, MidpointRounding.AwayFromZero);
-                    var updated = connection.Execute("UPDATE Suppliers SET Payable=@Payable, UpdatedAt=@Now WHERE Id=@Id", new { Payable = newPayable, Now = now, Id = supplierId }, tx);
+                    var newNet = checked(supplier.Payable - supplier.SupplierCredit + total);
+                    var checkedNetScaled = checked((long)(newNet * 10000m));
+                    var updated = connection.Execute("UPDATE Suppliers SET Payable=@Payable,SupplierCredit=@Credit, UpdatedAt=@Now WHERE Id=@Id", new { Payable = Math.Max(newNet,0), Credit = Math.Max(-newNet,0), Now = now, Id = supplierId }, tx);
                     if (updated != 1) throw new InvalidOperationException("تعذر تحديث رصيد المورد؛ لم يتم اعتماد الفاتورة.");
-                    connection.Execute("INSERT INTO SupplierLedgerEntries(SupplierId,EntryType,AmountScaled,OccurredOn,Reference,Notes,CreatedUtc) VALUES(@SupplierId,'legacy_invoice',@Amount,@Date,@Reference,@Notes,@Now)", new { SupplierId = supplierId, Amount = checked((long)Math.Round(total * 10000m, 0, MidpointRounding.AwayFromZero)), Date = invoiceDate, Reference = "SI-" + id, Notes = "فاتورة مورد محفوظة عبر سجل الفواتير السابق", Now = now }, tx);
+                    connection.Execute("INSERT INTO SupplierLedgerEntries(SupplierId,EntryType,AmountScaled,OccurredOn,Reference,SupplierInvoiceId,OperationKey,RequestHash,Notes,CreatedUtc) VALUES(@SupplierId,'legacy_invoice',@Amount,@Date,@Reference,@id,@operationKey,@requestHash,@Notes,@Now)", new { SupplierId = supplierId, Amount = checked((long)(total * 10000m)), Date = invoiceDate, Reference = "SI-" + id, id, operationKey, requestHash, Notes = "فاتورة مديونية مورد" + (actorUserId.HasValue ? " — سجلها المستخدم " + actorUserId.Value : ""), Now = now }, tx);
                     tx.Commit();
-                    return Shape(new SupplierInvoice { Id = id, SupplierId = supplierId, InvoiceNumber = number, InvoiceDate = invoiceDate, DueDate = dueDate, Total = total, PaidAmount = 0, Notes = notes ?? string.Empty, CreatedAt = now });
+                    return Shape(new SupplierInvoice { Id = id, SupplierId = supplierId, InvoiceNumber = number, InvoiceDate = invoiceDate, DueDate = dueDate, Total = total, PaidAmount = 0, Notes = notes ?? string.Empty, CreatedAt = now, InvoiceType = "legacy", DocumentStatus = "posted" });
                 }
             }
         }
@@ -120,20 +133,38 @@ namespace AlKhayal.Data.Suppliers
             }
         }
 
-        private static List<SupplierInvoice> GetInvoicesInternal(SQLiteConnection connection, long supplierId)
+        internal static List<SupplierInvoice> GetInvoicesInternal(SQLiteConnection connection, long supplierId, SQLiteTransaction tx = null)
         {
-            var rows = connection.Query<SupplierInvoice>(@"SELECT i.Id,i.SupplierId,i.InvoiceNumber,i.InvoiceDate,i.DueDate,i.Total,
-                i.PaidAmount+COALESCE((SELECT -SUM(l.AmountScaled)/10000.0 FROM SupplierLedgerEntries l WHERE l.SupplierInvoiceId=i.Id AND l.EntryType='payment'),0) PaidAmount,
-                i.Notes,i.CreatedAt,'legacy' InvoiceType,NULL PurchaseInvoiceId FROM SupplierInvoices i WHERE i.SupplierId=@SupplierId
+            // SQLite UNION expressions can change numeric provider types between rows. Read exact
+            // decimal/integer text and convert in C# instead of relying on binary REAL or Dapper casts.
+            var records = connection.Query<InvoiceReadRecord>(@"SELECT i.Id,i.SupplierId,i.InvoiceNumber,i.InvoiceDate,i.DueDate,
+                CAST(i.Total AS TEXT) TotalText,CAST(i.PaidAmount AS TEXT) LegacyPaidText,
+                CAST(COALESCE((SELECT -SUM(l.AmountScaled) FROM SupplierLedgerEntries l WHERE l.SupplierInvoiceId=i.Id AND l.EntryType='payment'),0)+COALESCE((SELECT SUM(a.AmountScaled) FROM SupplierPaymentAllocations a JOIN SupplierLedgerEntries e ON e.Id=a.SupplierLedgerEntryId WHERE a.SupplierInvoiceId=i.Id AND e.SupplierInvoiceId IS NULL AND e.PurchaseInvoiceId IS NULL),0) AS TEXT) PaymentScaledText,
+                i.Notes,i.CreatedAt,'legacy' InvoiceType,NULL PurchaseInvoiceId,'posted' DocumentStatus,'0' ReturnedScaledText
+                FROM SupplierInvoices i WHERE i.SupplierId=@SupplierId
                 UNION ALL
-                SELECT p.Id,p.SupplierId,p.InvoiceNumber,p.InvoiceDate,NULL DueDate,p.TotalScaled/10000.0,
-                    COALESCE((SELECT -SUM(l.AmountScaled)/10000.0 FROM SupplierLedgerEntries l WHERE l.PurchaseInvoiceId=p.Id AND l.EntryType='payment'),0),
-                    p.Notes,p.CreatedUtc,'purchase',p.Id FROM PurchaseInvoices p WHERE p.SupplierId=@SupplierId
-                ORDER BY InvoiceDate DESC,Id DESC", new { SupplierId = supplierId }).ToList();
-            foreach (var row in rows) Shape(row);
-            return rows;
+                SELECT p.Id,p.SupplierId,p.InvoiceNumber,p.InvoiceDate,NULL,CAST(p.TotalScaled AS TEXT),'0',
+                    CAST(COALESCE((SELECT -SUM(l.AmountScaled) FROM SupplierLedgerEntries l WHERE l.PurchaseInvoiceId=p.Id AND l.EntryType='payment'),0)+COALESCE((SELECT SUM(a.AmountScaled) FROM SupplierPaymentAllocations a JOIN SupplierLedgerEntries e ON e.Id=a.SupplierLedgerEntryId WHERE a.PurchaseInvoiceId=p.Id AND e.SupplierInvoiceId IS NULL AND e.PurchaseInvoiceId IS NULL),0) AS TEXT),
+                    p.Notes,p.CreatedUtc,'purchase',p.Id,p.Status,
+                    CAST(COALESCE((SELECT SUM(r.TotalScaled) FROM PurchaseReturns r WHERE r.PurchaseInvoiceId=p.Id AND r.Status='posted'),0) AS TEXT)
+                FROM PurchaseInvoices p WHERE p.SupplierId=@SupplierId ORDER BY InvoiceDate DESC,Id DESC", new { SupplierId=supplierId },tx);
+            return records.Select(row => Shape(new SupplierInvoice {
+                Id=row.Id,SupplierId=row.SupplierId,InvoiceNumber=row.InvoiceNumber,InvoiceDate=row.InvoiceDate,DueDate=row.DueDate,
+                Total=Exact(row.TotalText)/(row.InvoiceType=="purchase"?10000m:1m),
+                PaidAmount=Exact(row.LegacyPaidText)+Exact(row.PaymentScaledText)/10000m,
+                ReturnedAmount=Exact(row.ReturnedScaledText)/10000m,Notes=row.Notes,CreatedAt=row.CreatedAt,
+                InvoiceType=row.InvoiceType,PurchaseInvoiceId=row.PurchaseInvoiceId,DocumentStatus=row.DocumentStatus
+            })).ToList();
         }
-
+        private static decimal Exact(string text) => decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
+        private sealed class InvoiceReadRecord
+        {
+            public long Id { get; set; } public long SupplierId { get; set; } public string InvoiceNumber { get; set; }
+            public string InvoiceDate { get; set; } public string DueDate { get; set; } public string TotalText { get; set; }
+            public string LegacyPaidText { get; set; } public string PaymentScaledText { get; set; } public string ReturnedScaledText { get; set; }
+            public string Notes { get; set; } public string CreatedAt { get; set; } public string InvoiceType { get; set; }
+            public long? PurchaseInvoiceId { get; set; } public string DocumentStatus { get; set; }
+        }
         private static List<SupplierPayment> GetPaymentsInternal(SQLiteConnection connection, long supplierId)
         {
             return connection.Query<SupplierPayment>(@"SELECT p.Id,p.SupplierId,p.InvoiceId,p.Reference,p.Amount,p.PaymentDate,p.Method,p.Account,p.Notes,p.CreatedAt,s.Name SupplierName,i.InvoiceNumber
@@ -148,7 +179,7 @@ namespace AlKhayal.Data.Suppliers
         {
             invoice.Total = Round4(invoice.Total);
             invoice.PaidAmount = Round4(invoice.PaidAmount);
-            invoice.Remaining = Round4(invoice.Total - invoice.PaidAmount);
+            invoice.Remaining = Math.Max(0,Round4(invoice.Total - invoice.PaidAmount - invoice.ReturnedAmount));
             invoice.Status = invoice.Remaining <= 0 ? PaidStatus : invoice.PaidAmount > 0 ? PartialStatus : OpenStatus;
             return invoice;
         }

@@ -1045,161 +1045,61 @@
       );
     };
   }
-  function customerStatement(screen, container) {
-    var state = { id: Number(localStorage.getItem("alkhayal_customer_statement")) || null, from: "", to: "" },
-      seq = 0;
-    var columns = [
-      { key: "date", label: "التاريخ", date: true },
-      { key: "reference", label: "المرجع", ltr: true },
-      { key: "description", label: "البيان" },
-      { key: "debit", label: "مدين", money: true },
-      { key: "credit", label: "دائن", money: true },
-      { key: "balance", label: "الرصيد", money: true },
-    ];
-    function failure(error, retry) {
-      container.innerHTML =
-        UI.pageHeader(screen) +
-        '<section class="card"><div class="card-body"><strong>تعذر تحميل كشف الحساب من قاعدة البيانات</strong><p class="muted">' +
-        U.escape(error.message || "تأكد من تسجيل الدخول وتشغيل الخادم.") +
-        '</p><button class="button" data-retry-statement>إعادة المحاولة</button></div></section>';
-      container.querySelector("[data-retry-statement]").onclick = retry;
+  function customerStatement(screen, container, context) {
+    var state=context&&context.state||{},customers=[],seq=0,currentBalance=0;
+    state.customerStatementFrom=state.customerStatementFrom||"";state.customerStatementTo=state.customerStatementTo||"";
+    function active(){return !context||!context.isActive||context.isActive();}
+    function localDate(){var now=new Date();return now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");}
+    function controls(ready){container.querySelector("[data-customer-increase]").disabled=!ready;container.querySelector("[data-customer-collect]").disabled=!ready||currentBalance<=0;}
+    function shell(){
+      container.innerHTML=UI.pageHeader(screen)+'<section class="card"><div class="card-body form-grid"><div class="field"><label for="statementCustomer">العميل</label><select class="select" id="statementCustomer">'+customers.map(function(customer){return '<option value="'+customer.id+'"'+(Number(customer.id)===Number(state.customerStatementId)?' selected':'')+'>'+U.escape(customer.name+(customer.code?' — '+customer.code:''))+'</option>';}).join("")+'</select></div><div class="field"><label for="statementFrom">من تاريخ</label><input class="input" type="date" id="statementFrom" value="'+U.escape(state.customerStatementFrom)+'"></div><div class="field"><label for="statementTo">إلى تاريخ</label><input class="input" type="date" id="statementTo" value="'+U.escape(state.customerStatementTo)+'"></div><div class="page-actions"><button class="button" id="statementReset">كل الفترات</button><button class="button primary" data-customer-collect disabled>تحصيل من العميل</button><button class="button" data-customer-increase disabled>+ إضافة مديونية</button></div><p class="field-error span-2" id="statementError" role="alert" hidden></p></div></section><div id="statementBody" aria-live="polite"></div>';
+      container.querySelector("#statementCustomer").onchange=function(){state.customerStatementId=Number(this.value);load();};
+      function dates(){var from=container.querySelector("#statementFrom").value,to=container.querySelector("#statementTo").value,error=container.querySelector("#statementError");error.hidden=true;if(from&&to&&from>to){error.hidden=false;error.textContent="تاريخ البداية يجب ألا يكون بعد تاريخ النهاية.";return;}state.customerStatementFrom=from;state.customerStatementTo=to;load();}
+      container.querySelector("#statementFrom").onchange=dates;container.querySelector("#statementTo").onchange=dates;
+      container.querySelector("#statementReset").onclick=function(){state.customerStatementFrom=state.customerStatementTo="";container.querySelector("#statementError").hidden=true;container.querySelector("#statementFrom").value="";container.querySelector("#statementTo").value="";load();};
+      container.querySelector("[data-customer-collect]").onclick=function(){operation("collection");};
+      container.querySelector("[data-customer-increase]").onclick=function(){operation("increase");};
     }
-    function shell(customers) {
-      container.innerHTML =
-        UI.pageHeader(
-          screen,
-          '<button class="button" data-customer-invoices>فواتير العميل</button><button class="button" data-print-preview>معاينة الطباعة</button>',
-        ) +
-        '<div class="filter-bar"><div class="field grow"><label for="statementCustomer">العميل</label><select class="select" id="statementCustomer">' +
-        customers
-          .map(function (item) {
-            return (
-              '<option value="' +
-              U.escape(item.id) +
-              '"' +
-              (Number(item.id) === Number(state.id) ? " selected" : "") +
-              ">" +
-              U.escape(item.name) +
-              "</option>"
-            );
-          })
-          .join("") +
-        '</select></div><div class="field"><label for="statementFrom">من</label><input class="input" type="date" id="statementFrom" value="' +
-        U.escape(state.from) +
-        '"></div><div class="field"><label for="statementTo">إلى</label><input class="input" type="date" id="statementTo" value="' +
-        U.escape(state.to) +
-        '"></div><button class="button" type="button" id="statementReset">كل الفترات</button></div><div id="statementBody"><div class="card"><div class="card-body">جارٍ تحميل كشف الحساب...</div></div></div>';
-      container.querySelector("#statementCustomer").onchange = function () {
-        state.id = Number(this.value);
-        load();
-      };
-      container.querySelector("#statementFrom").onchange = function () {
-        state.from = this.value;
-        applyDates();
-      };
-      container.querySelector("#statementTo").onchange = function () {
-        state.to = this.value;
-        applyDates();
-      };
-      container.querySelector("#statementReset").onclick = function () {
-        state.from = "";
-        state.to = "";
-        container.querySelector("#statementFrom").value = "";
-        container.querySelector("#statementTo").value = "";
-        load();
-      };
-      container.onclick = function (event) {
-        if(event.target.closest("[data-customer-invoices]")){UI.toast("فواتير العميل قيد الإنشاء؛ لا توجد فواتير مبيعات محفوظة بعد.","info");return;}
-        if (event.target.closest("[data-print-preview]"))
-          UI.toast("معاينة فقط؛ لم يُرسل شيء إلى طابعة.", "warning");
-      };
+    function draw(data){
+      currentBalance=Number(data.currentBalance);controls(true);
+      var movements=data.movements||[];
+      container.querySelector("#statementBody").innerHTML='<div class="stats-grid">'+[
+        ["المديونية الحالية على العميل",data.currentBalance],["رصيد بداية الفترة",data.openingBalance],["مديونيات خلال الفترة",data.totalDebit],["تحصيلات وتخفيضات خلال الفترة",data.totalCredit],["رصيد نهاية الفترة",data.closingBalance]
+      ].map(function(item){return '<article class="card stat-card"><span class="stat-label">'+item[0]+'</span><strong class="stat-value">'+U.money(item[1])+'</strong></article>';}).join("")+'</div><section class="card"><div class="card-head"><h2>حركات حساب '+U.escape(data.customerName)+'</h2></div><div class="card-body"><div class="table-wrap"><table class="data-table"><thead><tr><th>التاريخ</th><th>المرجع</th><th>البيان</th><th>الملاحظات</th><th>زيادة المديونية</th><th>تحصيل / تخفيض</th><th>الرصيد</th></tr></thead><tbody>'+movements.map(function(item){return '<tr><td>'+U.date(item.date)+'</td><td>'+U.escape(item.reference||"—")+'</td><td>'+U.escape(item.description)+'</td><td>'+U.escape(item.notes||"—")+'</td><td>'+U.money(item.debit)+'</td><td>'+U.money(item.credit)+'</td><td>'+U.money(item.balance)+'</td></tr>';}).join("")+'</tbody></table></div>'+(movements.length<=1?'<p class="muted">لا توجد حركات خلال الفترة المحددة.</p>':'')+'</div></section>';
     }
-    function applyDates() {
-      if (state.from && state.to && state.from > state.to) {
-        UI.toast("تاريخ البداية يجب ألا يكون بعد تاريخ النهاية.", "danger");
-        return;
-      }
-      load();
+    function load(){
+      if(!active())return;var token=++seq;controls(false);
+      var query=[];if(state.customerStatementFrom)query.push("from="+encodeURIComponent(state.customerStatementFrom));if(state.customerStatementTo)query.push("to="+encodeURIComponent(state.customerStatementTo));
+      var target=container.querySelector("#statementBody");target.innerHTML='<div class="card card-body">جارٍ تحميل كشف الحساب من قاعدة البيانات...</div>';
+      AlKhayalApi.request("/api/customers/"+state.customerStatementId+"/statement"+(query.length?'?'+query.join('&'):'')).then(function(data){if(token===seq&&active())draw(data);}).catch(function(error){if(token!==seq||!active())return;target.innerHTML='<div class="card empty-state"><span>'+U.escape(error.message||"تعذر تحميل كشف الحساب.")+'</span><button class="button" data-statement-retry>إعادة المحاولة</button></div>';target.querySelector("[data-statement-retry]").onclick=load;});
     }
-    function draw(data) {
-      var host = container.querySelector("#statementBody");
-      if (!host) return;
-      var movements = data.movements || [];
-      var rows = movements.map(function (item, index) {
-        var isOpening = item.reference === "OPEN";
-        return {
-          id: index,
-          date: isOpening && !data.from ? "—" : item.date,
-          reference: "",
-          description:
-            item.description,
-          debit: item.debit,
-          credit: item.credit,
-          balance: item.balance,
-        };
-      });
-      host.innerHTML =
-        '<div class="stats-grid"><article class="card stat-card"><span class="stat-label">رصيد افتتاحي</span><strong class="stat-value">' +
-        U.money(data.openingBalance) +
-        '</strong></article><article class="card stat-card"><span class="stat-label">مبلغ اتدفع أو اتخصم</span><strong class="stat-value">' +
-        U.money(data.totalCredit) +
-        '</strong></article><article class="card stat-card"><span class="stat-label">الرصيد بعد العملية</span><strong class="stat-value">' +
-        U.money(data.closingBalance) +
-        "</strong></article></div>" +
-        rowsTable(columns, rows, false) +
-        (rows.length <= 1
-          ? '<p class="muted" style="margin-top:12px">لا توجد تحصيلات في الفترة المحددة.</p>'
-          : "");
-    }
-    function load() {
-      var current = ++seq,
-        query = [];
-      if (state.from) query.push("from=" + encodeURIComponent(state.from));
-      if (state.to) query.push("to=" + encodeURIComponent(state.to));
-      var host = container.querySelector("#statementBody");
-      if (host)
-        host.innerHTML =
-          '<div class="card"><div class="card-body">جارٍ تحميل كشف الحساب...</div></div>';
-      AlKhayalApi.request(
-        "/api/customers/" +
-          encodeURIComponent(state.id) +
-          "/statement" +
-          (query.length ? "?" + query.join("&") : ""),
-      )
-        .then(function (data) {
-          if (current === seq) draw(data);
-        })
-        .catch(function (error) {
-          if (current !== seq) return;
-          if (host)
-            host.innerHTML =
-              '<div class="card"><div class="card-body"><strong>تعذر تحميل كشف الحساب</strong><p class="muted">' +
-              U.escape(error.message || "حاول مرة أخرى.") +
-              "</p></div></div>";
-        });
-    }
-    container.innerHTML =
-      UI.pageHeader(screen) +
-      '<section class="card"><div class="card-body">جارٍ تحميل العملاء من قاعدة البيانات...</div></section>';
-    AlKhayalApi.request("/api/customers")
-      .then(function (customers) {
-        if (!context.isActive()) return;
-        S.store.replace("customers", customers);
-        if (!customers.length) {
-          container.innerHTML =
-            UI.pageHeader(screen) +
-            '<section class="card"><div class="card-body">لا يوجد عملاء. أضف عميلًا أولًا ثم افتح كشف الحساب.</div></section>';
-          return;
+    function operation(type){
+      var customer=customers.find(function(item){return Number(item.id)===Number(state.customerStatementId);});if(!customer)return;
+      var label=type==="increase"?"إضافة مديونية":"تحصيل من العميل",busy=false,uncertain=false;
+      var operationKey="customer-account-"+customer.id+"-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,14);
+      UI.modal({title:label+" — "+customer.name,compact:true,focusSelector:"#customerAccountAmount",beforeClose:function(){return !busy&&!uncertain;},
+        body:'<p class="muted">المديونية الحالية: '+U.money(currentBalance)+'</p><form id="customerAccountForm" class="form-grid"><div class="field"><label for="customerAccountAmount">المبلغ</label><input class="input ltr" id="customerAccountAmount" inputmode="decimal" required maxlength="20"></div><div class="field"><label for="customerAccountDate">تاريخ العملية</label><input class="input" type="date" id="customerAccountDate" required value="'+localDate()+'"></div><div class="field span-2"><label for="customerAccountNotes">البيان / ملاحظات</label><textarea class="textarea" id="customerAccountNotes" maxlength="1000"></textarea></div><p class="field-error span-2" data-account-error role="alert" hidden></p></form>',
+        actions:'<button class="button primary" type="submit" form="customerAccountForm" data-save-customer-account>حفظ '+label+'</button><button class="button" data-modal-close>إلغاء</button>',
+        onOpen:function(modal){
+          var form=modal.querySelector("#customerAccountForm"),button=modal.querySelector("[data-save-customer-account]"),error=modal.querySelector("[data-account-error]");
+          form.onsubmit=async function(event){event.preventDefault();if(busy)return;error.hidden=true;
+            var amount=modal.querySelector("#customerAccountAmount").value.trim(),date=modal.querySelector("#customerAccountDate").value,notes=modal.querySelector("#customerAccountNotes").value;
+            if(!/^\d+(?:\.\d{1,2})?$/.test(amount)||!/[1-9]/.test(amount)||!date){error.hidden=false;error.textContent="أدخل مبلغًا أكبر من صفر بدقة خانتين عشريتين وتاريخًا صحيحًا.";return;}
+            busy=true;button.disabled=true;modal.querySelectorAll("input,textarea").forEach(function(input){input.disabled=true;});
+            try{
+              await AlKhayalApi.request("/api/customers/"+customer.id+"/transactions",{method:"POST",body:JSON.stringify({type:type,amount:amount,occurredOn:date,notes:notes,operationKey:operationKey})});
+              if(modal.isConnected)UI.closeModal();UI.toast("تم حفظ "+label+" وتحديث حساب العميل."+((state.customerStatementFrom&&date<state.customerStatementFrom||state.customerStatementTo&&date>state.customerStatementTo)?" الحركة خارج الفترة المختارة.":""),"success");
+              if(active()&&Number(state.customerStatementId)===Number(customer.id))load();
+            }catch(failure){busy=false;uncertain=!failure.status||failure.status>=500;button.disabled=false;modal.querySelectorAll("input,textarea").forEach(function(input){input.disabled=uncertain;});error.hidden=false;error.textContent=(failure.message||"تعذر حفظ العملية.")+(uncertain?" أعد المحاولة بنفس البيانات للتحقق من الحفظ.":"");}
+          };
         }
-        state.id = customers.some(function(x){return Number(x.id)===state.id;})?state.id:Number(customers[0].id);
-        shell(customers);
-        load();
-      })
-      .catch(function (error) {
-        failure(error, function () {
-          customerStatement(screen, container);
-        });
       });
+    }
+    function init(){
+      container.innerHTML=UI.pageHeader(screen)+'<div class="card card-body">جارٍ تحميل العملاء...</div>';
+      AlKhayalApi.request("/api/customers").then(function(rows){if(!active())return;customers=rows;if(!customers.length){container.innerHTML=UI.pageHeader(screen)+'<div class="card empty-state">لا يوجد عملاء. أضف عميلًا من قائمة العملاء أولًا.</div>';return;}if(!customers.some(function(customer){return Number(customer.id)===Number(state.customerStatementId);}))state.customerStatementId=Number(customers[0].id);shell();load();}).catch(function(error){if(!active())return;container.innerHTML=UI.pageHeader(screen)+'<div class="card empty-state"><span>'+U.escape(error.message)+'</span><button class="button" data-customers-retry>إعادة المحاولة</button></div>';container.querySelector("[data-customers-retry]").onclick=init;});
+    }
+    init();
   }
   var supplierMethods = ["نقدي", "تحويل", "بطاقة"];
   function todayIso() {
@@ -1238,9 +1138,10 @@
       .join("");
   }
   function openSupplierPaymentModal(supplier, invoice, afterSave) {
+    var busy = false, uncertain = false, treasuryReady = false;
     var paymentOperationKey = "supplier-pay-" + supplier.id + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
     var limit = invoice
-      ? Number(invoice.remaining || 0)
+      ? Math.min(Number(invoice.remaining || 0), Number(supplier.payable || 0))
       : Number(supplier.payable || 0);
     var fields = [
       {
@@ -1254,8 +1155,15 @@
       { id: "paymentDate", label: "تاريخ الدفع", type: "date", required: true },
       {
         id: "account",
-        label: "مرجع السداد (اختياري — لا حركة خزينة)",
+        label: "مرجع الدفع (اختياري)",
         type: "text",
+      },
+      {
+        id: "treasuryAccountId",
+        label: "الخزنة أو البنك للسداد",
+        type: "select",
+        options: [{value:"",label:"جارٍ تحميل الحسابات..."}],
+        required: true,
       },
       {
         id: "method",
@@ -1274,6 +1182,7 @@
       notes: "",
     };
     var layer = UI.modal({
+      beforeClose: function () { return !busy && !uncertain; },
       title: invoice
         ? "دفع آجل — فاتورة " + invoice.invoiceNumber
         : "سداد على حساب المورد",
@@ -1283,22 +1192,38 @@
         " — " +
         (invoice ? "المتبقي على الفاتورة " : "المستحق الحالي ") +
         U.money(limit) +
-        "</p><p class=\"muted\">سيُسجل هذا الدفع في حساب المورد فقط؛ لا يتم ترحيل حركة نقدية أو بنكية.</p>" +
+        "</p><p class=\"muted\">سيُخصم مبلغ السداد من الخزنة أو البنك المختار ويُحدّث حساب المورد معًا.</p>" +
+        (invoice?"":'<p class="muted">يُوزع السداد تلقائيًا على الأقرب استحقاقًا، أو بتاريخ الفاتورة عند عدم وجود استحقاق. عند تساوي التاريخ تُسدد الفاتورة المنشأة أولًا.</p>') +
         '<form id="supplierPayForm" class="form-grid" novalidate>' +
         fields
           .map(function (field) {
             return UI.field(field, defaults[field.id]);
           })
           .join("") +
-        "</form>",
+        '</form><p class="muted" data-supplier-treasury-status role="status">جارٍ تحميل حسابات السداد...</p><button class="button" type="button" data-supplier-treasury-retry hidden>إعادة تحميل الحسابات</button>',
       actions:
-        '<button class="button primary" type="button" data-save-supplier-payment>تأكيد الدفع</button><button class="button" type="button" data-modal-close>إلغاء</button>',
+        '<button class="button primary" type="button" data-save-supplier-payment disabled>تأكيد الدفع</button><button class="button" type="button" data-modal-close>إلغاء</button>',
       onOpen: function (element) {
         element.querySelector("input").focus();
       },
     });
+    var paymentForm=layer.querySelector("#supplierPayForm");
+    function paymentModalActive(){return layer.isConnected&&layer.querySelector("#supplierPayForm")===paymentForm;}
+    function loadPaymentAccounts() {
+      var status=layer.querySelector("[data-supplier-treasury-status]"),retry=layer.querySelector("[data-supplier-treasury-retry]"),button=layer.querySelector("[data-save-supplier-payment]");
+      treasuryReady=false;button.disabled=true;retry.hidden=true;status.textContent="جارٍ تحميل حسابات السداد...";
+      AlKhayalApi.request("/api/treasury/accounts").then(function(accounts){
+        if(!paymentModalActive())return;
+        layer.querySelector("#treasuryAccountId").innerHTML='<option value="">اختر الخزنة أو البنك</option>'+accounts.map(function(account){return '<option value="'+U.escape(account.id)+'">'+U.escape(account.name+' — '+(account.type==="bank"?'بنك':'خزنة')+' — الرصيد '+account.balance+' ج.م')+'</option>';}).join("");
+        treasuryReady=accounts.length>0;button.disabled=!treasuryReady;
+        status.textContent=treasuryReady?"سيُخصم مبلغ السداد من الحساب المختار عند التأكيد.":"لا توجد خزن أو بنوك متاحة. أضف حسابًا وأودع رصيده أولًا.";
+      }).catch(function(error){if(!paymentModalActive())return;status.textContent=error.message||"تعذر تحميل الخزن والبنوك.";retry.hidden=false;});
+    }
+    layer.querySelector("[data-supplier-treasury-retry]").onclick=loadPaymentAccounts;
+    loadPaymentAccounts();
     layer.querySelector("[data-save-supplier-payment]").onclick =
       async function () {
+        if (busy || !treasuryReady) return;
         var form = layer.querySelector("#supplierPayForm"),
           result = UI.collectForm(form, fields);
         if (!result.valid) return;
@@ -1315,16 +1240,19 @@
           return;
         }
         var button = layer.querySelector("[data-save-supplier-payment]");
-        button.disabled = true;
+        button.disabled = true; busy = true;
+        layer.querySelectorAll("input,select,textarea").forEach(function(input){input.disabled=true;});
         try {
           var saved = await AlKhayalApi.request(
             "/api/suppliers/" + encodeURIComponent(supplier.id) + "/payments",
             {
               method: "POST",
               body: JSON.stringify({
-                invoiceId: invoice ? invoice.id : null,
+                invoiceId: invoice && invoice.invoiceType !== "purchase" ? invoice.id : null,
+                purchaseInvoiceId: invoice && invoice.invoiceType === "purchase" ? (invoice.purchaseInvoiceId || invoice.id) : null,
+                treasuryAccountId: Number(result.data.treasuryAccountId),
                 operationKey: paymentOperationKey,
-                amount: amount,
+                amount: form.elements.amount.value.trim(),
                 paymentDate: result.data.paymentDate,
                 method: result.data.method,
                 account: result.data.account,
@@ -1340,12 +1268,15 @@
           );
           if (afterSave) afterSave(saved);
         } catch (failure) {
-          button.disabled = false;
-          UI.toast(failure.message || "تعذر حفظ الدفع.", "danger");
+          button.disabled = false; busy = false; uncertain = !failure.status || failure.status >= 500;
+          layer.querySelectorAll("input,select,textarea").forEach(function(input){input.disabled=uncertain;});
+          UI.toast((failure.message || "تعذر حفظ الدفع.") + (uncertain ? " — أعد المحاولة بنفس البيانات للتحقق من الحفظ." : ""), "danger");
         }
       };
   }
   function openSupplierInvoiceModal(supplier, afterSave) {
+    var busy = false, uncertain = false;
+    var invoiceOperationKey = "supplier-invoice-" + supplier.id + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
     var fields = [
       { id: "invoiceNumber", label: "رقم الفاتورة (اختياري)", ltr: true },
       {
@@ -1366,9 +1297,10 @@
       { id: "notes", label: "ملاحظات", type: "textarea", span: true },
     ];
     var layer = UI.modal({
-      title: "فاتورة شراء آجلة — " + supplier.name,
+      title: "إضافة فاتورة مديونية — " + supplier.name,
+      beforeClose: function () { return !busy && !uncertain; },
       body:
-        '<form id="supplierInvoiceForm" class="form-grid" novalidate>' +
+        '<p class="muted">تسجيل مبلغ مستحق للمورد فقط، دون إضافة بضاعة للمخزون. عند شراء بضاعة استخدم إدارة المشتريات.</p><form id="supplierInvoiceForm" class="form-grid" novalidate>' +
         fields
           .map(function (field) {
             return UI.field(
@@ -1386,6 +1318,7 @@
     });
     layer.querySelector("[data-save-supplier-invoice]").onclick =
       async function () {
+        if (busy) return;
         var form = layer.querySelector("#supplierInvoiceForm"),
           result = UI.collectForm(form, fields);
         if (!result.valid) return;
@@ -1403,17 +1336,18 @@
           return;
         }
         var button = layer.querySelector("[data-save-supplier-invoice]");
-        button.disabled = true;
+        button.disabled = true; busy = true;
         try {
           await AlKhayalApi.request(
             "/api/suppliers/" + encodeURIComponent(supplier.id) + "/invoices",
             {
               method: "POST",
               body: JSON.stringify({
+                operationKey: invoiceOperationKey,
                 invoiceNumber: result.data.invoiceNumber,
                 invoiceDate: result.data.invoiceDate,
                 dueDate: result.data.dueDate || null,
-                total: Number(result.data.total),
+                total: form.elements.total.value.trim(),
                 notes: result.data.notes,
               }),
             },
@@ -1425,8 +1359,9 @@
           );
           if (afterSave) afterSave();
         } catch (failure) {
-          button.disabled = false;
-          UI.toast(failure.message || "تعذر حفظ الفاتورة.", "danger");
+          button.disabled = false; busy = false; uncertain = !failure.status || failure.status >= 500;
+          layer.querySelectorAll("input,select,textarea").forEach(function(input){input.disabled=uncertain;});
+          UI.toast((failure.message || "تعذر حفظ الفاتورة.") + (uncertain ? " — أعد المحاولة بنفس البيانات للتحقق من الحفظ." : ""), "danger");
         }
       };
   }
@@ -1660,204 +1595,75 @@
         });
       });
   }
-  function supplierPayment(screen, container) {
-    var suppliers = [], paymentOperationKey = null;
-    function invoiceOptions(invoices) {
-      return (
-        '<option value="">دفعة على الحساب (بدون فاتورة محددة)</option>' +
-        invoices
-          .filter(function (invoice) {
-            return Number(invoice.remaining) > 0;
-          })
-          .map(function (invoice) {
-            return (
-              '<option value="' +
-              U.escape(invoice.id) +
-              '">فاتورة ' +
-              U.escape(invoice.invoiceNumber) +
-              " — المتبقي " +
-              U.money(invoice.remaining) +
-              "</option>"
-            );
-          })
-          .join("")
-      );
+  function supplierPayment(screen, container, context) {
+    var state = context && context.state || {}, rows = [], seq = 0, invoiceCache = {};
+    function active() { return !context || !context.isActive || context.isActive(); }
+    state.accountsPage = state.accountsPage || 1;
+    state.accountsSearch = state.accountsSearch || "";
+    container.innerHTML = UI.pageHeader(screen) + '<section class="card"><div class="card-body"><div class="field"><label for="supplierAccountsSearch">بحث عن مورد بالاسم أو الكود أو الهاتف</label><input class="input" type="search" id="supplierAccountsSearch" value="'+U.escape(state.accountsSearch)+'"></div></div></section><div id="supplierAccountsResults" aria-live="polite"></div>';
+    var search = container.querySelector("#supplierAccountsSearch"), results = container.querySelector("#supplierAccountsResults");
+    var delayed = U.debounce(load,180);
+    search.oninput = function () { ++seq; state.accountsSearch=search.value;state.accountsPage=1;delayed(); };
+    function invoiceKey(invoice) { return (invoice.invoiceType === "purchase" ? "purchase:" : "legacy:")+invoice.id; }
+    function invoiceTable(invoices, supplier) {
+      if(!invoices.length)return '<div class="empty-state">لا توجد فواتير لهذا المورد.</div>';
+      return '<div class="table-wrap"><table class="data-table"><thead><tr><th>الفاتورة</th><th>التاريخ</th><th>النوع</th><th>الإجمالي</th><th>المدفوع</th><th>المرتجع</th><th>المتبقي</th><th>الحالة</th><th>السداد</th></tr></thead><tbody>'+invoices.map(function(invoice){
+        var draft=invoice.documentStatus==="draft",canPay=!draft&&Number(invoice.remaining)>0&&Number(supplier.payable)>0;
+        return '<tr><td>'+U.escape(invoice.invoiceNumber)+'</td><td>'+U.date(invoice.invoiceDate)+'</td><td>'+(invoice.invoiceType==="purchase"?'شراء بضاعة':'مديونية')+'</td><td>'+U.money(invoice.total)+'</td><td>'+U.money(invoice.paidAmount)+'</td><td>'+U.money(invoice.returnedAmount||0)+'</td><td>'+U.money(invoice.remaining)+'</td><td>'+(draft?'مسودة — غير مستحقة بعد':supplierInvoiceBadge(invoice))+'</td><td>'+(canPay?'<button class="button primary" type="button" data-account-invoice="'+U.escape(invoiceKey(invoice))+'">سداد الفاتورة</button>':'<span class="muted">'+(draft?'يجب نشر الفاتورة أولًا':'لا يوجد مستحق')+'</span>')+'</td></tr>';
+      }).join("")+'</tbody></table></div>';
     }
-    function render(selectedId) {
-      var today = todayIso();
-      container.innerHTML =
-        UI.pageHeader(screen) +
-        '<section class="card"><div class="card-head"><h2>سداد حساب المورد</h2></div><div class="card-body"><form id="supplierPaymentForm" class="form-grid" novalidate><div class="field"><label for="paymentSupplier">المورد</label><select class="select" id="paymentSupplier">' +
-        supplierOptions(suppliers, selectedId) +
-        '</select></div><div class="field"><label for="paymentInvoice">الفاتورة</label><select class="select" id="paymentInvoice"><option value="">جارٍ تحميل الفواتير...</option></select></div>' +
-        UI.field(
-          {
-            id: "amount",
-            label: "قيمة السداد",
-            type: "number",
-            min: 0.01,
-            step: "0.01",
-            required: true,
-          },
-          "",
-        ) +
-        UI.field(
-          {
-            id: "paymentDate",
-            label: "تاريخ السداد",
-            type: "date",
-            required: true,
-          },
-          today,
-        ) +
-        UI.field(
-          {
-            id: "account",
-            label: "مرجع السداد (اختياري — لا حركة خزينة)",
-            type: "text",
-          },
-          "",
-        ) +
-        UI.field(
-          {
-            id: "method",
-            label: "طريقة السداد",
-            type: "select",
-            options: supplierMethods,
-            required: true,
-          },
-          supplierMethods[0],
-        ) +
-        UI.field(
-          { id: "notes", label: "ملاحظات", type: "textarea", span: true },
-          "",
-        ) +
-        '<div class="span-2"><button class="button primary" type="submit">تسجيل السداد بحساب المورد</button></div></form><div id="supplierPaymentResult" class="muted" style="margin-top:12px">يُسجل في حساب المورد فقط؛ لا يتم إنشاء حركة خزينة أو بنك.</div></div></section>';
-      var form = container.querySelector("#supplierPaymentForm"),
-        supplierSelect = form.querySelector("#paymentSupplier"),
-        invoiceSelect = form.querySelector("#paymentInvoice");
-      function loadInvoices() {
-        invoiceSelect.innerHTML =
-          '<option value="">جارٍ تحميل الفواتير...</option>';
-        AlKhayalApi.request(
-          "/api/suppliers/" +
-            encodeURIComponent(supplierSelect.value) +
-            "/invoices",
-        )
-          .then(function (invoices) {
-            invoiceSelect.innerHTML = invoiceOptions(invoices);
-            invoiceSelect._invoices = invoices;
-          })
-          .catch(function (error) {
-            invoiceSelect.innerHTML =
-              '<option value="">تعذر تحميل الفواتير</option>';
-            UI.toast(error.message || "تعذر تحميل فواتير المورد.", "danger");
-          });
+    function host(id) { return results.querySelector('[data-account-invoices="'+id+'"]'); }
+    async function loadInvoices(supplier, token) {
+      try {
+        var invoices=await AlKhayalApi.request("/api/suppliers/"+supplier.id+"/invoices");
+        if(token!==seq||!active())return;
+        invoiceCache[supplier.id]=invoices;var target=host(supplier.id);if(target)target.innerHTML=invoiceTable(invoices,supplier);
+      } catch(error) {
+        if(token!==seq||!active())return;var target=host(supplier.id);
+        if(target)target.innerHTML='<div class="empty-state"><span>'+U.escape(error.message||"تعذر تحميل الفواتير.")+'</span><button class="button" data-retry-account="'+supplier.id+'">إعادة المحاولة</button></div>';
       }
-      supplierSelect.onchange = loadInvoices;
-      invoiceSelect.onchange = function () {
-        var invoice = (invoiceSelect._invoices || []).find(function (row) {
-          return String(row.id) === invoiceSelect.value;
-        });
-        if (invoice) form.querySelector("#amount").value = invoice.remaining;
-      };
-      loadInvoices();
-      form.onsubmit = async function (event) {
-        event.preventDefault();
-        var supplier = suppliers.find(function (row) {
-            return Number(row.id) === Number(supplierSelect.value);
-          }),
-          invoice = (invoiceSelect._invoices || []).find(function (row) {
-            return String(row.id) === invoiceSelect.value;
-          }),
-          amountText = form.querySelector("#amount").value,
-          amount = Number(amountText),
-          button = form.querySelector('[type="submit"]');
-        if (!(amount > 0)) {
-          UI.toast("أدخل قيمة سداد أكبر من صفر.", "danger");
-          return;
-        }
-        if (invoice && amount > Number(invoice.remaining)) {
-          UI.toast("القيمة أكبر من المتبقي على الفاتورة.", "danger");
-          return;
-        }
-        if (supplier && amount > Number(supplier.payable || 0)) {
-          UI.toast("القيمة أكبر من المستحق للمورد.", "danger");
-          return;
-        }
-        button.disabled = true;
-        paymentOperationKey = paymentOperationKey || "supplier-pay-" + supplier.id + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
-        try {
-          var saved = await AlKhayalApi.request(
-            "/api/suppliers/" +
-              encodeURIComponent(supplierSelect.value) +
-              "/payments",
-            {
-              method: "POST",
-              body: JSON.stringify({
-                invoiceId: invoice ? invoice.id : null,
-                amount: amountText,
-                operationKey: paymentOperationKey,
-                paymentDate: form.querySelector("#paymentDate").value,
-                method: form.querySelector("#method").value,
-                account: form.querySelector("#account").value,
-                notes: form.querySelector("#notes").value,
-              }),
-            },
-          );
-          suppliers = await AlKhayalApi.request("/api/suppliers");
-          paymentOperationKey = null;
-          S.store.replace("suppliers", suppliers);
-          UI.toast(
-            "تم حفظ السداد في قاعدة البيانات وتحديث رصيد المورد.",
-            "success",
-          );
-          render(supplierSelect.value);
-          var result = container.querySelector("#supplierPaymentResult");
-          if (result && saved)
-            result.textContent =
-              "رقم مرجع السداد: " + (saved.reference || "تم الحفظ");
-        } catch (error) {
-          button.disabled = false;
-          UI.toast(error.message || "تعذر حفظ السداد.", "danger");
-        }
-      };
     }
-    container.innerHTML =
-      UI.pageHeader(screen) +
-      '<section class="card"><div class="card-body">جارٍ تحميل الموردين من قاعدة البيانات...</div></section>';
-    AlKhayalApi.request("/api/suppliers")
-      .then(function (rows) {
-        suppliers = rows;
-        S.store.replace("suppliers", rows);
-        if (!rows.length) {
-          container.innerHTML =
-            UI.pageHeader(screen) +
-            '<section class="card"><div class="card-body">لا يوجد موردون. أضف موردًا أولًا ثم سجّل السداد.</div></section>';
-          return;
-        }
-        render(rows[0].id);
-      })
-      .catch(function (error) {
-        container.innerHTML =
-          UI.pageHeader(screen) +
-          '<section class="card"><div class="card-body"><strong>تعذر تحميل الموردين من قاعدة البيانات</strong><p class="muted">' +
-          U.escape(error.message || "تأكد من تسجيل الدخول وتشغيل الخادم.") +
-          '</p><button class="button" data-retry-supplier-payment>إعادة المحاولة</button></div></section>';
-        container.querySelector("[data-retry-supplier-payment]").onclick =
-          function () {
-            supplierPayment(screen, container);
-          };
-      });
+    function load() {
+      if(!active())return;
+      var token=++seq;
+      results.innerHTML='<div class="card card-body">جارٍ تحميل حسابات الموردين...</div>';
+      AlKhayalApi.request("/api/suppliers?search="+encodeURIComponent(state.accountsSearch)+"&page="+state.accountsPage+"&pageSize=10").then(function(data){
+        if(token!==seq||!active())return;rows=data.items||[];invoiceCache={};
+        if(!rows.some(function(supplier){return Number(supplier.id)===Number(state.selectedSupplierId);}))state.selectedSupplierId=null;
+        results.innerHTML=(rows.length?'<section class="card"><div class="card-body field"><label for="supplierAccountsSelect">اختر المورد لعرض حسابه وفواتيره</label><select class="select" id="supplierAccountsSelect"><option value="">اختر المورد</option>'+rows.map(function(supplier){return '<option value="'+supplier.id+'"'+(Number(supplier.id)===Number(state.selectedSupplierId)?' selected':'')+'>'+U.escape(supplier.name+' — '+supplier.code)+' — المستحق '+U.money(supplier.payable||0)+'</option>';}).join("")+'</select></div></section>':'<section class="card"><div class="empty-state">لا يوجد موردون مطابقون. يمكنك إضافة مورد من قائمة الموردين.</div></section>')+
+          '<div class="pagination"><span>'+data.totalCount+' مورد</span><div class="pagination-buttons"><button class="button" data-accounts-page="'+(state.accountsPage-1)+'"'+(state.accountsPage<=1?' disabled':'')+'>السابق</button><button class="button" data-accounts-page="'+(state.accountsPage+1)+'"'+(state.accountsPage*10>=data.totalCount?' disabled':'')+'>التالي</button></div></div><div id="selectedSupplierAccount"></div>';
+        var select=results.querySelector("#supplierAccountsSelect");
+        if(select)select.onchange=function(){state.selectedSupplierId=Number(this.value)||null;showSupplier();};
+        showSupplier();      }).catch(function(error){if(token!==seq||!active())return;results.innerHTML='<div class="card empty-state"><span>'+U.escape(error.message||"تعذر تحميل الموردين.")+'</span><button class="button" data-accounts-retry>إعادة المحاولة</button></div>';});
+    }
+    function showSupplier(){
+      var token=++seq,target=results.querySelector("#selectedSupplierAccount");invoiceCache={};
+      var supplier=rows.find(function(row){return Number(row.id)===Number(state.selectedSupplierId);});
+      if(!target)return;
+      if(!supplier){target.innerHTML=rows.length?'<div class="empty-state">اختر موردًا من القائمة لعرض حسابه وفواتيره.</div>':'';return;}
+      target.innerHTML='<section class="card supplier-account-card" data-supplier-account="'+supplier.id+'"><div class="card-head"><div><h2>'+U.escape(supplier.name)+'</h2><p class="muted">'+U.escape(supplier.code)+' — المستحق '+U.money(supplier.payable||0)+(Number(supplier.supplierCredit)>0?' — رصيد لدى المورد '+U.money(supplier.supplierCredit):'')+'</p></div><div class="page-actions"><button class="button" type="button" data-add-account-invoice="'+supplier.id+'">+ إضافة فاتورة مديونية</button><button class="button primary" type="button" data-pay-supplier-account="'+supplier.id+'"'+(Number(supplier.payable)>0?'':' disabled')+'>سداد على الحساب</button></div></div><div class="card-body" data-account-invoices="'+supplier.id+'">جارٍ تحميل فواتير المورد...</div></section>';
+      loadInvoices(supplier,token);
+    }
+    container.onclick=function(event){
+      var page=event.target.closest("[data-accounts-page]");if(page&&!page.disabled){state.accountsPage=Number(page.getAttribute("data-accounts-page"));load();return;}
+      if(event.target.closest("[data-accounts-retry]")){load();return;}
+      var retry=event.target.closest("[data-retry-account]");if(retry){var owner=rows.find(function(x){return String(x.id)===retry.getAttribute("data-retry-account");});if(owner)loadInvoices(owner,seq);return;}
+      var add=event.target.closest("[data-add-account-invoice]"),pay=event.target.closest("[data-pay-supplier-account]"),invoiceButton=event.target.closest("[data-account-invoice]"),card=event.target.closest("[data-supplier-account]");
+      if(!card)return;var supplier=rows.find(function(x){return String(x.id)===card.getAttribute("data-supplier-account");});if(!supplier)return;
+      if(add)openSupplierInvoiceModal(supplier,function(){if(active())load();});
+      if(pay&&!pay.disabled)openSupplierPaymentModal(supplier,null,function(){if(active())load();});
+      if(invoiceButton){var invoice=(invoiceCache[supplier.id]||[]).find(function(x){return invoiceKey(x)===invoiceButton.getAttribute("data-account-invoice");});if(invoice&&invoice.documentStatus!=="draft")openSupplierPaymentModal(supplier,invoice,function(){if(active())load();});}
+    };
+    load();
   }
-  function statement(screen, container) {
+  function statement(screen, container, context) {
     if (screen.party === "supplier")
       return supplierStatement(screen, container);
-    return customerStatement(screen, container);
+    return customerStatement(screen, container, context);
   }
-  function payment(screen, container) {
+  function payment(screen, container, context) {
     var isSupplier = screen.party === "supplier";
-    if (isSupplier) return supplierPayment(screen, container);
+    if (isSupplier) return supplierPayment(screen, container, context);
     function render(rows) {
       S.store.replace("customers", rows);
       if (!rows.length) {
