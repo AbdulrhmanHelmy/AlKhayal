@@ -89,6 +89,8 @@ Static frontend files, including `frontend/data/screens.json`, are served from t
 
 Other business-screen operations do not yet have HTTP contracts: their UI state is explicitly in-memory and must not be interpreted as durable server behavior. Customer records and customer payments are exceptions: customer management endpoints persist customer data in SQLite.
 
+Customer installment contracts are persisted by `POST /api/customers/{id}/installments` (screen permission `installment-system`, session and CSRF required); the request includes product ID and catalog price, down payment, interest percentage, count, interval months, first due date, and operation key. The API verifies the active catalog price. `GET /api/customers/{id}/installments` and `POST /api/customers/{id}/installments/{contractId}/payments/{number}` require `installment-payment`; payment also requires CSRF and includes paid date and operation key. Contract creation, customer-ledger debit/down-payment credit, schedule, installment payment, and statement ledger collection commit atomically. Identical retries return the saved contract; key reuse with different content conflicts. See [installments.md](installments.md).
+
 - `GET /api/customers` returns the authenticated user's customer records from SQLite.
 - `POST /api/customers` creates a customer; `PUT /api/customers/{id}` updates one; `DELETE /api/customers/{id}` deletes one. All writes require the session cookie and `X-CSRF-Token`. Customer codes are unique. The customer management list and add/edit/delete actions use these endpoints; other business screens remain session-only unless explicitly implemented.
 
@@ -143,3 +145,7 @@ Touch POS converts an entered invoice percentage (0–100 with at most two decim
 ## Product barcodes and labels — Phase 7.3
 
 `/api/labels` provides administrator versioned settings/defaults/native sample preview, permission/module-gated operational options/jobs, administrator saved-profile test output, and transactional product barcode commands. Writes require existing session CSRF/origin checks. Batch requests contain persisted barcode IDs/counts/formats, never prices. Shared print diagnostics remain under `/api/printing`. See [contracts, authorization and replay semantics](phase-7/phase-7-3.md#api-persistence-and-security).
+
+## Maintenance
+
+GET /api/maintenance/tickets?customerId={id} lists persisted tickets, POST /api/maintenance/tickets records device intake and optional advance, PUT /api/maintenance/tickets/{id}/status records status history, and POST /api/maintenance/tickets/{id}/deliver completes delivery as cash or installment. All writes require a valid session, effective screen access and CSRF; operation keys support safe retries. Intake advances are posted to the customer statement immediately; final charges and cash collections are posted at delivery. Cash maintenance settlement is not posted to treasury/cashbox. See [maintenance workflow](maintenance.md).

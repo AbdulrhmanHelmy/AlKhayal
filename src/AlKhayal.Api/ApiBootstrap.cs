@@ -142,6 +142,14 @@ namespace AlKhayal.Api
                         typeof(Application.Authentication.AuthService)),
                     (Application.Customers.CustomerAccountService)_get(
                         typeof(Application.Customers.CustomerAccountService)),
+                    (Application.Customers.InstallmentService)_get(typeof(Application.Customers.InstallmentService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.MaintenanceController))
+                return new Controllers.MaintenanceController(
+                    (Application.Maintenance.MaintenanceService)_get(typeof(Application.Maintenance.MaintenanceService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
                     (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
                     (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
 

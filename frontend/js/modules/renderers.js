@@ -3,7 +3,8 @@
   var U = global.AlKhayalUtils,
     UI = global.AlKhayalUI,
     S = global.AlKhayalServices,
-    C = global.AlKhayalCalculations;
+    C = global.AlKhayalCalculations,
+    Api = global.AlKhayalApi;
   function friendlyReference(reference) {
     var value = String(reference || "");
     if (!value || value === "OPEN") return "رصيد افتتاحي";
@@ -2570,125 +2571,40 @@
     };
   }
   function installments(screen, container, context) {
-    var contracts = S.store.all("installments");
-    if (screen.mode !== "create") {
-      container.innerHTML =
-        UI.pageHeader(screen) +
-        UI.mockBanner() +
-        '<div class="filter-bar"><div class="field grow"><label>العقد</label><select class="select" id="contractSelect">' +
-        contracts
-          .map(function (contract) {
-            return (
-              '<option value="' +
-              contract.id +
-              '">' +
-              U.escape(contract.contract + " — " + contract.customer) +
-              "</option>"
-            );
-          })
-          .join("") +
-        '</select></div><button class="button primary" data-installment-action>' +
-        (screen.mode === "confirm" ? "تأكيد تجريبي" : "تسجيل دفعة تجريبية") +
-        "</button></div>" +
-        rowsTable(schemaFor("installments").columns, contracts, false);
-      container.querySelector("[data-installment-action]").onclick =
-        function () {
-          UI.confirm({
-            title: "مراجعة دفعة قسط",
-            message: "سيتم تحديث حالة العرض فقط دون حركة خزنة حقيقية.",
-            confirmText: "تأكيد المحاكاة",
-          }).then(function (confirmed) {
-            if (confirmed) UI.toast("تم تحديث جدول العرض مؤقتًا.", "success");
-          });
-        };
-      return;
+    function esc(value) { return U.escape(value); }
+    function money(value) { return U.money(value); }
+    function localDate() { var date = new Date(); return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0"); }
+    function showFailure(message) { container.innerHTML = UI.pageHeader(screen) + '<div class="empty-state"><strong>تعذر تحميل بيانات التقسيط</strong><span>' + esc(message || "أعد المحاولة.") + '</span><button class="button" data-installment-retry>إعادة المحاولة</button></div>'; container.querySelector("[data-installment-retry]").onclick = function () { installments(screen, container, context); }; }
+    function renderSale(customers, products) {
+      container.innerHTML = UI.pageHeader(screen) + '<section class="card"><div class="card-head"><h2>بيانات البيع بالتقسيط</h2></div><div class="card-body form-grid">' +
+        '<div class="field"><label for="installmentCustomer">العميل</label><select class="select" id="installmentCustomer"><option value="">اختر العميل</option>' + customers.map(function (c) { return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>'; }).join("") + '</select></div>' +
+        '<div class="field"><label for="installmentProduct">المنتج</label><select class="select" id="installmentProduct"><option value="">اختر المنتج</option>' + products.map(function (p) { return '<option value="'+esc(p.id)+'" data-price="'+Number(p.salePrice||0)+'">'+esc(p.name)+'</option>'; }).join("") + '</select></div>' +
+        '<label class="field">سعر المنتج<input class="input" id="installmentPrice" type="number" readonly></label><label class="field">المقدم<input class="input" id="installmentDown" type="number" min="0" step="0.01" value="0"></label>' +
+        '<label class="field">نسبة الفائدة (%)<input class="input" id="installmentRate" type="number" min="0" step="0.01" value="0"></label><label class="field">عدد الأقساط<input class="input" id="installmentCount" type="number" min="1" max="120" step="1" value="6"></label>' +
+        '<div class="field"><label for="installmentEvery">تكرار القسط</label><select class="select" id="installmentEvery"><option value="1">شهريًا</option><option value="2">كل شهرين</option><option value="3">كل 3 أشهر</option></select></div><label class="field">أول استحقاق<input class="input" id="installmentFirstDue" type="date"></label>' +
+        '<div class="field span-2"><strong>إجمالي الأقساط: <span id="installmentTotal">0.00</span></strong>　<strong>قيمة القسط: <span id="installmentEach">0.00</span></strong></div><div class="span-2"><button class="button primary" data-save-installment>تسجيل بيع التقسيط</button></div></div></section><section class="card"><div class="card-head"><h2>جدول الأقساط المتوقع</h2></div><div class="card-body" id="installmentPreview"></div></section>';
+      var product = container.querySelector("#installmentProduct"), price = container.querySelector("#installmentPrice"), busy = false;
+      container.querySelector("#installmentFirstDue").value = localDate();
+      product.onchange = function () { var option=product.options[product.selectedIndex]; price.value=option&&option.dataset.price||""; recalc(); };
+      ["installmentDown","installmentRate","installmentCount","installmentEvery","installmentFirstDue"].forEach(function(id){container.querySelector("#"+id).oninput=recalc;container.querySelector("#"+id).onchange=recalc;});
+      function values(){return {customerId:Number(container.querySelector("#installmentCustomer").value),productId:Number(product.value),productPrice:Number(price.value)||0,downPayment:Number(container.querySelector("#installmentDown").value)||0,interestRate:Number(container.querySelector("#installmentRate").value)||0,installmentCount:parseInt(container.querySelector("#installmentCount").value,10),intervalMonths:Number(container.querySelector("#installmentEvery").value),firstDueOn:container.querySelector("#installmentFirstDue").value};}
+      function recalc() { var v=values(), financed=Math.round(Math.max(0,v.productPrice-v.downPayment)*(1+v.interestRate/100)*100)/100, schedule=C.installments(financed,0,Math.max(1,v.installmentCount||1),v.firstDueOn||localDate()); schedule.forEach(function(item,index){var date=new Date((v.firstDueOn||localDate())+"T12:00:00");date.setMonth(date.getMonth()+index*v.intervalMonths);item.dueDate=date.toISOString().slice(0,10);}); container.querySelector("#installmentTotal").textContent=money(financed);container.querySelector("#installmentEach").textContent=money(schedule.length?schedule[0].amount:0);container.querySelector("#installmentPreview").innerHTML=rowsTable([{key:"number",label:"القسط",number:true},{key:"dueDate",label:"الاستحقاق",date:true},{key:"amount",label:"القيمة",money:true}],schedule.map(function(x){x.id=x.number;return x;}),false); }
+      recalc();
+      container.querySelector("[data-save-installment]").onclick=function(){ if(busy)return; var v=values();if(!v.customerId||!v.productId||v.productPrice<=0||v.downPayment<0||v.downPayment>=v.productPrice||!Number.isInteger(v.installmentCount)||v.installmentCount<1||v.interestRate<0){UI.toast("اختر العميل والمنتج وتأكد من صحة بيانات العقد.","warning");return;} var body={productId:v.productId,productPrice:v.productPrice,downPayment:v.downPayment,interestRate:v.interestRate,installmentCount:v.installmentCount,intervalMonths:v.intervalMonths,firstDueOn:v.firstDueOn}, identity=JSON.stringify(body), storageKey="alkhayal_installment_sale_"+v.customerId+"_"+btoa(unescape(encodeURIComponent(identity))), operationKey=sessionStorage.getItem(storageKey);if(!operationKey){operationKey="installment-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10);sessionStorage.setItem(storageKey,operationKey);}body.operationKey=operationKey;busy=true;var button=this;button.disabled=true;Api.request("/api/customers/"+v.customerId+"/installments",{method:"POST",body:JSON.stringify(body)}).then(function(contract){sessionStorage.removeItem(storageKey);UI.toast("تم حفظ عقد "+contract.contractNumber+" وإثباته في كشف حساب العميل.","success");button.disabled=false;busy=false;}).catch(function(error){UI.toast(error.message||"تعذر حفظ العقد؛ أعد المحاولة بنفس البيانات.","danger");button.disabled=false;busy=false;}); };
     }
-    var state = context.state;
-    state.amount = state.amount || 12000;
-    state.down = state.down || 3000;
-    state.count = state.count || 6;
-    function drawSchedule() {
-      var schedule = C.installments(
-        state.amount,
-        state.down,
-        state.count,
-        "2026-11-01",
-      );
-      var host = container.querySelector("#scheduleHost");
-      if (host)
-        host.innerHTML = rowsTable(
-          [
-            { key: "number", label: "القسط", number: true },
-            { key: "dueDate", label: "الاستحقاق", date: true },
-            { key: "amount", label: "القيمة", money: true },
-            { key: "status", label: "الحالة", badge: true },
-          ],
-          schedule.map(function (item) {
-            item.id = item.number;
-            return item;
-          }),
-          false,
-        );
+    function renderPayments(customers) {
+      container.innerHTML=UI.pageHeader(screen)+'<div class="field" style="max-width:520px"><label for="installmentCustomerFilter">العميل</label><select class="select" id="installmentCustomerFilter"><option value="">اختر العميل</option>'+customers.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>';}).join("")+'</select></div><div id="customerInstallments"></div>';
+      var select=container.querySelector("#installmentCustomerFilter"), host=container.querySelector("#customerInstallments");select.onchange=load;
+      function load(){var customerId=select.value;if(!customerId){host.innerHTML='<div class="empty-state">اختر عميلًا لعرض عقود وأقساط العميل.</div>';return;}host.innerHTML='<div class="empty-state">جارٍ تحميل الأقساط...</div>';Api.request("/api/customers/"+encodeURIComponent(customerId)+"/installments").then(draw).catch(function(error){host.innerHTML='<div class="empty-state">'+esc(error.message||"تعذر تحميل الأقساط.")+'</div>';});}
+      function draw(contracts){if(!contracts.length){host.innerHTML='<div class="empty-state">لا توجد عقود تقسيط لهذا العميل.</div>';return;}host.innerHTML=contracts.map(function(contract){return '<section class="card"><div class="card-head"><h2>'+esc(contract.contractNumber)+' — '+esc(contract.productName)+'</h2></div><div class="card-body"><p>إجمالي العقد '+money(contract.totalAmount)+' — المقدم '+money(contract.downPayment)+' — الفائدة '+esc(contract.interestRate)+'%</p>'+rowsTable([{key:"number",label:"القسط",number:true},{key:"dueDate",label:"الاستحقاق",date:true},{key:"amount",label:"القيمة",money:true},{key:"status",label:"الحالة"},{key:"action",label:"إجراء"}],contract.schedule.map(function(item){item.id=item.number;item.action=item.status==="مسدد"?"مسدد":'<button class="button" data-pay="'+contract.customerId+':'+contract.id+':'+item.number+'">تسديد القسط</button>';return item;}),false)+'</div></section>';}).join("");host.querySelectorAll("td").forEach(function(cell){var match=/^<button class="button" data-pay="(\d+:\d+:\d+)">تسديد القسط<\/button>$/.exec(cell.textContent);if(match){var button=container.ownerDocument.createElement("button");button.className="button";button.setAttribute("data-pay",match[1]);button.textContent="تسديد القسط";cell.textContent="";cell.appendChild(button);}});host.querySelectorAll("[data-pay]").forEach(function(button){button.onclick=function(){var parts=button.getAttribute("data-pay").split(":"),today=localDate(),keyName="alkhayal_installment_pay_"+parts[1]+"_"+parts[2],key=sessionStorage.getItem(keyName);if(!key){key="installment-pay-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10);sessionStorage.setItem(keyName,key);}button.disabled=true;Api.request("/api/customers/"+parts[0]+"/installments/"+parts[1]+"/payments/"+parts[2],{method:"POST",body:JSON.stringify({paidOn:today,operationKey:key})}).then(function(){sessionStorage.removeItem(keyName);UI.toast("تم حفظ سداد القسط وتحديث كشف حساب العميل.","success");load();}).catch(function(error){button.disabled=false;UI.toast(error.message||"تعذر تسجيل السداد.","danger");});};});}
     }
-    container.innerHTML =
-      UI.pageHeader(screen) +
-      UI.mockBanner() +
-      '<div class="content-grid"><section class="card"><div class="card-head"><h2>بيانات العقد</h2></div><div class="card-body form-grid"><div class="field span-2"><label>العميل</label><select class="select">' +
-      S.store
-        .all("customers")
-        .filter(function (customer) {
-          return customer.name !== "عميل نقدي";
-        })
-        .map(function (customer) {
-          return "<option>" + U.escape(customer.name) + "</option>";
-        })
-        .join("") +
-      "</select></div>" +
-      UI.field(
-        { id: "contractAmount", label: "قيمة العقد", type: "number", min: 1, step: "0.01" },
-        state.amount,
-      ) +
-      UI.field(
-        { id: "downPayment", label: "المقدم", type: "number", min: 0, step: "0.01" },
-        state.down,
-      ) +
-      UI.field(
-        {
-          id: "installmentCount",
-          label: "عدد الأقساط",
-          type: "number",
-          min: 1,
-        },
-        state.count,
-      ) +
-      UI.field(
-        { id: "firstDue", label: "أول استحقاق", type: "date" },
-        "2026-11-01",
-      ) +
-      '<div class="span-2"><button class="button primary" data-save-contract>حفظ عقد تجريبي</button></div></div></section><section class="card"><div class="card-head"><h2>جدول الأقساط</h2></div><div class="card-body" id="scheduleHost"></div></section></div>';
-    drawSchedule();
-    ["contractAmount", "downPayment", "installmentCount"].forEach(
-      function (id) {
-        container.querySelector("#" + id).onchange = function () {
-          state.amount = Number(
-            container.querySelector("#contractAmount").value,
-          );
-          state.down = Number(container.querySelector("#downPayment").value);
-          state.count = Number(
-            container.querySelector("#installmentCount").value,
-          );
-          drawSchedule();
-        };
-      },
-    );
-    container.querySelector("[data-save-contract]").onclick = function () {
-      UI.toast("تم حفظ العقد وجدوله في ذاكرة الجلسة فقط.", "success");
-    };
+    container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state">جارٍ تحميل البيانات...</div>';
+    Promise.all([Api.request("/api/customers"),screen.mode==="create"?Api.request("/api/catalog/products?isActive=true&page=1&pageSize=100"):Promise.resolve(null)]).then(function(data){if(context.isActive&&!context.isActive())return;var customers=(data[0]||[]).filter(function(c){return c.status==="نشط";});if(screen.mode==="create"){var page=data[1]||{};renderSale(customers,(page.items||[]).filter(function(p){return p.isActive&&!p.isArchived;}));}else renderPayments(customers);}).catch(function(error){if(!context.isActive||context.isActive())showFailure(error.message);});
   }
-  function maintenanceIntake(screen, container) {
+  function maintenanceIntake(screen, container, context) {
     var fields = [
-      { id: "customer", label: "اسم العميل", required: true },
       { id: "phone", label: "الهاتف", required: true, ltr: true },
+      { id: "received", label: "تاريخ الاستلام", type: "date", required: true },
       {
         id: "device",
         label: "نوع الجهاز",
@@ -2697,6 +2613,7 @@
       },
       { id: "model", label: "الموديل", required: true, ltr: true },
       { id: "serial", label: "الرقم التسلسلي", required: true, ltr: true },
+      { id: "accessories", label: "الملحقات المستلمة", span: true },
       {
         id: "technician",
         label: "الفني",
@@ -2716,75 +2633,26 @@
         span: true,
         required: true,
       },
+      { id: "estimatedCost", label: "تكلفة الصيانة التقديرية", type: "number", min: 0, step: "0.01" },
+      { id: "notes", label: "ملاحظات الاستلام", type: "textarea", span: true },
     ];
-    container.innerHTML =
-      UI.pageHeader(screen) +
-      UI.mockBanner() +
-      '<section class="card"><div class="card-head"><h2>بيانات الاستلام</h2></div><div class="card-body"><form id="maintenanceForm" class="form-grid">' +
-      fields
-        .map(function (field) {
-          return UI.field(field, "");
-        })
-        .join("") +
-      '<div class="span-2"><button class="button primary" type="submit">إنشاء تذكرة تجريبية</button></div></form></div></section>';
-    container.querySelector("#maintenanceForm").onsubmit = function (event) {
-      event.preventDefault();
-      var result = UI.collectForm(this, fields);
-      if (!result.valid) return;
-      result.data.ticket = "MNT-DEMO-" + Date.now().toString().slice(-4);
-      result.data.received = "2026-10-20";
-      result.data.status = "تم الاستلام";
-      S.createMock("maintenance", result.data);
-      UI.toast("أُنشئت تذكرة مؤقتة: " + result.data.ticket, "success");
-      this.reset();
-    };
+    function localDate(){var date=new Date();return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");}
+    function isCurrent(){return container.isConnected&&document.title===screen.title+" | الخيال POS";}
+    function loadCustomers(){container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state"><span>جارٍ تحميل العملاء...</span><button class="button" data-maintenance-customer-retry>إعادة المحاولة</button></div>';var loadingRetry=container.querySelector("[data-maintenance-customer-retry]");if(loadingRetry)loadingRetry.onclick=loadCustomers;var timer;var timedRequest=new Promise(function(_,reject){timer=global.setTimeout(function(){var timeoutError=new Error("تأخر الرد من الخادم أثناء تحميل العملاء.");timeoutError.code="request_timeout";reject(timeoutError);},15000);});Promise.race([Api.request("/api/customers"),timedRequest]).then(function(customers){global.clearTimeout(timer);if(!isCurrent())return;customers=(customers||[]).filter(function(customer){return customer.status==="نشط";});if(!customers.length){container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state"><strong>لا يوجد عملاء نشطون</strong><span>أضف عميلًا أو فعّل عميلًا من صفحة العملاء أولًا.</span></div>';return;}container.innerHTML=UI.pageHeader(screen)+'<section class="card"><div class="card-head"><h2>تسجيل جهاز وبيانات استلامه</h2></div><div class="card-body"><form id="maintenanceForm" class="form-grid"><div class="field"><label for="maintenanceCustomer">العميل</label><select class="select" id="maintenanceCustomer" required><option value="">اختر العميل</option>'+customers.map(function(customer){return '<option value="'+customer.id+'" data-phone="'+U.escape(customer.phone||"")+'">'+U.escape(customer.name)+'</option>';}).join("")+'</select></div>'+fields.map(function(field){return UI.field(field,"");}).join("")+'<label class="field"><span>هل دفع العميل مقدمًا؟</span><span class="check-row"><input type="checkbox" id="maintenanceHasAdvance"> نعم، دفع مقدمًا</span></label><div class="field" id="maintenanceAdvanceWrap" hidden>'+UI.field({id:"advancePaid",label:"قيمة المقدم",type:"number",min:0.01,step:"0.01"},"")+'</div><div class="span-2"><button class="button primary" type="submit">تسجيل الجهاز للصيانة</button></div></form></div></section>';
+      var form=container.querySelector("#maintenanceForm"),customerSelect=container.querySelector("#maintenanceCustomer"),advanceCheck=container.querySelector("#maintenanceHasAdvance");container.querySelector("#received").value=localDate();container.querySelector("#expected").value=localDate();customerSelect.onchange=function(){var option=customerSelect.options[customerSelect.selectedIndex];container.querySelector("#phone").value=option&&option.dataset.phone||"";};advanceCheck.onchange=function(){container.querySelector("#maintenanceAdvanceWrap").hidden=!advanceCheck.checked;};
+      form.onsubmit=function(event){event.preventDefault();var result=UI.collectForm(form,fields),customerId=Number(customerSelect.value),advance=advanceCheck.checked?Number(container.querySelector("#advancePaid").value)||0:0;if(!result.valid||!customerId){UI.toast("اختر العميل وأكمل البيانات المطلوبة.","warning");return;}if(advanceCheck.checked&&advance<=0){UI.toast("أدخل قيمة المقدم الذي دفعه العميل.","warning");return;}var body={customerId:customerId,phone:result.data.phone,device:result.data.device,model:result.data.model,serial:result.data.serial,accessories:result.data.accessories,issue:result.data.issue,technician:result.data.technician,estimatedCost:Number(result.data.estimatedCost)||0,advancePaid:advance,notes:result.data.notes,receivedOn:result.data.received,expectedOn:result.data.expected},identity=JSON.stringify(body),storageKey="alkhayal_maintenance_intake_"+btoa(unescape(encodeURIComponent(identity))),key=sessionStorage.getItem(storageKey);if(!key){key="maintenance-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10);sessionStorage.setItem(storageKey,key);}body.operationKey=key;var button=form.querySelector('[type="submit"]');button.disabled=true;Api.request("/api/maintenance/tickets",{method:"POST",body:JSON.stringify(body)}).then(function(ticket){sessionStorage.removeItem(storageKey);UI.toast("تم حفظ تذكرة "+ticket.ticketNumber+" وقيمة المقدم في قاعدة البيانات.","success");form.reset();container.querySelector("#received").value=localDate();container.querySelector("#expected").value=localDate();container.querySelector("#maintenanceAdvanceWrap").hidden=true;button.disabled=false;}).catch(function(error){UI.toast(error.message||"تعذر حفظ تذكرة الصيانة.","danger");button.disabled=false;});};
+    }).catch(function(error){global.clearTimeout(timer);if(isCurrent()){container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state"><strong>تعذر تحميل العملاء</strong><span>'+U.escape(error.message||"")+'</span><button class="button" data-maintenance-customer-retry>إعادة المحاولة</button></div>';var retry=container.querySelector("[data-maintenance-customer-retry]");if(retry)retry.onclick=loadCustomers;}});}
+    loadCustomers();
   }
-  function maintenanceTracking(screen, container) {
-    var tickets = S.store.all("maintenance");
-    function draw(id) {
-      var ticket = S.store.find("maintenance", id) || tickets[0];
-      container.innerHTML =
-        UI.pageHeader(screen) +
-        UI.mockBanner() +
-        '<div class="filter-bar"><div class="field grow"><label>رقم التذكرة</label><select class="select" id="ticketSelect">' +
-        tickets
-          .map(function (item) {
-            return (
-              '<option value="' +
-              item.id +
-              '"' +
-              (item.id === ticket.id ? " selected" : "") +
-              ">" +
-              U.escape(item.ticket + " — " + item.customer) +
-              "</option>"
-            );
-          })
-          .join("") +
-        '</select></div><button class="button" data-advance-status>تقدم الحالة تجريبيًا</button></div><div class="content-grid"><section class="card"><div class="card-head"><h2>' +
-        U.escape(ticket.ticket) +
-        "</h2>" +
-        UI.badge(ticket.status) +
-        '</div><div class="card-body form-grid"><div class="field"><label>العميل</label><strong>' +
-        U.escape(ticket.customer) +
-        '</strong></div><div class="field"><label>الجهاز</label><strong>' +
-        U.escape(ticket.device + " — " + ticket.model) +
-        '</strong></div><div class="field"><label>العطل</label><strong>' +
-        U.escape(ticket.issue) +
-        '</strong></div><div class="field"><label>الفني</label><strong>' +
-        U.escape(ticket.technician) +
-        '</strong></div></div></section><aside class="card"><div class="card-head"><h2>خط التتبع</h2></div><div class="card-body timeline"><div class="timeline-item"><strong>تم الاستلام</strong><p class="muted">' +
-        U.date(ticket.received) +
-        '</p></div><div class="timeline-item"><strong>الفحص الفني</strong><p class="muted">تم تسجيل التشخيص الأولي.</p></div><div class="timeline-item"><strong>' +
-        U.escape(ticket.status) +
-        '</strong><p class="muted">آخر حالة في بيانات العرض.</p></div></div></aside></div>';
-      container.querySelector("#ticketSelect").onchange = function () {
-        draw(this.value);
-      };
-      container.querySelector("[data-advance-status]").onclick = function () {
-        UI.toast("تقدمت الحالة داخل جلسة العرض فقط.", "success");
-      };
+  function maintenanceTracking(screen, container, context) {
+    var selectedCustomer="all",statuses=["تم الاستلام","قيد الفحص","قيد الإصلاح","بانتظار قطعة","جاهز للتسليم"],customers=[];
+    function localDate(){var date=new Date();return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");}
+    function draw(rows){var visible=selectedCustomer==="all"?rows:rows.filter(function(ticket){return String(ticket.customerId)===selectedCustomer;});container.innerHTML=UI.pageHeader(screen)+'<div class="toolbar"><div class="field" style="max-width:420px"><label for="maintenanceCustomerFilter">العميل</label><select class="select" id="maintenanceCustomerFilter"><option value="all">كل العملاء</option>'+customers.map(function(customer){return '<option value="'+customer.id+'"'+(String(customer.id)===selectedCustomer?' selected':'')+'>'+U.escape(customer.name)+'</option>';}).join("")+'</select></div><span class="muted">'+U.number(visible.length)+' تذكرة صيانة</span></div><div class="maintenance-ticket-list">'+visible.map(function(ticket){return '<section class="card maintenance-ticket" data-maintenance-id="'+ticket.id+'"><div class="card-head"><div><h2>'+U.escape(ticket.ticketNumber)+'</h2><p class="muted">'+U.escape(ticket.customerName)+' · '+U.escape(ticket.phone||"")+'</p></div>'+UI.badge(ticket.status)+'</div><div class="card-body form-grid"><div class="field"><label>الجهاز</label><strong>'+U.escape(ticket.device+" — "+ticket.model)+'</strong></div><div class="field"><label>الرقم التسلسلي</label><strong class="ltr">'+U.escape(ticket.serial||"—")+'</strong></div><div class="field span-2"><label>العطل</label><span>'+U.escape(ticket.issue||"—")+'</span></div><div class="field"><label>الفني</label><span>'+U.escape(ticket.technician||"—")+'</span></div><div class="field"><label>التسليم المتوقع</label><span>'+U.date(ticket.expectedOn)+'</span></div><div class="field"><label>الملحقات</label><span>'+U.escape(ticket.accessories||"—")+'</span></div><div class="field"><label>التكلفة التقديرية</label><span>'+U.money(ticket.estimatedCost)+'</span></div><div class="field"><label>المقدم</label><span>'+U.money(ticket.advancePaid)+'</span></div>'+(ticket.status==="تم التسليم"?'<div class="field"><label>التكلفة النهائية</label><span>'+U.money(ticket.finalCost||0)+' · '+(ticket.settlementType==="cash"?"نقدي":"آجل على حساب العميل")+'</span></div><div class="field"><label>تاريخ التسليم الفعلي</label><span>'+U.date(ticket.deliveredOn)+'</span></div>':'<div class="field"><label for="maintenanceStatus_'+ticket.id+'">الحالة</label><select class="select" id="maintenanceStatus_'+ticket.id+'" data-maintenance-status>'+statuses.map(function(status){return '<option value="'+status+'"'+(ticket.status===status?' selected':'')+'>'+status+'</option>';}).join("")+'</select></div><div class="row-actions"><button class="button" type="button" data-save-maintenance-status>حفظ الحالة</button>'+(ticket.status==="جاهز للتسليم"?'<label class="field">المبلغ النهائي<input class="input" type="number" min="0" step="0.01" data-final-cost value="'+Number(ticket.estimatedCost||0)+'"></label><label class="field">طريقة السداد<select class="select" data-settlement-type><option value="cash">نقدي</option><option value="installment">آجل على حساب العميل</option></select></label><button class="button primary" type="button" data-deliver-maintenance>تسليم للعميل</button>':'')+'</div>')+'</div></section>';}).join("")+(visible.length?"":'<div class="empty-state">لا توجد أجهزة مسجلة لهذا العميل.</div>')+'</div>';container.querySelector("#maintenanceCustomerFilter").onchange=function(){selectedCustomer=this.value;load();};
+      container.querySelectorAll("[data-save-maintenance-status]").forEach(function(button){button.onclick=function(){var card=button.closest("[data-maintenance-id]"),id=card.getAttribute("data-maintenance-id"),status=card.querySelector("[data-maintenance-status]").value,key="maintenance-status-"+id+"-"+Date.now().toString(36);button.disabled=true;Api.request("/api/maintenance/tickets/"+id+"/status",{method:"PUT",body:JSON.stringify({status:status,operationKey:key})}).then(function(){UI.toast("تم حفظ حالة الصيانة.","success");load();}).catch(function(error){button.disabled=false;UI.toast(error.message||"تعذر تحديث الحالة.","danger");});};});
+      container.querySelectorAll("[data-deliver-maintenance]").forEach(function(button){button.onclick=function(){var card=button.closest("[data-maintenance-id]"),id=card.getAttribute("data-maintenance-id"),body={finalCost:Number(card.querySelector("[data-final-cost]").value)||0,settlementType:card.querySelector("[data-settlement-type]").value,deliveredOn:localDate()},identity=JSON.stringify(body),storageKey="alkhayal_maintenance_delivery_"+id,stored;try{stored=JSON.parse(sessionStorage.getItem(storageKey)||"null");}catch(e){stored=null;}if(!stored||stored.identity!==identity){stored={identity:identity,key:"maintenance-delivery-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10)};sessionStorage.setItem(storageKey,JSON.stringify(stored));}body.operationKey=stored.key;button.disabled=true;Api.request("/api/maintenance/tickets/"+id+"/deliver",{method:"POST",body:JSON.stringify(body)}).then(function(){sessionStorage.removeItem(storageKey);UI.toast(body.settlementType==="cash"?"تم تسجيل التسليم والسداد النقدي.":"تم تسجيل التسليم وإضافة المديونية إلى كشف حساب العميل.","success");load();}).catch(function(error){button.disabled=false;UI.toast(error.message||"تعذر تسجيل التسليم.","danger");});};});
     }
-    draw(tickets[0].id);
+    function load(){container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state">جارٍ تحميل تذاكر الصيانة...</div>';Api.request("/api/maintenance/tickets"+(selectedCustomer==="all"?"":"?customerId="+encodeURIComponent(selectedCustomer))).then(function(rows){if(context.isActive&&!context.isActive())return;draw(rows||[]);}).catch(function(error){if(!context.isActive||context.isActive())container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state"><strong>تعذر تحميل تذاكر الصيانة</strong><span>'+U.escape(error.message||"")+'</span><button class="button" data-maintenance-retry>إعادة المحاولة</button></div>';var retry=container.querySelector("[data-maintenance-retry]");if(retry)retry.onclick=load;});}
+    container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state">جارٍ تحميل العملاء...</div>';Api.request("/api/customers").then(function(rows){if(context.isActive&&!context.isActive())return;customers=(rows||[]).filter(function(customer){return customer.status==="نشط";});load();}).catch(function(error){if(!context.isActive||context.isActive())container.innerHTML=UI.pageHeader(screen)+'<div class="empty-state"><strong>تعذر تحميل العملاء</strong><span>'+U.escape(error.message||"")+'</span></div>';});
   }
   function cashServices(screen, container) {
     var services = [

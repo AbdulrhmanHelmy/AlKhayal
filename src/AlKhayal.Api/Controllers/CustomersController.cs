@@ -20,9 +20,10 @@ namespace AlKhayal.Api.Controllers
         private readonly CustomerService _customers;
         private readonly AuthService _auth;
         private readonly CustomerAccountService _accounts;
+        private readonly InstallmentService _installments;
         private readonly UserManagementService _users;
         private readonly FeatureService _features;
-        public CustomersController(CustomerService customers, AuthService auth, CustomerAccountService accounts, UserManagementService users, FeatureService features) { _customers = customers; _auth = auth; _accounts = accounts; _users=users; _features=features; }
+        public CustomersController(CustomerService customers, AuthService auth, CustomerAccountService accounts, InstallmentService installments, UserManagementService users, FeatureService features) { _customers = customers; _auth = auth; _accounts = accounts; _installments=installments; _users=users; _features=features; }
 
         [HttpGet, Route("")]
         public async Task<IHttpActionResult> GetAll(CancellationToken ct)
@@ -108,12 +109,57 @@ namespace AlKhayal.Api.Controllers
             catch (System.Collections.Generic.KeyNotFoundException ex) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", ex.Message)); }
         }
 
+        [HttpGet, Route("{id:long}/installments")]
+        public async Task<IHttpActionResult> GetInstallments(long id, CancellationToken ct)
+        {
+            if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            if (!await CanUseScreen("installment-payment", ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("screen_forbidden", "لا تملك صلاحية سداد الأقساط."));
+            try { return Ok(ApiEnvelope<object>.Ok(_installments.GetByCustomer(id))); }
+            catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
+        }
+
+        [HttpPost, Route("{id:long}/installments")]
+        public async Task<IHttpActionResult> CreateInstallment(long id, InstallmentSaleRequest request, CancellationToken ct)
+        {
+            if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            if (!await HasValidCsrf(ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("invalid_csrf", "تعذر التحقق من الطلب. حدّث الصفحة وحاول مرة أخرى."));
+            if (!await CanUseScreen("installment-system", ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("screen_forbidden", "لا تملك صلاحية البيع بالتقسيط."));
+            try
+            {
+                var result = _installments.Create(id, request == null ? 0 : request.ProductId, request == null ? 0 : request.ProductPrice, request == null ? 0 : request.DownPayment, request == null ? 0 : request.InterestRate, request == null ? 0 : request.InstallmentCount, request == null ? 0 : request.IntervalMonths, request == null ? null : request.FirstDueOn, request == null ? null : request.OperationKey);
+                return Content(HttpStatusCode.Created, ApiEnvelope<CustomerInstallmentContract>.Ok(result));
+            }
+            catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
+            catch (CustomerOperationKeyConflictException ex) { return Content(HttpStatusCode.Conflict, ApiEnvelope<object>.Fail("operation_key_conflict", ex.Message)); }
+            catch (OverflowException) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", "قيمة العقد تتجاوز الحد المسموح.")); }
+            catch (System.Collections.Generic.KeyNotFoundException ex) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", ex.Message)); }
+            catch (System.Data.SQLite.SQLiteException ex) { System.Diagnostics.Trace.TraceError("Installment contract failed: SQLite code {0}", ex.ResultCode); return Content(HttpStatusCode.ServiceUnavailable, ApiEnvelope<object>.Fail("database_unavailable", "تعذر حفظ عقد التقسيط. أعد المحاولة بنفس المفتاح.")); }
+        }
+
+        [HttpPost, Route("{id:long}/installments/{contractId:long}/payments/{number:int}")]
+        public async Task<IHttpActionResult> PayInstallment(long id, long contractId, int number, InstallmentPaymentRequest request, CancellationToken ct)
+        {
+            if (!await IsAuthenticated(ct)) return UnauthorizedResult();
+            if (!await HasValidCsrf(ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("invalid_csrf", "تعذر التحقق من الطلب. حدّث الصفحة وحاول مرة أخرى."));
+            if (!await CanUseScreen("installment-payment", ct)) return Content(HttpStatusCode.Forbidden, ApiEnvelope<object>.Fail("screen_forbidden", "لا تملك صلاحية سداد الأقساط."));
+            try { return Ok(ApiEnvelope<CustomerInstallmentContract>.Ok(_installments.Pay(id, contractId, number, request == null ? null : request.PaidOn, request == null ? null : request.OperationKey))); }
+            catch (ArgumentException ex) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", ex.Message)); }
+            catch (CustomerOperationKeyConflictException ex) { return Content(HttpStatusCode.Conflict, ApiEnvelope<object>.Fail("operation_key_conflict", ex.Message)); }
+            catch (OverflowException) { return Content(HttpStatusCode.BadRequest, ApiEnvelope<object>.Fail("validation", "قيمة السداد تتجاوز الحد المسموح.")); }
+            catch (System.Collections.Generic.KeyNotFoundException ex) { return Content(HttpStatusCode.NotFound, ApiEnvelope<object>.Fail("not_found", ex.Message)); }
+            catch (System.Data.SQLite.SQLiteException ex) { System.Diagnostics.Trace.TraceError("Installment payment failed: SQLite code {0}", ex.ResultCode); return Content(HttpStatusCode.ServiceUnavailable, ApiEnvelope<object>.Fail("database_unavailable", "تعذر تأكيد سداد القسط. أعد المحاولة بنفس المفتاح.")); }
+        }
+
         private async Task<bool> CanUseStatement(CancellationToken ct)
+        {
+            return await CanUseScreen("customer-statement", ct).ConfigureAwait(false);
+        }
+        private async Task<bool> CanUseScreen(string screenId, CancellationToken ct)
         {
             var user=await _auth.GetCurrentUserAsync(ReadCookie(),ct).ConfigureAwait(false);
             if(user==null)return false;if(user.Role==UserRoles.Administrator)return true;
             var access=await _users.GetEffectiveAccessAsync(user,await _features.GetEffectiveAsync(ct).ConfigureAwait(false),ct).ConfigureAwait(false);
-            return access.ScreenIds.Contains("customer-statement",StringComparer.OrdinalIgnoreCase);
+            return access.ScreenIds.Contains(screenId,StringComparer.OrdinalIgnoreCase);
         }
         private async Task<bool> IsAuthenticated(CancellationToken ct) { var token = ReadCookie(); return await _auth.GetCurrentUserAsync(token, ct) != null; }
         private async Task<bool> HasValidCsrf(CancellationToken ct) { return await _auth.ValidateCsrfAsync(ReadCookie(), ReadCsrf(), ct); }

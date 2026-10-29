@@ -17,7 +17,8 @@ namespace AlKhayal.UnitTests
             var store = new MemoryStore(); var service = new FeatureService(store, store);
             var defaults = await service.GetEffectiveAsync(CancellationToken.None);
             Assert.True(defaults.Modules.Single(item => item.Key == "sales").IsEnabled);
-            Assert.False(defaults.Modules.Single(item => item.Key == "installments").IsEnabled);
+            Assert.True(defaults.Modules.Single(item => item.Key == "installments").IsEnabled);
+            Assert.True(defaults.Modules.Single(item => item.Key == "maintenance-management").IsEnabled);
             Assert.True((await service.SetAsync(Command("installments", FeatureKinds.Module, true), CancellationToken.None)).Succeeded);
             Assert.True((await service.GetEffectiveAsync(CancellationToken.None)).Modules.Single(item => item.Key == "installments").IsEnabled);
             Assert.True((await service.SetAsync(Command("installments", FeatureKinds.Module, false), CancellationToken.None)).Succeeded);

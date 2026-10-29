@@ -22,7 +22,7 @@ namespace AlKhayal.Api.Controllers
         [HttpGet,Route("products")]
         public async Task<IHttpActionResult> Products(string search=null,long? categoryId=null,bool? isActive=null,bool includeArchived=false,int page=1,int pageSize=25,CancellationToken ct=default(CancellationToken))
         {
-            var access=await RequireAny(ct,false,false,"products-list","product-edit").ConfigureAwait(false); if(access.Error!=null)return access.Error;
+            var access=await RequireAny(ct,false,false,"products-list","product-edit","installment-system").ConfigureAwait(false); if(access.Error!=null)return access.Error;
             if(includeArchived&&access.User.Role!=UserRoles.Administrator)return Content(HttpStatusCode.Forbidden,ApiEnvelope<object>.Fail("forbidden","عرض المنتجات المؤرشفة متاح لمسؤول النظام فقط."));
             return Result(await _catalog.ListProductsAsync(new ProductQuery{Search=search,CategoryId=categoryId,IsActive=isActive,IncludeArchived=includeArchived,Page=page,PageSize=pageSize},ct).ConfigureAwait(false));
         }

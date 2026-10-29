@@ -10,6 +10,8 @@ Application validation and the existing SQLite writer transaction remain the fin
 
 The old frontend statement referenced `context` without receiving it, causing loading to fail. Renderer dispatch now supplies the real render context and request-generation/active-route guards prevent late responses repainting another customer/page. The old all-time SQL reader initialized its running balance with the sum of every movement, then added every movement again. It now starts an unfiltered statement at zero; a date-filtered statement starts with entries strictly before `from`. `currentBalance` is independently derived from the same full ledger rows, and `notes` is exposed on movements. The schema is unchanged and no migration is required.
 
+Persisted installment sales add an installment-sale debit for the total contract, a down-payment collection when present, and each installment settlement as an individual customer-ledger collection. The statement descriptions identify these movements and current/closing balances include them. Contract/schedule/payment rows and ledger entries share one SQLite transaction; see [installments.md](installments.md).
+
 The statement GET and transaction POST require an authenticated session and effective `customer-statement` screen access for cashiers; POST also requires CSRF. Administrators retain access. Stored old-route permissions are not silently expanded to the new combined workflow. Historical operation-key ownership/conflict behavior is unchanged. Numeric overflow returns an Arabic validation envelope; logged SQLite failures return 503 and the client keeps retry identity.
 
 ## Verification

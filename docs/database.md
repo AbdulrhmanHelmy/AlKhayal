@@ -2,6 +2,8 @@
 
 Migration `031_sales_refund_overdraft.sql` transactionally rebuilds the treasury ledger to allow narrowly scoped signed sales-refund post-balances, retaining all row IDs/history/source FKs. The migrator performs FK integrity checks before commit and restores FK enforcement after rollback or success. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
 
+Migration `032_customer_installments.sql` adds immutable installment contracts and due schedules plus append-only installment payment records. Contract creation and payment each write the customer transaction ledger and update the balance projection in the same transaction; historical customer records are unchanged. Retry keys and unique schedule-payment constraints prevent duplicate contracts or payments. See [installments.md](installments.md).
+
 Invoice return-state flags are read projections over saved return headers/lines. Complete return requires all original line quantities to be returned; purchase drafts do not count. This requires no migration or invoice/history rewrite. See [returns-management.md](returns-management.md).
 
 Migration `030_returns_management.sql` adds immutable named return-cashbox identities and real sales/purchase return-to-treasury source links. Historical return rows are retained without retroactive cash posting. See [returns-management.md](returns-management.md).
@@ -127,3 +129,7 @@ Additive `072_phase7_2_printing.sql` creates versioned PrintingConfiguration JSO
 ## Barcode and label storage — Phase 7.3
 
 Additive `073_phase7_3_labels.sql` adds LabelConfiguration/LabelConfigurationAudit, BarcodeOperations/BarcodeSymbologies and nullable PrintJobs RequestHash/BatchSummaryJson. Symbology is separate from existing barcode provenance. Replacement retires the old ProductBarcodes row and increments the existing product version/audit atomically; no historical line or financial identity is rewritten. Current migration count is **34**. See [persistence and identity policy](phase-7/phase-7-3.md).
+
+## Maintenance ticket storage
+
+033_maintenance_tickets.sql adds customer-linked tickets, append-only status history, and receipt records for intake advances and cash delivery. Monetary values use scale 4, operation keys protect intake/status/delivery retries, and ticket/customer-statement writes share short SQLite transactions. Cash delivery does not create a treasury/cashbox movement. See [maintenance workflow](maintenance.md).

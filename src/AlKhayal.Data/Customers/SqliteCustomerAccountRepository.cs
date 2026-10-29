@@ -133,7 +133,8 @@ namespace AlKhayal.Data.Customers
             {
                 var add=row.Type=="opening"||row.Type=="increase";running=checked(running+Signed(row));var amount=row.AmountScaled/10000m;
                 if(add)statement.TotalDebit+=amount;else statement.TotalCredit+=amount;
-                statement.Movements.Add(new CustomerStatementMovement{TransactionId=row.Id,Date=row.OccurredOn,Reference=row.Reference,Notes=row.Notes,Description=row.Type=="reduction"&&row.Notes!=null&&row.Notes.StartsWith("إلغاء فاتورة بيع",StringComparison.Ordinal)?"إلغاء فاتورة بيع":Description(row.Type,row.Reference),Debit=add?amount:0,Credit=add?0:amount,Balance=running/10000m,Kind=row.Type});
+                var description=row.Notes!=null&&row.Notes.StartsWith("بيع بالتقسيط",StringComparison.Ordinal)?"بيع بالتقسيط":row.Notes!=null&&row.Notes.StartsWith("مقدم بيع بالتقسيط",StringComparison.Ordinal)?"مقدم بيع بالتقسيط":row.Notes!=null&&row.Notes.StartsWith("سداد القسط رقم ",StringComparison.Ordinal)?row.Notes:row.Notes!=null&&row.Notes.StartsWith("صيانة رقم ",StringComparison.Ordinal)?"صيانة وخدمة":row.Notes!=null&&row.Notes.StartsWith("مقدم صيانة رقم ",StringComparison.Ordinal)?"مقدم صيانة":row.Notes!=null&&row.Notes.StartsWith("سداد صيانة نقدي رقم ",StringComparison.Ordinal)?"سداد صيانة نقدي":row.Type=="reduction"&&row.Notes!=null&&row.Notes.StartsWith("إلغاء فاتورة بيع",StringComparison.Ordinal)?"إلغاء فاتورة بيع":Description(row.Type,row.Reference);
+                statement.Movements.Add(new CustomerStatementMovement{TransactionId=row.Id,Date=row.OccurredOn,Reference=row.Reference,Notes=row.Notes,Description=description,Debit=add?amount:0,Credit=add?0:amount,Balance=running/10000m,Kind=row.Type});
             }
             statement.ClosingBalance=running/10000m;return statement;
         }

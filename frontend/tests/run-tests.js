@@ -8,6 +8,7 @@ var tokensCss = fs.readFileSync(path.join(root, "frontend", "css", "tokens.css")
 var themesCss = fs.readFileSync(path.join(root, "frontend", "css", "themes.css"), "utf8");
 var modulesCss = fs.readFileSync(path.join(root, "frontend", "css", "modules.css"), "utf8");
 var appJs = fs.readFileSync(path.join(root, "frontend", "js", "app.js"), "utf8");
+var apiClientJs = fs.readFileSync(path.join(root, "frontend", "js", "api-client.js"), "utf8");
 var activityJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "business-activities.js"), "utf8");
 var featureJs = fs.readFileSync(path.join(root, "frontend", "js", "modules", "feature-management.js"), "utf8");
 var featureStateJs = fs.readFileSync(path.join(root, "frontend", "js", "services", "feature-state.js"), "utf8");
@@ -38,6 +39,10 @@ var allowedRenderers = new Set(["product-labels","native-printing", "workforce-e
 assert.ok(loginHtml.indexOf("مرحبًا بك في الخيال. يجب إنشاء حساب المدير للبدء.") >= 0, "login must contain the first-run Arabic message");
 assert.ok(loginHtml.indexOf("إنشاء حساب المدير") >= 0, "login must expose the first Admin action");
 assert.ok(loginJs.indexOf("/api/auth/bootstrap-status") >= 0 && loginJs.indexOf("/api/auth/bootstrap") >= 0, "login must use the bootstrap API contract");
+assert.ok(apiClientJs.indexOf("request_timeout") >= 0 && apiClientJs.indexOf("20000") >= 0, "API requests must abort after a bounded wait instead of leaving pages loading indefinitely");
+assert.ok(renderersJs.indexOf("تعذر تحميل العملاء") >= 0 && renderersJs.indexOf("data-maintenance-customer-retry") >= 0 && renderersJs.indexOf("15000") >= 0 && renderersJs.indexOf('document.title===screen.title+" | الخيال POS"') >= 0, "maintenance intake must time out, keep active-screen responses, and provide a retry action");
+assert.ok(/function maintenanceIntake\(screen, container, context\)/.test(renderersJs) && /function maintenanceTracking\(screen, container, context\)/.test(renderersJs), "maintenance renderers must receive the screen context used by async callbacks");
+assert.ok(renderersJs.indexOf('id: "received", label: "تاريخ الاستلام", type: "date"') >= 0, "maintenance intake must render the receipt-date field that it initializes and submits");
 
 var routes = registry.screens.map(function (screen) { return screen.route; });
 assert.strictEqual(new Set(routes).size, routes.length, "screen routes must be unique");
@@ -277,6 +282,19 @@ var totals = calculations.invoice([{ quantity: 2, price: 19.95 }, { quantity: 3,
 assert.deepStrictEqual(totals, { subtotal: 69.9, discount: 4.9, tax: 9.1, total: 74.1 });
 var schedule = calculations.installments(1000, 100, 3, "2026-11-01");
 assert.strictEqual(schedule.length, 3); assert.strictEqual(schedule.reduce(function (sum, item) { return sum + item.amount; }, 0), 900); assert.strictEqual(schedule[2].dueDate, "2027-01-01");
+var installmentRoutes=registry.screens.filter(function(screen){return screen.route==="installment-system"||screen.route==="installment-payment";});
+assert.strictEqual(installmentRoutes.length,2,"installments navigation must expose exactly sale and payment screens");
+assert.ok(installmentRoutes.some(function(screen){return screen.title==="البيع بالتقسيط"&&screen.mode==="create";})&&installmentRoutes.some(function(screen){return screen.title==="سداد القسط"&&screen.mode==="payment";}),"installment screens must have the requested Arabic names and modes");
+assert.ok(appJs.indexOf('"installment-system"')>=0&&appJs.indexOf('"installment-payment"')>=0,"both installment routes must select their real renderer instead of the construction placeholder");
+assert.ok(renderersJs.indexOf('id="installmentRate"')>=0&&renderersJs.indexOf('id="installmentEvery"')>=0&&renderersJs.indexOf('id="installmentCustomerFilter"')>=0&&renderersJs.indexOf('data-pay=')>=0,"installment sale must calculate rate/interval and payment must select a customer and settle individual rows");
+assert.ok(renderersJs.indexOf('container.ownerDocument.createElement("button")')>=0,"installment settlement action must be materialized as a real DOM button after safe table text escaping");
+assert.ok(renderersJs.indexOf('/api/customers/"+v.customerId+"/installments')>=0&&renderersJs.indexOf('/api/customers/"+encodeURIComponent(customerId)+"/installments')>=0&&renderersJs.indexOf('data-pay="\'+contract.customerId+\':\'+contract.id')>=0,"installment sale and payment must use persisted customer installment APIs");
+assert.ok(renderersJs.indexOf('S.store.add("installments"')<0&&renderersJs.indexOf('إثباته في كشف حساب العميل')>=0,"installment actions must no longer save in session-only mock state and must report statement posting");
+var maintenanceModule=registry.modules.find(function(module){return module.id==="maintenance";}), maintenanceScreens=registry.screens.filter(function(screen){return screen.route==="maintenance-intake"||screen.route==="maintenance-tracking";});
+assert.deepStrictEqual(maintenanceModule.items,["maintenance-intake","maintenance-tracking"],"the Maintenance section must contain the intake and customer maintenance list");
+assert.ok(maintenanceScreens.some(function(screen){return screen.title==="تسجيل جهاز للصيانة";})&&maintenanceScreens.some(function(screen){return screen.title==="قائمة الصيانة";}),"maintenance routes must use the requested screen names");
+assert.ok(appJs.indexOf('"maintenance-intake"')>=0&&appJs.indexOf('"maintenance-tracking"')>=0,"maintenance routes must render their implementation instead of the construction placeholder");
+assert.ok(renderersJs.indexOf('/api/maintenance/tickets')>=0&&renderersJs.indexOf('maintenanceCustomerFilter')>=0&&renderersJs.indexOf('maintenanceHasAdvance')>=0&&renderersJs.indexOf('تسليم للعميل')>=0&&renderersJs.indexOf('settlementType')>=0,"maintenance intake, customer filtering, advance collection and delivery settlement must use persisted maintenance APIs");
 var sample = [{ name: "أحمد", amount: 2 }, { name: "محمود", amount: 1 }];
 assert.strictEqual(calculations.filter(sample, "أح", ["name"]).length, 1); assert.strictEqual(calculations.sort(sample, "amount", "asc")[0].amount, 1);
 function verifyCatalogSavedSummaryAndEditHydration(){

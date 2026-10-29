@@ -99,21 +99,27 @@
     },
     {
       "id": "installments",
-      "title": "البيع بالتقسيط",
+      "title": "التقسيط",
       "icon": "ق",
       "items": [
         "installment-system",
-        "installment-payment",
-        "installment-confirm"
+        "installment-payment"
       ]
     },
     {
       "id": "maintenance",
-      "title": "الصيانة والفروع",
+      "title": "الصيانة",
       "icon": "ف",
       "items": [
         "maintenance-intake",
-        "maintenance-tracking",
+        "maintenance-tracking"
+      ]
+    },
+    {
+      "id": "branches",
+      "title": "الفروع والخدمات",
+      "icon": "ف",
+      "items": [
         "branches-list",
         "branch-stock-transfer",
         "branch-finance",
@@ -1055,7 +1061,7 @@
     {
       "route": "installment-system",
       "module": "البيع بالتقسيط",
-      "title": "نظام التقسيط",
+      "title": "البيع بالتقسيط",
       "description": "إنشاء عقد وجدول أقساط محسوب داخل الجلسة.",
       "renderer": "installments",
       "data": "installments",
@@ -1065,7 +1071,7 @@
     {
       "route": "installment-payment",
       "module": "البيع بالتقسيط",
-      "title": "سداد التقسيط",
+      "title": "سداد القسط",
       "description": "اختيار عقد وقسط ومحاكاة السداد.",
       "renderer": "installments",
       "data": "installments",
@@ -1073,37 +1079,26 @@
       "featureKey": "installments"
     },
     {
-      "route": "installment-confirm",
-      "module": "البيع بالتقسيط",
-      "title": "تأكيد سداد التقسيط",
-      "description": "مراجعة دفعة قبل تأكيدها تجريبيًا.",
-      "renderer": "installments",
-      "data": "installments",
-      "mode": "confirm",
-      "featureKey": "installments"
-    },
-
-    {
       "route": "maintenance-intake",
-      "module": "الصيانة والفروع",
-      "title": "استلام جهاز صيانة",
-      "description": "تسجيل جهاز وعطل وفني وموعد متوقع داخل الجلسة.",
+      "module": "الصيانة",
+      "title": "تسجيل جهاز للصيانة",
+      "description": "تسجيل بيانات العميل والجهاز والعطل وتاريخ الاستلام والتسليم المتوقع.",
       "renderer": "maintenance-intake",
       "data": "maintenance",
       "featureKey": "maintenance-management"
     },
     {
       "route": "maintenance-tracking",
-      "module": "الصيانة والفروع",
-      "title": "تتبع الصيانة",
-      "description": "بحث تذكرة وعرض خط زمني لحالتها.",
+      "module": "الصيانة",
+      "title": "قائمة الصيانة",
+      "description": "عرض أجهزة الصيانة حسب العميل وتحديث الحالة وتسجيل التسليم.",
       "renderer": "maintenance-tracking",
       "data": "maintenance",
       "featureKey": "maintenance-management"
     },
     {
       "route": "branches-list",
-      "module": "الصيانة والفروع",
+      "module": "الفروع والخدمات",
       "title": "الفروع والفرعيات",
       "description": "قائمة الفروع والمسؤول والمبيعات التجريبية.",
       "renderer": "entity-list",
@@ -1112,7 +1107,7 @@
     },
     {
       "route": "branch-stock-transfer",
-      "module": "الصيانة والفروع",
+      "module": "الفروع والخدمات",
       "title": "حركة الأصناف بين الفروع",
       "description": "مستند نقل تجريبي بين فرعين.",
       "renderer": "transfer",
@@ -1122,7 +1117,7 @@
     },
     {
       "route": "branch-finance",
-      "module": "الصيانة والفروع",
+      "module": "الفروع والخدمات",
       "title": "حركة مالية للفروع",
       "description": "تحويل تجريبي ومقارنة أرصدة الفروع.",
       "renderer": "workflow",
@@ -1132,7 +1127,7 @@
     },
     {
       "route": "cash-services",
-      "module": "الصيانة والفروع",
+      "module": "الفروع والخدمات",
       "title": "خدمات كاش",
       "description": "واجهة عرض لخدمات شحن ودفع غير متصلة بأي مزود فعلي.",
       "renderer": "cash-services",

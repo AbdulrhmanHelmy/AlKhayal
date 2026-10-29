@@ -101,8 +101,8 @@ Originally generated from `frontend/data/screens.json` on 2026-10-20. Batch 1 ad
 | البيع بالتقسيط | نظام التقسيط | `installment-system` | `frontend/js/modules/renderers.js` | installments | installments | Build and review a calculated schedule | Registry verified |
 | البيع بالتقسيط | سداد التقسيط | `installment-payment` | `frontend/js/modules/renderers.js` | installments | installments | Build and review a calculated schedule | Registry verified |
 | البيع بالتقسيط | تأكيد سداد التقسيط | `installment-confirm` | `frontend/js/modules/renderers.js` | installments | installments | Build and review a calculated schedule | Registry verified |
-| الصيانة والفروع | استلام جهاز صيانة | `maintenance-intake` | `frontend/js/modules/renderers.js` | maintenance-intake | maintenance | Interactive session workflow or preview | Registry verified |
-| الصيانة والفروع | تتبع الصيانة | `maintenance-tracking` | `frontend/js/modules/renderers.js` | maintenance-tracking | maintenance | Interactive session workflow or preview | Browser smoke |
+| الصيانة | تسجيل جهاز للصيانة | `maintenance-intake` | `frontend/js/modules/renderers.js` | maintenance-intake | maintenance | Persisted intake form with customer and advance | Registry verified |
+| الصيانة | قائمة الصيانة | `maintenance-tracking` | `frontend/js/modules/renderers.js` | maintenance-tracking | maintenance | Persisted customer-filtered tickets, history, status and delivery settlement | Registry verified |
 | الصيانة والفروع | الفروع والفرعيات | `branches-list` | `frontend/js/modules/renderers.js` | entity-list | branches | Search, filter, sort, paginate, inspect and session actions | Registry verified |
 | الصيانة والفروع | حركة الأصناف بين الفروع | `branch-stock-transfer` | `frontend/js/modules/renderers.js` | transfer | products | Interactive session workflow or preview | Registry verified |
 | الصيانة والفروع | حركة مالية للفروع | `branch-finance` | `frontend/js/modules/renderers.js` | workflow | branches | Review and simulated confirmation | Registry verified |

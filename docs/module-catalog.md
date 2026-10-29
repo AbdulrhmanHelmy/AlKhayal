@@ -1,6 +1,6 @@
 # Module and capability catalog
 
-`FeatureRegistry` is the canonical catalog. Keys are stable identifiers. Core modules are always enabled and cannot be changed. Optional modules default disabled until an administrator or confirmed activity recommendation enables them.
+`FeatureRegistry` is the canonical catalog. Keys are stable identifiers. Core modules are always enabled and cannot be changed. Optional modules default disabled until an administrator or confirmed activity recommendation enables them, except Maintenance and Installments which are enabled by default.
 
 ## Core modules
 
@@ -10,8 +10,8 @@
 
 | Key | Arabic name | Default |
 | --- | --- | --- |
-| `maintenance-management` | إدارة الصيانة | Off |
-| `installments` | البيع بالتقسيط | Off |
+| `maintenance-management` | إدارة الصيانة | On |
+| `installments` | التقسيط | On |
 | `manufacturing` | التصنيع | Off |
 | `multiple-warehouses` | المخازن المتعددة | Off |
 | `multiple-branches` | الفروع المتعددة | Off |

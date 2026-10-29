@@ -9,9 +9,15 @@
     config.headers = Object.assign({ "Content-Type": "application/json", "Accept": "application/json" }, config.headers || {});
     var method = (config.method || "GET").toUpperCase(), csrf = sessionStorage.getItem(csrfKey);
     if (method !== "GET" && method !== "HEAD" && csrf) config.headers["X-CSRF-Token"] = csrf;
-    var response;
+    var response, timeoutId = null, timedOut = false;
+    if (global.AbortController && !config.signal) {
+      var controller = new global.AbortController();
+      config.signal = controller.signal;
+      timeoutId = global.setTimeout(function () { timedOut = true; controller.abort(); }, 20000);
+    }
     try { response = await fetch(path, config); }
-    catch (networkError) { var unavailable = new Error("الخادم غير متاح حاليًا."); unavailable.code = "network_error"; unavailable.status = 0; throw unavailable; }
+    catch (networkError) { var unavailable = new Error(timedOut ? "انتهت مهلة الاتصال بالخادم. تحقق من اتصال التطبيق وحاول مجددًا." : "الخادم غير متاح حاليًا."); unavailable.code = timedOut ? "request_timeout" : "network_error"; unavailable.status = 0; throw unavailable; }
+    finally { if (timeoutId !== null) global.clearTimeout(timeoutId); }
     var body = await response.json().catch(function () { return { success: false, error: { code: "invalid_response", message: "استجابة غير صالحة من الخادم." } }; });
     if (!response.ok || !body.success) { var code = body.error && body.error.code, error = new Error(safeErrorMessage(body.error && body.error.message, code, response.status)); error.code = code; error.status = response.status; if (response.status === 401) sessionStorage.removeItem(csrfKey); throw error; }
     return rememberCsrf(body.data);
