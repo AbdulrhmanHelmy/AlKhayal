@@ -40,7 +40,7 @@ namespace AlKhayal.Server.Host
 
         public HostOptions Options { get; private set; }
 
-        public void Start(HostOptions options)
+        public void Start(HostOptions options, AlKhayal.Application.Printing.IPrinterBackend printerBackend = null)
         {
             Options = options;
             Directory.CreateDirectory(Path.GetDirectoryName(options.DatabasePath));
@@ -67,7 +67,12 @@ namespace AlKhayal.Server.Host
             var treasury = new AlKhayal.Application.Treasury.TreasuryService(new AlKhayal.Data.Treasury.SqliteTreasuryStore(connectionString));
             var expenses = new AlKhayal.Application.Expenses.ExpenseService(new AlKhayal.Data.Expenses.SqliteExpenseStore(connectionString));
             var returns = new AlKhayal.Application.Returns.ReturnService(new AlKhayal.Data.Returns.SqliteReturnReadStore(connectionString), sales, purchases);
-            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : type == typeof(SupplierService) ? suppliers : type == typeof(SupplierAccountService) ? supplierAccounts : type == typeof(SupplierLedgerService) ? supplierLedger : type == typeof(PurchaseService) ? purchases : type == typeof(SalesService) ? sales : type == typeof(AlKhayal.Application.Treasury.TreasuryService) ? treasury : type == typeof(AlKhayal.Application.Expenses.ExpenseService) ? expenses : type == typeof(AlKhayal.Application.Returns.ReturnService) ? returns : null);
+            var workforce = new AlKhayal.Application.Workforce.WorkforceService(new AlKhayal.Data.Workforce.SqliteWorkforceStore(connectionString));
+            var outputBackend = printerBackend ?? new AlKhayal.Printing.WindowsPrinterBackend(new AlKhayal.Printing.NativePrintRenderer());
+            var printing = new AlKhayal.Application.Printing.PrintingService(new AlKhayal.Data.Printing.SqlitePrintRepository(connectionString), new AlKhayal.Application.Printing.PrintDocumentProvider(sales, purchases, returns, workforce, settings, new AlKhayal.Data.Printing.SqlitePrintPaymentReader(connectionString)), outputBackend);
+            var labels = new AlKhayal.Application.Printing.LabelService(new AlKhayal.Data.Printing.SqliteLabelRepository(connectionString), outputBackend as AlKhayal.Application.Printing.ILabelPrinterBackend, printing);
+            var barcodes = new AlKhayal.Application.Catalog.BarcodeService(new SqliteCatalogStore(connectionString));
+            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AlKhayal.Application.Printing.LabelService) ? labels : type == typeof(AlKhayal.Application.Catalog.BarcodeService) ? barcodes : type == typeof(AlKhayal.Application.Printing.PrintingService) ? printing : type == typeof(AlKhayal.Application.Workforce.WorkforceService) ? workforce : type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : type == typeof(SupplierService) ? suppliers : type == typeof(SupplierAccountService) ? supplierAccounts : type == typeof(SupplierLedgerService) ? supplierLedger : type == typeof(PurchaseService) ? purchases : type == typeof(SalesService) ? sales : type == typeof(AlKhayal.Application.Treasury.TreasuryService) ? treasury : type == typeof(AlKhayal.Application.Expenses.ExpenseService) ? expenses : type == typeof(AlKhayal.Application.Returns.ReturnService) ? returns : null);
 
             _server = WebApp.Start(options.Url, app =>
             {

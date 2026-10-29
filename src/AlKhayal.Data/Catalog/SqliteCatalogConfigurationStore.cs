@@ -80,7 +80,7 @@ namespace AlKhayal.Data.Catalog
                         new { VariantId = variant.Id }, cancellationToken: ct)).ConfigureAwait(false);
 
                     variant.Barcodes = (await connection.QueryAsync<ProductBarcodeRecord>(
-                        new CommandDefinition("SELECT Id, ProductId, VariantId, ProductUnitId, Barcode, NormalizedBarcode, BarcodeType, IsPrimary, RetiredUtc, RetiredByUserId, CreatedUtc, CreatedByUserId FROM ProductBarcodes WHERE VariantId=@VariantId ORDER BY IsPrimary DESC, Id",
+                        new CommandDefinition("SELECT Id, ProductId, VariantId, ProductUnitId, Barcode, NormalizedBarcode, BarcodeType, IsPrimary, RetiredUtc, RetiredByUserId, CreatedUtc, CreatedByUserId, COALESCE((SELECT Format FROM BarcodeSymbologies WHERE BarcodeId=ProductBarcodes.Id),'code128') Format FROM ProductBarcodes WHERE VariantId=@VariantId ORDER BY IsPrimary DESC, Id",
                         new { VariantId = variant.Id }, cancellationToken: ct)).ConfigureAwait(false)).ToList();
                 }
 
@@ -1075,6 +1075,8 @@ namespace AlKhayal.Data.Catalog
                     else if (!string.IsNullOrWhiteSpace(b.Barcode))
                     {
                         var normBarcode = ValidateIdentifier(b.Barcode, "الباركود");
+                        try { BarcodeRules.Validate(normBarcode, "code128"); }
+                        catch (ArgumentException ex) { throw Error("identifier_invalid", ex.Message); }
                         var upperNormBarcode = NormalizeFormKc(normBarcode);
                         var type = (b.BarcodeType ?? "gtin").ToLowerInvariant();
                         if (type != "gtin" && type != "internal" && type != "supplier")

@@ -28,6 +28,11 @@ namespace AlKhayal.Data.Features
                 await connection.OpenAsync(ct).ConfigureAwait(false);
                 using (var transaction = connection.BeginTransaction())
                 {
+                    // Serialize lifecycle disabling with opening/check-in on the same SQLite writer lock.
+                    if (module && !enabled && key == "advanced-shifts" && await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM CashierShifts WHERE ClosedUtc IS NULL", transaction: transaction, cancellationToken: ct)).ConfigureAwait(false) > 0)
+                        throw new FeatureStateConflictException("أغلق وردية الكاشير المفتوحة قبل تعطيل إدارة الورديات.");
+                    if (module && !enabled && (key == "employee-attendance" || key == "employee-management") && await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM EmployeeAttendance WHERE CheckOutUtc IS NULL", transaction: transaction, cancellationToken: ct)).ConfigureAwait(false) > 0)
+                        throw new FeatureStateConflictException("سجّل انصراف الموظفين الحاضرين قبل تعطيل الوحدة.");
                     var previous = await connection.QuerySingleOrDefaultAsync<long?>(new CommandDefinition("SELECT IsEnabled FROM " + table + " WHERE " + keyColumn + "=@Key", new { Key = key }, transaction, cancellationToken: ct)).ConfigureAwait(false);
                     var now = DateTime.UtcNow.ToString("o");
                     await connection.ExecuteAsync(new CommandDefinition("INSERT INTO " + table + " (" + keyColumn + ", IsEnabled, OverrideState, UpdatedUtc, ChangedByUserId) VALUES (@Key, @Enabled, 'administrator', @Now, @UserId) ON CONFLICT(" + keyColumn + ") DO UPDATE SET IsEnabled=@Enabled, OverrideState='administrator', UpdatedUtc=@Now, ChangedByUserId=@UserId", new { Key = key, Enabled = enabled, Now = now, UserId = changedByUserId }, transaction, cancellationToken: ct)).ConfigureAwait(false);

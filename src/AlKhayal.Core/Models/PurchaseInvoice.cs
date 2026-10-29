@@ -11,6 +11,7 @@ namespace AlKhayal.Core.Models
         public string WarehouseName { get; set; }
         public string InvoiceNumber { get; set; }
         public string InvoiceDate { get; set; }
+        public string PostedUtc { get; set; }
         public string PaymentMode { get; set; }
         public long? TreasuryAccountId { get; set; }
         public string TreasuryAccountName { get; set; }

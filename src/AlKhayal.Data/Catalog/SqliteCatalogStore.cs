@@ -18,7 +18,8 @@ namespace AlKhayal.Data.Catalog
             d.IsActive, d.ArchivedUtc, d.MigrationState, d.VariantMode, d.Version, d.UpdatedUtc,
             COALESCE((SELECT ps.Sku FROM ProductSkus ps JOIN ProductVariants pv ON pv.Id=ps.VariantId WHERE pv.ProductId=p.Id AND pv.IsDefault=1 AND ps.RetiredUtc IS NULL LIMIT 1), (SELECT ps.Sku FROM ProductSkus ps WHERE ps.ProductId=p.Id AND ps.RetiredUtc IS NULL ORDER BY ps.Id LIMIT 1)) AS PrimarySku,
             (SELECT COUNT(*) FROM ProductVariants pv WHERE pv.ProductId=p.Id AND pv.IsActive=1 AND pv.ArchivedUtc IS NULL) AS VariantCount,
-            (SELECT COUNT(*) FROM ProductBarcodes pb WHERE pb.ProductId=p.Id AND pb.RetiredUtc IS NULL) AS BarcodeCount
+            (SELECT COUNT(*) FROM ProductBarcodes pb WHERE pb.ProductId=p.Id AND pb.RetiredUtc IS NULL) AS BarcodeCount,
+            (SELECT b.Barcode FROM ProductBarcodes b JOIN ProductVariants v ON v.Id=b.VariantId WHERE b.ProductId=p.Id AND b.RetiredUtc IS NULL AND v.IsActive=1 AND v.ArchivedUtc IS NULL ORDER BY v.IsDefault DESC,b.IsPrimary DESC,b.Id LIMIT 1) PrimaryBarcode
             FROM Products p JOIN ProductDetails d ON d.ProductId=p.Id
             JOIN Units u ON u.Id=d.BaseUnitId LEFT JOIN ProductCategories c ON c.Id=d.CategoryId";
 

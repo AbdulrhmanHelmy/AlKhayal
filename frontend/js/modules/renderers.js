@@ -1065,7 +1065,8 @@
       var movements=data.movements||[];
       container.querySelector("#statementBody").innerHTML='<div class="stats-grid">'+[
         ["المديونية الحالية على العميل",data.currentBalance],["رصيد بداية الفترة",data.openingBalance],["مديونيات خلال الفترة",data.totalDebit],["تحصيلات وتخفيضات خلال الفترة",data.totalCredit],["رصيد نهاية الفترة",data.closingBalance]
-      ].map(function(item){return '<article class="card stat-card"><span class="stat-label">'+item[0]+'</span><strong class="stat-value">'+U.money(item[1])+'</strong></article>';}).join("")+'</div><section class="card"><div class="card-head"><h2>حركات حساب '+U.escape(data.customerName)+'</h2></div><div class="card-body"><div class="table-wrap"><table class="data-table"><thead><tr><th>التاريخ</th><th>المرجع</th><th>البيان</th><th>الملاحظات</th><th>زيادة المديونية</th><th>تحصيل / تخفيض</th><th>الرصيد</th></tr></thead><tbody>'+movements.map(function(item){return '<tr><td>'+U.date(item.date)+'</td><td>'+U.escape(item.reference||"—")+'</td><td>'+U.escape(item.description)+'</td><td>'+U.escape(item.notes||"—")+'</td><td>'+U.money(item.debit)+'</td><td>'+U.money(item.credit)+'</td><td>'+U.money(item.balance)+'</td></tr>';}).join("")+'</tbody></table></div>'+(movements.length<=1?'<p class="muted">لا توجد حركات خلال الفترة المحددة.</p>':'')+'</div></section>';
+      ].map(function(item){return '<article class="card stat-card"><span class="stat-label">'+item[0]+'</span><strong class="stat-value">'+U.money(item[1])+'</strong></article>';}).join("")+'</div><section class="card"><div class="card-head"><h2>حركات حساب '+U.escape(data.customerName)+'</h2></div><div class="card-body"><div class="table-wrap"><table class="data-table"><thead><tr><th>التاريخ</th><th>المرجع</th><th>البيان</th><th>الملاحظات</th><th>زيادة المديونية</th><th>تحصيل / تخفيض</th><th>الرصيد</th><th>طباعة</th></tr></thead><tbody>'+movements.map(function(item){return '<tr><td>'+U.date(item.date)+'</td><td>'+U.escape(item.reference||"—")+'</td><td>'+U.escape(item.description)+'</td><td>'+U.escape(item.notes||"—")+'</td><td>'+U.money(item.debit)+'</td><td>'+U.money(item.credit)+'</td><td>'+U.money(item.balance)+'</td><td>'+((item.transactionId&&(item.kind==="collection"||item.kind==="legacy_payment"))?'<button class="button" data-customer-receipt="'+item.transactionId+'">طباعة السند</button>':'')+'</td></tr>';}).join("")+'</tbody></table></div>'+(movements.length<=1?'<p class="muted">لا توجد حركات خلال الفترة المحددة.</p>':'')+'</div></section>';
+      container.querySelector("#statementBody").onclick=function(event){var button=event.target.closest("[data-customer-receipt]");if(button&&global.AlKhayalPrinting)global.AlKhayalPrinting.submit("customer-payment",Number(button.getAttribute("data-customer-receipt")),false,button);};
     }
     function load(){
       if(!active())return;var token=++seq;controls(false);
@@ -1267,6 +1268,7 @@
             "success",
           );
           if (afterSave) afterSave(saved);
+          if(saved&&saved.id&&global.AlKhayalPrinting)UI.modal({title:"سند دفع المورد",body:"<p>تم حفظ السداد. يمكنك طباعة السند دون إعادة تسجيل الدفع.</p>",actions:'<button class="button" data-modal-close>إغلاق</button>',onOpen:function(modal){global.AlKhayalPrinting.mount(modal.querySelector(".modal-actions")||modal,"supplier-payment",saved.id);}});
         } catch (failure) {
           button.disabled = false; busy = false; uncertain = !failure.status || failure.status >= 500;
           layer.querySelectorAll("input,select,textarea").forEach(function(input){input.disabled=uncertain;});
@@ -1642,6 +1644,7 @@
       if(!target)return;
       if(!supplier){target.innerHTML=rows.length?'<div class="empty-state">اختر موردًا من القائمة لعرض حسابه وفواتيره.</div>':'';return;}
       target.innerHTML='<section class="card supplier-account-card" data-supplier-account="'+supplier.id+'"><div class="card-head"><div><h2>'+U.escape(supplier.name)+'</h2><p class="muted">'+U.escape(supplier.code)+' — المستحق '+U.money(supplier.payable||0)+(Number(supplier.supplierCredit)>0?' — رصيد لدى المورد '+U.money(supplier.supplierCredit):'')+'</p></div><div class="page-actions"><button class="button" type="button" data-add-account-invoice="'+supplier.id+'">+ إضافة فاتورة مديونية</button><button class="button primary" type="button" data-pay-supplier-account="'+supplier.id+'"'+(Number(supplier.payable)>0?'':' disabled')+'>سداد على الحساب</button></div></div><div class="card-body" data-account-invoices="'+supplier.id+'">جارٍ تحميل فواتير المورد...</div></section>';
+      if(global.AlKhayalPrinting)global.AlKhayalPrinting.supplierReceipts(target.querySelector("[data-supplier-account]"),supplier.id);
       loadInvoices(supplier,token);
     }
     container.onclick=function(event){

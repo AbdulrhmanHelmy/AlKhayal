@@ -57,7 +57,8 @@ namespace AlKhayal.Application.Features
                 var dependents = FeatureRegistry.All.Where(item => item.Dependencies.Contains(definition.Key) && all.Any(current => current.Key == item.Key && current.IsEnabled)).Select(item => item.ArabicName).ToList();
                 if (dependents.Count > 0) return FeatureResult<FeatureSnapshot>.Fail("dependent_feature", "لا يمكن التعطيل لأن الميزات التالية تعتمد عليها: " + string.Join("، ", dependents));
             }
-            await _store.SetStateAsync(definition.Kind, definition.Key, command.IsEnabled, command.ChangedByUserId, ct).ConfigureAwait(false);
+            try { await _store.SetStateAsync(definition.Kind, definition.Key, command.IsEnabled, command.ChangedByUserId, ct).ConfigureAwait(false); }
+            catch (FeatureStateConflictException ex) { return FeatureResult<FeatureSnapshot>.Fail("active_workflow", ex.Message); }
             return FeatureResult<FeatureSnapshot>.Ok(await GetEffectiveAsync(ct).ConfigureAwait(false));
         }
 

@@ -64,3 +64,15 @@ The WinForms shell owns host lifetime, WebView2 runtime detection, application-s
 The standalone host now composes `InventoryService` with `SqliteInventoryStore`. The Warehouse Directory and browser clients use authenticated `/api/inventory/*` calls; neither WinForms nor JavaScript owns stock quantities. `InventoryService` validates command shape, fixed-scale decimal input, feature gates, and request identity. `SqliteInventoryStore` owns the single SQLite posting transaction, tracking identity changes, immutable movements, derived balances, and audit events. See [inventory-ledger.md](inventory-ledger.md) for invariants and limits.
 
 FIFO extends the same posting boundary: Application `InventoryCosting` owns exact selected-unit money conversion and allocation rounding; Data atomically persists FIFO layers/allocations, catalog variant pricing, physical identities, movements and projections. The existing catalog variant override model is reused inside the inventory transaction. The administrator reconciliation port records a documented legacy opening basis without reconstructing or changing historical movements. See [inventory-fifo.md](inventory-fifo.md).
+
+## Phase 7.1 workforce boundary
+
+Employees, optional attendance and cashier shifts now use Application/Workforce ports and a SQLite store, with thin authenticated HTTP adapters. Existing sale posting and invoice cash collections append owner-scoped shift events inside their original transactions. The WinForms shell remains unchanged. See [Phase 7.1](phase-7/phase-7-1.md) for authorization, lifecycle and excluded financial sources.
+
+## Native printing — Phase 7.2
+
+Application owns validated print contracts, document projections and orchestration; Data persists printing settings/templates and job diagnostics; the isolated Printing project implements native System.Drawing/PrintDocument output. Server.Host composes the backend through IPrinterBackend. No WebView2/browser print engine is used. See [Phase 7.2 architecture and verification](phase-7/phase-7-2.md).
+
+## Barcode and native label extension — Phase 7.3
+
+BarcodeService extends the existing catalog aggregate through IProductBarcodeStore; SQLite owns atomic replacement/retirement/version/audit/operation replay. LabelService/ILabelRepository load authoritative catalog snapshots. LabelBatch/ILabelRenderer/ILabelPrinterBackend are nonfinancial contracts implemented by the same WindowsPrinterBackend and shared PrintingService/PrintJobs lifecycle as receipts. No browser/PDF output or second printing subsystem. See [Phase 7.3](phase-7/phase-7-3.md) and [final Phase 7 acceptance](phase-7/phase-7-final-report.md).

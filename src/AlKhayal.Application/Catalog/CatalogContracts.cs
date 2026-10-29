@@ -30,6 +30,7 @@ namespace AlKhayal.Application.Catalog
         public string PrimarySku { get; set; }
         public int VariantCount { get; set; }
         public int BarcodeCount { get; set; }
+        public string PrimaryBarcode { get; set; }
         public IReadOnlyList<string> SizeValues { get; set; }
         public IReadOnlyList<string> ColorValues { get; set; }
         public bool HasExpiryTracking { get; set; }

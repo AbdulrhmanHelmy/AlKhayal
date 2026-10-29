@@ -25,8 +25,10 @@ namespace AlKhayal.IntegrationTests
                 Assert.Equal(0m,statement.OpeningBalance);Assert.Equal(150.50m,statement.TotalDebit);Assert.Equal(20.25m,statement.TotalCredit);
                 Assert.Equal(130.25m,statement.ClosingBalance);Assert.Equal(130.25m,statement.CurrentBalance);Assert.Equal(statement.ClosingBalance,statement.Movements.Last().Balance);
                 Assert.Contains(statement.Movements,x=>x.Notes=="مديونية جديدة");Assert.Contains(statement.Movements,x=>x.Notes=="تحصيل جزئي");
-                var later=service.GetStatement(customer.Id,"2026-10-29","2026-10-29");Assert.Equal(130.25m,later.OpeningBalance);Assert.Equal(130.25m,later.ClosingBalance);Assert.Equal(130.25m,later.CurrentBalance);Assert.Equal(0m,later.TotalDebit);
-                var before=service.GetStatement(customer.Id,null,"2026-10-27");Assert.Equal(0m,before.ClosingBalance);Assert.Equal(130.25m,before.CurrentBalance);
+                // Creation records an opening entry on the actual UTC day; derive filter boundaries from the fixture.
+                string afterDate, beforeDate; using(var c=f.Open()){afterDate=DateTime.Parse(c.ExecuteScalar<string>("SELECT MAX(OccurredOn) FROM CustomerTransactions WHERE CustomerId=@Id",new{customer.Id}),System.Globalization.CultureInfo.InvariantCulture).AddDays(1).ToString("yyyy-MM-dd");beforeDate=DateTime.Parse(c.ExecuteScalar<string>("SELECT MIN(OccurredOn) FROM CustomerTransactions WHERE CustomerId=@Id",new{customer.Id}),System.Globalization.CultureInfo.InvariantCulture).AddDays(-1).ToString("yyyy-MM-dd");}
+                var later=service.GetStatement(customer.Id,afterDate,afterDate);Assert.Equal(130.25m,later.OpeningBalance);Assert.Equal(130.25m,later.ClosingBalance);Assert.Equal(130.25m,later.CurrentBalance);Assert.Equal(0m,later.TotalDebit);
+                var before=service.GetStatement(customer.Id,null,beforeDate);Assert.Equal(0m,before.ClosingBalance);Assert.Equal(130.25m,before.CurrentBalance);
                 Assert.True(service.PostTransaction(customer.Id,"collection",20.25m,"2026-10-28","تحصيل جزئي","statement-collection").Replayed);
                 Assert.Equal(130.25m,new CustomerAccountService(new SqliteCustomerAccountRepository(f.ConnectionString)).GetStatement(customer.Id,null,null).ClosingBalance);
                 Assert.Throws<ArgumentException>(()=>service.PostTransaction(customer.Id,"collection",130.26m,"2026-10-28",null,"over-collection"));

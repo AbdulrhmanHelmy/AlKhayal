@@ -24,6 +24,7 @@ namespace AlKhayal.Application.Catalog
         public string PrimarySku { get; set; }
         public int VariantCount { get; set; }
         public int BarcodeCount { get; set; }
+        public string PrimaryBarcode { get; set; }
         public IReadOnlyList<string> SizeValues { get; set; }
         public IReadOnlyList<string> ColorValues { get; set; }
         public bool HasExpiryTracking { get; set; }
@@ -184,6 +185,7 @@ namespace AlKhayal.Application.Catalog
         public string Barcode { get; set; }
         public string NormalizedBarcode { get; set; }
         public string BarcodeType { get; set; }
+        public string Format { get; set; }
         public bool IsPrimary { get; set; }
         public string RetiredUtc { get; set; }
         public long? RetiredByUserId { get; set; }

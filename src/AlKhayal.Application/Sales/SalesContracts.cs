@@ -32,6 +32,7 @@ namespace AlKhayal.Application.Sales
         public long Id { get; set; }
         public string InvoiceNumber { get; set; }
         public string InvoiceDate { get; set; }
+        public string PostedUtc { get; set; }
         public long? CustomerId { get; set; }
         public string CustomerName { get; set; }
         public long WarehouseId { get; set; }

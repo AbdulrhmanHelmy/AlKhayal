@@ -37,7 +37,7 @@ namespace AlKhayal.Data.Sales
                     await c.ExecuteAsync(Cmd("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc,Reference,SalesInvoiceId) VALUES(@CustomerId,@Key,@Hash,'collection',@Amount,@Date,@Notes,@Now,@Reference,@Id)",new{CustomerId=invoice.CustomerId,Key="sale-payment:"+command.OperationKey,Hash=hash,Amount=amount,Date=command.OccurredOn,Notes="تحصيل فاتورة "+invoice.InvoiceNumber,Now=now,Reference=invoice.InvoiceNumber,Id=id},tx,ct)).ConfigureAwait(false);
                     await c.ExecuteAsync(Cmd("UPDATE Customers SET Balance=Balance-@Amount,UpdatedAt=@Now WHERE Id=@Id AND Balance>=@Amount",new{Amount=amount/10000m,Now=now,Id=invoice.CustomerId},tx,ct)).ConfigureAwait(false);
                     await c.ExecuteAsync(Cmd("UPDATE SalesInvoices SET PaidScaled=PaidScaled+@Amount WHERE Id=@Id AND PaidScaled+@Amount<=TotalScaled",new{Amount=amount,Id=id},tx,ct)).ConfigureAwait(false);
-                    tx.Commit();return new SalePaymentResult{Succeeded=true,PaymentId=paymentId,Invoice=await GetAsync(id,ct).ConfigureAwait(false)};
+                    if(command.Method=="cash") await AlKhayal.Data.Workforce.SqliteWorkforceStore.AssociateAsync(c,tx,userId,"collection",amount,id,paymentId,ct).ConfigureAwait(false); tx.Commit();return new SalePaymentResult{Succeeded=true,PaymentId=paymentId,Invoice=await GetAsync(id,ct).ConfigureAwait(false)};
                 }
             }
             catch(SQLiteException e) when(e.ResultCode==SQLiteErrorCode.Busy||e.ResultCode==SQLiteErrorCode.Locked){return new SalePaymentResult{ErrorCode="database_busy",ErrorMessage="قاعدة البيانات مشغولة. أعد المحاولة بالمفتاح نفسه."};}

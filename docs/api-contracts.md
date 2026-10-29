@@ -131,3 +131,15 @@ Draft lines contain `variantId`, `productUnitId`, `quantity` (up to six decimals
 `GET /api/inventory/categories` returns active categories under sales-read access. `GET /api/customers/search?query=...` returns at most 20 active customers matching name, code, or phone; it does not transfer the whole customer directory to Touch POS.
 
 Touch POS converts an entered invoice percentage (0–100 with at most two decimal places) to one fixed, two-decimal discount amount before `POST /api/sales/drafts` or `PUT /api/sales/{id}`. The existing sales service recalculates tax and total from that amount and posts the customer ledger as before. The persisted invoice stores the monetary discount, so reopening it presents fixed-amount mode.
+
+## Phase 7.1 employee, attendance and shift API
+
+`/api/workforce` exposes paginated employees/attendance/shifts, current/detail/event/audit reads and CSRF-protected employee save, attendance in/out/correct and shift open/close/adjust commands. Employee/compensation/attendance are Admin-only; cashiers operate only their own shifts with an effective POS/shift grant. Module flags are enforced and operations require replay-safe keys. See the [complete HTTP contract](phase-7/phase-7-1.md#http-contract) and its explicit cash-source exclusions.
+
+## Native printing — Phase 7.2
+
+`/api/printing` exposes settings/defaults/printers, structured native PNG preview, idempotent document jobs, sample test-print, recent diagnostics and explicit interrupted-job review. All routes require a session; mutations require CSRF and reject a foreign supplied Origin. Administration APIs are administrator-only; document submission checks effective screen access and shift ownership. Requests carry only document type/id and print request identity, never financial totals. Posted sales/purchase invoice DTOs expose their persisted `postedUtc` for native document timing. Customer statement movements add nullable `transactionId`, the CustomerTransactions identity used by collection-receipt printing. Full [contracts, identity spaces and outcomes](phase-7/phase-7-2.md#api-and-security).
+
+## Product barcodes and labels — Phase 7.3
+
+`/api/labels` provides administrator versioned settings/defaults/native sample preview, permission/module-gated operational options/jobs, administrator saved-profile test output, and transactional product barcode commands. Writes require existing session CSRF/origin checks. Batch requests contain persisted barcode IDs/counts/formats, never prices. Shared print diagnostics remain under `/api/printing`. See [contracts, authorization and replay semantics](phase-7/phase-7-3.md#api-persistence-and-security).

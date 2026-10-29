@@ -92,7 +92,7 @@ namespace AlKhayal.IntegrationTests
                 using (var connection = new SQLiteConnection(connectionString))
                 {
                     connection.Open();
-                    Assert.Equal(31, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(34,connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM Suppliers WHERE Id=@Id", new { Id = supplierId }));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM PurchaseInvoices WHERE Id=@Id AND Status='posted'", new { Id = purchaseId }));
                     Assert.Equal(2, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries WHERE PurchaseInvoiceId=@Id", new { Id = purchaseId }));

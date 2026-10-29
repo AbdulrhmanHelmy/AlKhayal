@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace AlKhayal.Application.Features
 {
+    public sealed class FeatureStateConflictException : Exception
+    {
+        public FeatureStateConflictException(string message) : base(message) { }
+    }
     public static class FeatureKinds
     {
         public const string Module = "module";
@@ -81,4 +85,3 @@ namespace AlKhayal.Application.Features
         public static FeatureResult<T> Fail(string code, string message) { return new FeatureResult<T> { ErrorCode = code, ErrorMessage = message }; }
     }
 }
-

@@ -75,16 +75,12 @@
     },
     {
       "id": "employees",
-      "title": "الحضور والانصراف والموظفين",
+      "title": "ورديات الكاشير",
       "icon": "و",
       "items": [
-        "employees-list",
-        "employee-add",
         "shifts-list",
         "shift-add",
-        "shift-reports",
-        "attendance",
-        "shift-approval"
+        "shift-reports"
       ]
     },
     {
@@ -144,6 +140,16 @@
     { "route": "dashboard", "label": "المزيد", "icon": "•••", "more": true }
   ],
   "screens": [
+    {
+      "route": "product-labels",
+      "module": "المخازن",
+      "title": "طباعة ملصقات المنتجات",
+      "description": "دفعة ملصقات من بيانات المنتجات والمتغيرات المحفوظة؛ دخول سياقي من دليل المنتجات.",
+      "renderer": "product-labels",
+      "featureKey": "barcode-label-printing",
+      "navigationHidden": true,
+      "permissionRoute": "products-list"
+    },
     {
       "route": "dashboard",
       "module": "الرئيسية",
@@ -226,18 +232,18 @@
       "module": "الإعدادات",
       "title": "إعدادات الفاتورة",
       "description": "معاينة رأس وتذييل الفاتورة وخيارات العرض فقط.",
-      "renderer": "settings",
+      "renderer": "legacy-redirect",
       "category": "invoice",
       "administratorOnly": true,
-      "settingsGroup": "operations",
-      "settingsOrder": 10
+      "redirectTo": "settings-printers",
+      "navigationHidden": true
     },
     {
       "route": "settings-printers",
       "module": "الإعدادات",
-      "title": "إعدادات الطابعات",
-      "description": "معاينة إعدادات الطابعة دون تعديل إعدادات Windows.",
-      "renderer": "printer",
+      "title": "الطابعات والطباعة",
+      "description": "الطباعة الأصلية وإعدادات الورق والقوالب ومصمم الإيصالات.",
+      "renderer": "native-printing",
       "category": "settings",
       "administratorOnly": true,
       "settingsGroup": "operations",
@@ -541,72 +547,72 @@
       "module": "الإعدادات",
       "title": "تسطيب برنتر الفواتير",
       "description": "معاينة إعدادات طابعة حرارية فقط.",
-      "renderer": "printer",
+      "renderer": "legacy-redirect",
       "category": "receipt",
       "administratorOnly": true,
-      "settingsGroup": "operations",
-      "settingsOrder": 30
+      "redirectTo": "settings-printers",
+      "navigationHidden": true
     },
     {
       "route": "barcode-printer",
       "module": "الإعدادات",
       "title": "تسطيب برنتر الباركود",
       "description": "معاينة اتصال ومقاس ملصقات دون تثبيت تعريفات.",
-      "renderer": "printer",
+      "renderer": "legacy-redirect",
       "category": "barcode",
       "featureKey": "barcode-label-printing",
       "administratorOnly": true,
-      "settingsGroup": "operations",
-      "settingsOrder": 40
+      "redirectTo": "settings-printers",
+      "navigationHidden": true
     },
     {
       "route": "barcode-designer",
       "module": "الإعدادات",
       "title": "تصميم وطباعة الباركود",
       "description": "مصمم ملصق باركود تفاعلي ومعاينة طباعة.",
-      "renderer": "barcode",
+      "renderer": "legacy-redirect",
       "category": "designer",
       "featureKey": "barcode-label-printing",
       "administratorOnly": true,
-      "settingsGroup": "operations",
-      "settingsOrder": 50
+      "redirectTo": "settings-printers",
+      "navigationHidden": true
     },
     {
       "route": "print-design",
       "module": "الإعدادات",
       "title": "إعدادات التصميم",
       "description": "خطوط ومحاذاة وهوامش نموذج الملصق.",
-      "renderer": "barcode",
+      "renderer": "legacy-redirect",
       "category": "design",
       "featureKey": "barcode-label-printing",
       "administratorOnly": true,
-      "settingsGroup": "operations",
-      "settingsOrder": 60
+      "redirectTo": "settings-printers",
+      "navigationHidden": true
     },
     {
       "route": "print-advanced",
       "module": "الإعدادات",
       "title": "التنسيق المتقدم",
       "description": "معاينة كثافة واتجاه ومقاسات الطباعة.",
-      "renderer": "barcode",
+      "renderer": "legacy-redirect",
       "category": "advanced",
       "featureKey": "barcode-label-printing",
       "administratorOnly": true,
-      "settingsGroup": "operations",
-      "settingsOrder": 70
+      "redirectTo": "settings-printers",
+      "navigationHidden": true
     },
     {
       "route": "barcode-product-edit",
       "module": "الإعدادات",
       "title": "تعديل السعر والكمية والباركود",
       "description": "تعديل عرض ملصق منتج داخل الجلسة.",
-      "renderer": "entity-form",
+      "renderer": "legacy-redirect",
       "data": "products",
       "mode": "edit",
       "featureKey": "barcode-label-printing",
       "administratorOnly": true,
-      "settingsGroup": "operations",
-      "settingsOrder": 80
+      "redirectTo": "settings-printers",
+      "navigationHidden": true
     },
 
     {
@@ -859,35 +865,42 @@
     {
       "route": "employees-list",
       "module": "الموظفين",
-      "title": "قائمة إدارة الموظفين",
-      "description": "دليل الموظفين وحالة الحضور والوردية.",
-      "renderer": "entity-list",
-      "data": "employees"
+      "title": "دليل الموظفين",
+      "description": "بيانات الموظفين المحفوظة وحقول الراتب والحضور الاختيارية.",
+      "renderer": "workforce-employees",
+      "data": "employees",
+      "featureKey": "employee-management",
+      "administratorOnly": true,
+      "settingsGroup": "users-security",
+      "settingsOrder": 80
     },
     {
       "route": "employee-add",
       "module": "الموظفين",
       "title": "إضافة موظف جديد",
-      "description": "إضافة موظف مؤقت دون إنشاء حساب دخول.",
-      "renderer": "entity-form",
+      "description": "إضافة موظف بالاسم فقط دون إنشاء حساب دخول.",
+      "renderer": "workforce-employees",
       "data": "employees",
-      "mode": "add"
+      "mode": "add",
+      "featureKey": "employee-management",
+      "administratorOnly": true,
+      "navigationHidden": true
     },
     {
       "route": "shifts-list",
       "module": "الموظفين",
-      "title": "إدارة الورديات",
-      "description": "الورديات وساعاتها وحالاتها التجريبية.",
-      "renderer": "entity-list",
+      "title": "ورديات الكاشير",
+      "description": "سجل الورديات وفتح وإغلاق جلسات النقد الفعلية.",
+      "renderer": "workforce-shifts",
       "data": "shifts",
       "featureKey": "advanced-shifts"
     },
     {
       "route": "shift-add",
       "module": "الموظفين",
-      "title": "إضافة وردية",
-      "description": "تعريف وردية مؤقتة وتعيين ساعات العمل.",
-      "renderer": "entity-form",
+      "title": "الوردية الحالية",
+      "description": "فتح وردية وبيان النقد الفعلي للكاشير.",
+      "renderer": "workforce-shifts",
       "data": "shifts",
       "mode": "add",
       "featureKey": "advanced-shifts"
@@ -896,8 +909,8 @@
       "route": "shift-reports",
       "module": "الموظفين",
       "title": "تقارير الورديات",
-      "description": "مبيعات وحضور كل وردية ضمن بيانات العرض.",
-      "renderer": "report",
+      "description": "ملخصات الورديات وفروق النقد مع فلاتر الخادم.",
+      "renderer": "workforce-shifts",
       "data": "shifts",
       "report": "shifts",
       "featureKey": "advanced-shifts"
@@ -906,10 +919,13 @@
       "route": "attendance",
       "module": "الموظفين",
       "title": "الحضور والانصراف",
-      "description": "حركات حضور تجريبية لا تمثل جهاز بصمة فعليًا.",
-      "renderer": "attendance",
+      "description": "تسجيل حضور اختياري مستقل عن ورديات الكاشير مع سجل تصحيحات إدارية.",
+      "renderer": "workforce-attendance",
       "data": "employees",
-      "featureKey": "employee-attendance"
+      "featureKey": "employee-attendance",
+      "administratorOnly": true,
+      "settingsGroup": "users-security",
+      "settingsOrder": 81
     },
 
     {
@@ -956,11 +972,13 @@
       "route": "shift-approval",
       "module": "الموظفين",
       "title": "إضافة ورديات وتأكيدها",
-      "description": "سير موافقة تجريبي لا يمنح صلاحيات خادم.",
-      "renderer": "workflow",
+      "description": "مسار توافق قديم لورديات الكاشير.",
+      "renderer": "legacy-redirect",
       "data": "shifts",
       "workflow": "shift-approval",
-      "featureKey": "advanced-shifts"
+      "featureKey": "advanced-shifts",
+      "redirectTo": "shifts-list",
+      "navigationHidden": true
     },
 
     {
@@ -1015,11 +1033,13 @@
       "route": "analytics-shifts",
       "module": "الإحصائيات والأرباح",
       "title": "تقارير الورديات",
-      "description": "مقارنة مبيعات وحضور الورديات.",
-      "renderer": "report",
+      "description": "مسار توافق لتقارير ورديات الكاشير.",
+      "renderer": "legacy-redirect",
       "data": "shifts",
       "report": "shifts",
-      "featureKey": "advanced-reports"
+      "featureKey": "advanced-shifts",
+      "redirectTo": "shift-reports",
+      "navigationHidden": true
     },
     {
       "route": "tracking-reports",
@@ -1117,6 +1137,27 @@
       "description": "واجهة عرض لخدمات شحن ودفع غير متصلة بأي مزود فعلي.",
       "renderer": "cash-services",
       "featureKey": "cash-services"
+    },
+    {
+      "route": "shift-details",
+      "module": "الموظفين",
+      "title": "تفاصيل الوردية",
+      "description": "رابط سياقي من سجل الورديات لملخص النقد والحركات ومراجع المستندات.",
+      "renderer": "workforce-shifts",
+      "featureKey": "advanced-shifts",
+      "navigationHidden": true,
+      "permissionRoute": "shifts-list"
+    },
+    {
+      "route": "attendance-history",
+      "module": "الموظفين",
+      "title": "سجل الحضور",
+      "description": "تاريخ الحضور والانصراف والمدد والتصحيحات الإدارية.",
+      "renderer": "workforce-attendance",
+      "featureKey": "employee-attendance",
+      "administratorOnly": true,
+      "settingsGroup": "users-security",
+      "settingsOrder": 82
     }
   ]
 }

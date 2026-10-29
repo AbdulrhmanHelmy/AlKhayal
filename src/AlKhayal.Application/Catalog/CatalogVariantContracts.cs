@@ -93,6 +93,7 @@ namespace AlKhayal.Application.Catalog
         public long Id { get; set; }
         public string Code { get; set; }
         public string Type { get; set; }
+        public string Format { get; set; }
         public long ProductUnitId { get; set; }
         public bool IsPrimary { get; set; }
         public bool IsRetired { get; set; }

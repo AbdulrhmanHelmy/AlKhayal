@@ -1,1 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net48</TargetFramework><LangVersion>latest</LangVersion></PropertyGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net48</TargetFramework><LangVersion>latest</LangVersion></PropertyGroup>
+  <ItemGroup><Reference Include="System.Drawing" /><ProjectReference Include="..\AlKhayal.Application\AlKhayal.Application.csproj" /></ItemGroup>
+  <ItemGroup><PackageReference Include="ZXing.Net" Version="0.16.11" GeneratePathProperty="true" ExcludeAssets="compile;runtime" /></ItemGroup>
+  <ItemGroup><Reference Include="zxing"><HintPath>$(PkgZXing_Net)\lib\net48\zxing.dll</HintPath><Private>true</Private></Reference></ItemGroup>
+  <ItemGroup><Content Include="..\..\docs\third-party\ZXing-Apache-2.0.txt" Link="ThirdPartyNotices\ZXing-Apache-2.0.txt" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+</Project>

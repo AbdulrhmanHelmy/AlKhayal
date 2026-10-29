@@ -1,4 +1,4 @@
-﻿.dashboard-activity { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dashboard-activity { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .pos-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(360px, .82fr); gap: 12px; min-width: 0; min-height: 620px; }
 .pos-products, .pos-cart { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); } .pos-products .card-body, .pos-cart .card-body { overflow: auto; }
 .pos-products .card-head, .pos-cart .card-head { min-width: 0; } .pos-cart .card-body { scrollbar-gutter: stable; } .pos-cart .card-body .form-grid { min-width: 0; } .pos-cart .card-body .page-actions { align-items: stretch; }
@@ -218,16 +218,18 @@
 .return-reason { max-width: 520px; margin-block: 14px; }
 .return-result { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; padding: 12px; border-radius: var(--radius-md); background: var(--surface-raised); }
 @media (max-width: 560px) { .sale-collection { grid-template-columns: minmax(0, 1fr); } }
-.receipt-print-only { display: none; }
-@page { size: 80mm auto; margin: 4mm; }
-@media print {
-  body.printing-receipt > *:not(#receiptPrint) { display: none !important; }
-  body.printing-receipt #receiptPrint { display: block !important; width: 72mm; margin: 0 auto; color: #111; background: #fff; font: 12px/1.45 Arial, sans-serif; }
-  #receiptPrint h1, #receiptPrint h2, #receiptPrint p { margin: 5px 0; text-align: center; }
-  #receiptPrint table { width: 100%; border-collapse: collapse; }
-  #receiptPrint th, #receiptPrint td { padding: 4px 1px; border-bottom: 1px dashed #888; text-align: start; }
-  #receiptPrint small { display: block; }
-}
 .purchase-head .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 760px) { .purchase-head .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .purchase-actions { align-items: stretch; flex-direction: column; } }
 @media (max-width: 560px) { .purchase-head .form-grid { grid-template-columns: minmax(0, 1fr); } .purchase-search { width: 100%; } }
+
+/* Phase 7.1: intrinsic workforce layouts share the shell scroll owner and theme tokens. */
+.workforce-filters{display:flex;flex-wrap:wrap;align-items:end;gap:12px;min-width:0;min-height:0}
+.workforce-filters .field{flex:1 1 160px;min-width:0}
+.workforce-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px;min-width:0}
+.workforce-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;min-width:0;min-height:0}
+.workforce-summary div{min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px}
+.workforce-summary dt{color:var(--text-secondary);font-size:.85rem}
+.workforce-summary dd{margin:6px 0 0;overflow-wrap:anywhere;font-weight:600}
+.workforce-note{padding:12px}
+@media(max-width:760px){.workforce-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.workforce-summary{grid-template-columns:minmax(0,1fr)}}

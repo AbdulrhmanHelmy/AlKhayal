@@ -225,7 +225,7 @@ namespace AlKhayal.IntegrationTests
                     c.Open();Assert.Equal(10000000,c.ExecuteScalar<long>("SELECT ValueScaled FROM StockMovements WHERE Id=1"));
                     Assert.Equal("legacy-hash",c.ExecuteScalar<string>("SELECT RequestHash FROM InventoryDocuments WHERE Id=1"));
                     Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryCostReconciliations"));
-                    Assert.Equal(31,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));
+                    Assert.Equal(34,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));
                 }
                 Assert.True(await f.Store.VerifyProjectionAsync(NoCancellation));
             }

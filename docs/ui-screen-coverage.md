@@ -19,8 +19,8 @@ Originally generated from `frontend/data/screens.json` on 2026-10-20. Batch 1 ad
 | الإعدادات | الإعدادات العامة | `settings-general` | `frontend/js/modules/general-settings.js` | general-settings | SQLite/API | Edit validated date/time/currency/tax defaults | Automated integration |
 | الإعدادات | بيانات المنشأة | `settings-company` | `frontend/js/modules/general-settings.js` | company-settings | SQLite/API | Edit validated reusable company profile | Automated integration |
 | الإعدادات | المظهر | `settings-appearance` | `frontend/js/modules/general-settings.js` | appearance-settings | Device preference | Apply Light/Dark/System immediately | Native smoke |
-| الإعدادات | إعدادات الفاتورة | `settings-invoice` | `frontend/js/modules/renderers.js` | settings | UI/session state | Edit settings and save in session | Registry verified |
-| الإعدادات | إعدادات الطابعات | `settings-printers` | `frontend/js/modules/renderers.js` | printer | UI/session state | Configuration and print preview only | Registry verified |
+| الإعدادات | إعدادات الفاتورة | `settings-invoice` | `frontend/js/modules/renderers.js` | legacy-redirect | Compatibility redirect | Hidden redirect to settings-printers | Registry verified |
+| الإعدادات | الطابعات والطباعة | `settings-printers` | `frontend/js/modules/printing.js` | native-printing | Persisted SQLite + native C# | Printer profiles, paper/templates/designer, PNG preview, diagnostics | Registry + executable VM/API verified; physical output unverified |
 | الإعدادات | البيانات والصيانة | `settings-backup` | `frontend/js/modules/general-settings.js` | database-settings | SQLite/API read | Inspect database status; backup/restore explicitly unavailable | Automated integration |
 | العملاء | إدارة العملاء | `customers-list` | `frontend/js/modules/renderers.js` | entity-list | customers | Search, filter, sort, paginate, inspect, add, and edit persisted customers | Browser smoke |
 | العملاء | إضافة عميل | `customer-add` | `frontend/js/modules/renderers.js` | entity-form | customers | Hidden contextual route; validate and save to SQLite | Registry verified |
@@ -52,12 +52,12 @@ Originally generated from `frontend/data/screens.json` on 2026-10-20. Batch 1 ad
 | المرتجعات | نظرة عامة على المرتجعات | `returns-overview` | `frontend/js/modules/renderers.js` | entity-list | returns | Search, filter, sort, paginate, inspect and session actions | Registry verified |
 | المرتجعات | إدارة مرتجعات المبيعات | `sales-returns` | `frontend/js/modules/renderers.js` | returns | sales | Interactive session workflow or preview | Registry verified |
 | المرتجعات | إدارة مرتجعات المشتريات | `purchase-returns` | `frontend/js/modules/purchasing.js` | purchase-returns | purchases | Select posted invoice/warehouse, return eligible quantities/serials, choose refund or supplier credit and review FIFO variance | Automated API/registry tests; native WebView2 smoke pending |
-| التسطيب والطباعة | تسطيب برنتر الفواتير | `receipt-printer` | `frontend/js/modules/renderers.js` | printer | UI/session state | Configuration and print preview only | Registry verified |
-| التسطيب والطباعة | تسطيب برنتر الباركود | `barcode-printer` | `frontend/js/modules/renderers.js` | printer | UI/session state | Configuration and print preview only | Registry verified |
-| التسطيب والطباعة | تصميم وطباعة الباركود | `barcode-designer` | `frontend/js/modules/renderers.js` | barcode | UI/session state | Interactive label design and print preview | Registry verified |
-| التسطيب والطباعة | إعدادات التصميم | `print-design` | `frontend/js/modules/renderers.js` | barcode | UI/session state | Interactive label design and print preview | Registry verified |
-| التسطيب والطباعة | التنسيق المتقدم | `print-advanced` | `frontend/js/modules/renderers.js` | barcode | UI/session state | Interactive label design and print preview | Registry verified |
-| التسطيب والطباعة | تعديل السعر والكمية والباركود | `barcode-product-edit` | `frontend/js/modules/renderers.js` | entity-form | products | Validate and save to the session store | Registry verified |
+| الإعدادات | تسطيب برنتر الفواتير | `receipt-printer` | `frontend/js/modules/renderers.js` | legacy-redirect | Compatibility redirect | Hidden redirect to settings-printers | Registry verified |
+| التسطيب والطباعة | تسطيب برنتر الباركود | `barcode-printer` | `frontend/js/app.js` | legacy-redirect | Compatibility | Hidden alias to settings-printers | Automated registry |
+| التسطيب والطباعة | تصميم وطباعة الباركود | `barcode-designer` | `frontend/js/app.js` | legacy-redirect | Compatibility | Hidden alias to settings-printers | Automated registry |
+| التسطيب والطباعة | إعدادات التصميم | `print-design` | `frontend/js/app.js` | legacy-redirect | Compatibility | Hidden alias to settings-printers | Automated registry |
+| التسطيب والطباعة | التنسيق المتقدم | `print-advanced` | `frontend/js/app.js` | legacy-redirect | Compatibility | Hidden alias to settings-printers | Automated registry |
+| التسطيب والطباعة | تعديل السعر والكمية والباركود | `barcode-product-edit` | `frontend/js/app.js` | legacy-redirect | Compatibility | Hidden alias to settings-printers | Automated registry |
 | المصروفات والسندات | قائمة المصروفات والسندات | `expenses-list` | `frontend/js/modules/renderers.js` | entity-list | expenses | Search, filter, sort, paginate, inspect and session actions | Registry verified |
 | المصروفات والسندات | أنواع المصروفات | `expense-categories` | `frontend/js/modules/renderers.js` | workflow | expenses | Review and simulated confirmation | Registry verified |
 | المصروفات والسندات | إضافة مصروف | `expense-add` | `frontend/js/modules/renderers.js` | expense-form | expenses | Interactive session workflow or preview | Registry verified |
@@ -108,4 +108,9 @@ Originally generated from `frontend/data/screens.json` on 2026-10-20. Batch 1 ad
 | الصيانة والفروع | حركة مالية للفروع | `branch-finance` | `frontend/js/modules/renderers.js` | workflow | branches | Review and simulated confirmation | Registry verified |
 | الصيانة والفروع | خدمات كاش | `cash-services` | `frontend/js/modules/renderers.js` | cash-services | UI/session state | Interactive session workflow or preview | Registry verified |
 
-Total distinct screens: **99**.
+| المنتجات | طباعة ملصقات المنتجات | `product-labels` | `frontend/js/modules/labels.js` | product-labels | SQLite/API + native C# | Contextual paged bulk selection, saved barcode quantities/profiles/start cells, durable print jobs | Executable VM/API/native raster verified; physical output unverified |
+
+Current total registered routes: **105** (including hidden compatibility/contextual routes).
+
+
+Phase 7.3 adds label profile/template editing to settings-printers and barcode/collapsed label actions to existing catalog screens. The five historical barcode-design routes above are hidden redirects; no duplicate administration entry. Full acceptance: [Phase 7 report](phase-7/phase-7-final-report.md).

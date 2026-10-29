@@ -17,6 +17,7 @@ namespace AlKhayal.Core.Models
     }
     public sealed class CustomerStatementMovement
     {
+        public long? TransactionId { get; set; }
         public string Date { get; set; }
         public string Reference { get; set; }
         public string Description { get; set; }

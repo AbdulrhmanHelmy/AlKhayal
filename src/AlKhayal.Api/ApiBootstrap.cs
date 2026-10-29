@@ -45,6 +45,27 @@ namespace AlKhayal.Api
             if (value != null)
                 return value;
 
+            if (t == typeof(Controllers.LabelsController))
+                return new Controllers.LabelsController(
+                    (Application.Printing.LabelService)_get(typeof(Application.Printing.LabelService)),
+                    (Application.Catalog.BarcodeService)_get(typeof(Application.Catalog.BarcodeService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.PrintingController))
+                return new Controllers.PrintingController(
+                    (Application.Printing.PrintingService)_get(typeof(Application.Printing.PrintingService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.WorkforceController))
+                return new Controllers.WorkforceController(
+                    (Application.Workforce.WorkforceService)_get(typeof(Application.Workforce.WorkforceService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
             if (t == typeof(Controllers.AuthController))
                 return new Controllers.AuthController(
                     (Application.Authentication.AuthService)_get(

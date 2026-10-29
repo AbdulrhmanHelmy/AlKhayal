@@ -30,7 +30,7 @@ namespace AlKhayal.IntegrationTests
                 {
                     c.Open();c.Execute("CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL)");
                     var assembly=typeof(Migrator).Assembly;
-                    foreach(var script in assembly.GetManifestResourceNames().Where(x=>x.EndsWith(".sql")&&!x.EndsWith("031_sales_refund_overdraft.sql")).OrderBy(x=>x,StringComparer.Ordinal))
+                    foreach(var script in assembly.GetManifestResourceNames().Where(n => !n.EndsWith("071_phase7_1_workforce.sql", StringComparison.Ordinal) && !n.EndsWith("072_phase7_2_printing.sql", StringComparison.Ordinal) && !n.EndsWith("073_phase7_3_labels.sql", StringComparison.Ordinal)).Where(x=>x.EndsWith(".sql")&&!x.EndsWith("031_sales_refund_overdraft.sql")).OrderBy(x=>x,StringComparer.Ordinal))
                     {
                         using(var stream=assembly.GetManifestResourceStream(script))using(var reader=new StreamReader(stream))c.Execute(reader.ReadToEnd());
                         c.Execute("INSERT INTO SchemaVersion VALUES(@script,'2026-10-29T00:00:00Z')",new{script});
@@ -51,7 +51,7 @@ namespace AlKhayal.IntegrationTests
                 Migrator.Run(cs);Migrator.Run(cs);
                 using(var c=new SQLiteConnection(cs))
                 {
-                    c.Open();Assert.Equal(before,Snapshot(c));Assert.Equal(31,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));Assert.Equal(voucher.TreasuryMovementId,c.ExecuteScalar<long>("SELECT TreasuryMovementId FROM ExpenseVouchers"));
+                    c.Open();Assert.Equal(before,Snapshot(c));Assert.Equal(34,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));Assert.Equal(voucher.TreasuryMovementId,c.ExecuteScalar<long>("SELECT TreasuryMovementId FROM ExpenseVouchers"));
                     Assert.Throws<SQLiteException>(()=>c.Execute("UPDATE TreasuryMovements SET Notes='tampered'"));
                     Assert.Throws<SQLiteException>(()=>c.Execute("INSERT INTO TreasuryMovements(AccountId,Type,AmountScaled,BalanceAfterScaled,OperationKey,RequestHash,Notes,UserId,CreatedUtc) VALUES(@account,'withdraw',100,-100,'invalid-negative','hash','',@user,'2026-10-29')",new{account=account.Id,user}));
                 }

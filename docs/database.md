@@ -115,3 +115,15 @@ Invoice posting uses the existing inventory posting implementation with the same
 `022_pos_browse_indexes.sql` adds lookup indexes on `SalesInvoiceLines(SalesInvoiceId,Id)` and `SalesReturnLines(SalesInvoiceLineId)`. The Touch POS page query aggregates only invoices from the previous 30 UTC days, subtracts returns at the original line's base-unit conversion, and orders the filtered product set by net quantity. The indexes change no financial rows or stock balances. Historical migration fixtures that intentionally omit sales tables skip this dependent index script before running the normal migrator.
 
 `023_directory_query_indexes.sql` adds balance and active product-identifier lookup indexes for paged warehouse searches. It changes no inventory or financial rows. Customer code allocation runs within the customer insert transaction, using the highest existing numeric `CUS-` suffix and the existing case-insensitive unique constraint; historical and explicitly supplied codes are retained.
+
+## Phase 7.1 workforce storage
+
+Additive embedded `071_phase7_1_workforce.sql` adds Employees, EmployeeAttendance, CashierShifts, CashierShiftEvents, WorkforceOperations and WorkforceAudit. Allocation leaves the intervening range for parallel Phase 6; it changes no prior migration or existing history. Unique active/source indexes, exact scale-4 amounts, UTC intervals and immutable audit/close guards preserve history. See [Phase 7.1](phase-7/phase-7-1.md#database-and-migration-coordination) for migration coordination and drawer accounting boundaries.
+
+## Native printing persistence — Phase 7.2
+
+Additive `072_phase7_2_printing.sql` creates versioned PrintingConfiguration JSON, PrintingAudit and PrintJobs with durable request-key uniqueness, an active-document index and explicit interrupted-job review metadata. It changes no financial table or existing migration. Configuration and its audit commit atomically; 33 migrations now apply in the current checkout. See [Phase 7.2 storage and diagnostics](phase-7/phase-7-2.md).
+
+## Barcode and label storage — Phase 7.3
+
+Additive `073_phase7_3_labels.sql` adds LabelConfiguration/LabelConfigurationAudit, BarcodeOperations/BarcodeSymbologies and nullable PrintJobs RequestHash/BatchSummaryJson. Symbology is separate from existing barcode provenance. Replacement retires the old ProductBarcodes row and increments the existing product version/audit atomically; no historical line or financial identity is rewritten. Current migration count is **34**. See [persistence and identity policy](phase-7/phase-7-3.md).
