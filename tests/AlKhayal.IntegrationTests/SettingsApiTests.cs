@@ -27,7 +27,7 @@ namespace AlKhayal.IntegrationTests
                 server.Dispose();server=null;url="http://127.0.0.1:"+FreePort();server=Start(path,url);using(var restarted=Client(url)){await Login(restarted,"settings-api-admin");var company=await restarted.GetStringAsync("api/settings/company");var general=await restarted.GetStringAsync("api/settings/general");Assert.Contains("مؤسسة الخيال",company);Assert.Contains("\"currencyCode\":\"USD\"",general);}
             }finally{if(server!=null)server.Dispose();System.Data.SQLite.SQLiteConnection.ClearAllPools();if(File.Exists(path))File.Delete(path);}
         }
-        private static AlKhayalServer Start(string path,string url){var server=new AlKhayalServer();server.Start(new HostOptions{DatabasePath=path,Url=url,FrontendPath=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"missing-frontend")});return server;}
+        private static AlKhayalServer Start(string path,string url){var server=new AlKhayalServer(new TestLicenseGate());server.Start(new HostOptions{DatabasePath=path,Url=url,FrontendPath=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"missing-frontend")});return server;}
         private static HttpClient Client(string url){return new HttpClient(new HttpClientHandler{UseCookies=true}){BaseAddress=new Uri(url)};}
         private static StringContent Json(string json){return new StringContent(json,Encoding.UTF8,"application/json");}
         private static async Task<string> Login(HttpClient client,string username){var response=await client.PostAsync("api/auth/login",Json("{\"username\":\""+username+"\",\"password\":\"secret\"}"));Assert.Equal(HttpStatusCode.OK,response.StatusCode);return Regex.Match(await response.Content.ReadAsStringAsync(),"\\\"csrfToken\\\":\\\"([^\\\"]+)\\\"").Groups[1].Value;}

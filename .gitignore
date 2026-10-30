@@ -485,3 +485,32 @@ $RECYCLE.BIN/
 .codex/opencode-log.md
 
 /seeded-database.db
+
+# Disposable acceptance runs and local runtime state (never source fixtures).
+/.test-results-batch5/
+/test-artifacts/
+/.tmp/
+**/webview2-profile/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+
+# Offline licensing output and owner-only private state; public XML stays allowed.
+*.alklic
+*.alkreq
+**/signing-key.pem
+**/signing-key-*.pem
+**/private-key.pem
+**/private-key.xml
+**/private.xml
+/tools/AlKhayal.LicenseManager/session.json
+/tools/AlKhayal.LicenseManager/backups/
+AlKhayal-registry-*.json
+*.bak
+.env.*
+!.env.example

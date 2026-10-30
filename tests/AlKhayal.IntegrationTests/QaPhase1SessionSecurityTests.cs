@@ -46,7 +46,7 @@ namespace AlKhayal.IntegrationTests
                 await users.CreateAsync("qa-admin", "مسؤول الجودة", new PasswordHasher().Hash("qa-secret"), "administrator", CancellationToken.None);
 
                 var options = new HostOptions { DatabasePath = path, Url = "http://127.0.0.1:" + FreePort(), FrontendPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "missing-frontend") };
-                server = new AlKhayalServer();
+                server = new AlKhayalServer(new TestLicenseGate());
                 server.Start(options);
 
                 string token;
@@ -80,7 +80,7 @@ namespace AlKhayal.IntegrationTests
                 // A host restart on the same database does not restore the expired session.
                 server.Dispose();
                 var restarted = new HostOptions { DatabasePath = path, Url = "http://127.0.0.1:" + FreePort(), FrontendPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "missing-frontend") };
-                server = new AlKhayalServer();
+                server = new AlKhayalServer(new TestLicenseGate());
                 server.Start(restarted);
                 using (var client = Client(restarted.Url))
                 {
@@ -107,7 +107,7 @@ namespace AlKhayal.IntegrationTests
                 await users.CreateAsync("qa-admin", "مسؤول الجودة", new PasswordHasher().Hash("qa-secret"), "administrator", CancellationToken.None);
 
                 var options = new HostOptions { DatabasePath = path, Url = "http://127.0.0.1:" + FreePort(), FrontendPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "missing-frontend") };
-                server = new AlKhayalServer();
+                server = new AlKhayalServer(new TestLicenseGate());
                 server.Start(options);
                 using (var client = Client(options.Url))
                 {
@@ -145,7 +145,7 @@ namespace AlKhayal.IntegrationTests
                 await users.CreateAsync("qa-admin", "مسؤول الجودة", new PasswordHasher().Hash("qa-secret"), "administrator", CancellationToken.None);
 
                 var options = new HostOptions { DatabasePath = path, Url = "http://127.0.0.1:" + FreePort(), FrontendPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "missing-frontend") };
-                server = new AlKhayalServer();
+                server = new AlKhayalServer(new TestLicenseGate());
                 server.Start(options);
                 using (var client = Client(options.Url))
                 {

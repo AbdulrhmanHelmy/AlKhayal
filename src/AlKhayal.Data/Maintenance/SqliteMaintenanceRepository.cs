@@ -33,11 +33,9 @@ VALUES(@CustomerId,@number,@operationKey,@requestHash,@Phone,@Device,@Model,@Ser
                     c.Execute("INSERT INTO MaintenanceTicketStatusHistory(TicketId,Status,OperationKey,ChangedUtc) VALUES(@id,'تم الاستلام',@key,@now)",new{id,key="maintenance:"+id+":status:received",now},tx);
                     if(advance>0)
                     {
-                        var balance=c.ExecuteScalar<long>("SELECT COALESCE(SUM(CASE WHEN TransactionType IN ('opening','increase') THEN AmountScaled ELSE -AmountScaled END),0) FROM CustomerTransactions WHERE CustomerId=@CustomerId",new{ticket.CustomerId},tx);
-                        var receiptKey="maintenance:"+id+":advance";var receiptHash=requestHash;
+                        // An advance prepays this uncharged ticket; it is not a collection of existing customer debt.
+                        var receiptKey="maintenance:"+id+":advance";
                         c.Execute("INSERT INTO MaintenanceTicketReceipts(TicketId,ReceiptType,AmountScaled,OperationKey,ReceivedOn,CreatedUtc) VALUES(@id,'advance',@advance,@receiptKey,@date,@now)",new{id,advance,receiptKey,date=ticket.ReceivedOn,now},tx);
-                        c.Execute("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc,Reference) VALUES(@CustomerId,@receiptKey,@receiptHash,'collection',@advance,@date,@notes,@now,@number)",new{ticket.CustomerId,receiptKey,receiptHash,advance,date=ticket.ReceivedOn,notes="مقدم صيانة رقم "+number,now,number},tx);
-                        c.Execute("UPDATE Customers SET Balance=@balance,UpdatedAt=@now WHERE Id=@CustomerId",new{balance=(balance-advance)/10000m,now,ticket.CustomerId},tx);
                     }
                     tx.Commit();return Get(c,id);
                 }
@@ -88,8 +86,15 @@ VALUES(@CustomerId,@number,@operationKey,@requestHash,@Phone,@Device,@Model,@Ser
                     var total=checked((long)(finalCost*10000m));var advance=ticket.AdvancePaidScaled;if(total<advance)throw new ArgumentException("التكلفة النهائية أقل من المقدم المسجل.");
                     var cash=settlementType=="cash"?checked(total-advance):0L;
                     var ledger=c.ExecuteScalar<long>("SELECT COALESCE(SUM(CASE WHEN TransactionType IN ('opening','increase') THEN AmountScaled ELSE -AmountScaled END),0) FROM CustomerTransactions WHERE CustomerId=@CustomerId",new{ticket.CustomerId},tx);
-                    var next=checked(ledger+total-cash);var now=DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture);var reference=ticket.TicketNumber;
+                    var advanceKey="maintenance:"+ticketId+":advance";
+                    var appliedAdvance=c.QuerySingleOrDefault<AdvanceLedgerRow>("SELECT CustomerId,TransactionType,AmountScaled FROM CustomerTransactions WHERE OperationKey=@advanceKey",new{advanceKey},tx);
+                    if(appliedAdvance!=null&&(appliedAdvance.CustomerId!=ticket.CustomerId||appliedAdvance.TransactionType!="collection"||appliedAdvance.AmountScaled!=advance))throw new ArgumentException("قيد مقدم الصيانة لا يطابق التذكرة؛ لم يتم التسليم.");
+                    // Older tickets may already have collected their advance at intake. Never collect it twice.
+                    var advanceToApply=appliedAdvance==null?advance:0L;
+                    var next=checked(ledger+total-cash-advanceToApply);var now=DateTime.UtcNow.ToString("o",CultureInfo.InvariantCulture);var reference=ticket.TicketNumber;
+                    if(advance>0&&c.ExecuteScalar<long>("SELECT COUNT(*) FROM MaintenanceTicketReceipts WHERE TicketId=@ticketId AND ReceiptType='advance' AND AmountScaled=@advance AND OperationKey=@advanceKey",new{ticketId,advance,advanceKey},tx)!=1)throw new ArgumentException("إيصال مقدم الصيانة غير مطابق؛ لم يتم التسليم.");
                     if(total>0)c.Execute("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc,Reference) VALUES(@CustomerId,@key,@requestHash,'increase',@total,@deliveredOn,@notes,@now,@reference)",new{ticket.CustomerId,key="maintenance:"+ticketId+":charge",requestHash,total,deliveredOn,notes="صيانة رقم "+reference+" - "+ticket.Device+" "+ticket.Model,now,reference},tx);
+                    if(advanceToApply>0)c.Execute("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc,Reference) VALUES(@CustomerId,@advanceKey,@requestHash,'collection',@advanceToApply,@deliveredOn,@notes,@now,@reference)",new{ticket.CustomerId,advanceKey,requestHash,advanceToApply,deliveredOn,notes="مقدم صيانة رقم "+reference,now,reference},tx);
                     if(cash>0)
                     {
                         c.Execute("INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc,Reference) VALUES(@CustomerId,@key,@requestHash,'collection',@cash,@deliveredOn,@notes,@now,@reference)",new{ticket.CustomerId,key="maintenance:"+ticketId+":cash-statement",requestHash,cash,deliveredOn,notes="سداد صيانة نقدي رقم "+reference,now,reference},tx);
@@ -110,6 +115,7 @@ VALUES(@CustomerId,@number,@operationKey,@requestHash,@Phone,@Device,@Model,@Ser
             var result=new MaintenanceTicket{Id=row.Id,CustomerId=row.CustomerId,CustomerName=row.CustomerName,TicketNumber=row.TicketNumber,Phone=row.Phone,Device=row.Device,Model=row.Model,Serial=row.Serial,Accessories=row.Accessories,Issue=row.Issue,Technician=row.Technician,EstimatedCost=row.EstimatedCostScaled/10000m,AdvancePaid=row.AdvancePaidScaled/10000m,Notes=row.Notes,ReceivedOn=row.ReceivedOn,ExpectedOn=row.ExpectedOn,Status=row.Status,FinalCost=row.FinalCostScaled.HasValue?(decimal?)(row.FinalCostScaled.Value/10000m):null,SettlementType=row.SettlementType,DeliveredOn=row.DeliveredOn};
             result.History=c.Query<MaintenanceStatusEvent>("SELECT Status,ChangedUtc FROM MaintenanceTicketStatusHistory WHERE TicketId=@id ORDER BY Id",new{id}).ToList();return result;
         }
+        private sealed class AdvanceLedgerRow{public long CustomerId{get;set;}public string TransactionType{get;set;}public long AmountScaled{get;set;}}
         private sealed class StoredTicket{public long Id{get;set;}public string RequestHash{get;set;}public string Status{get;set;}}
         private sealed class StatusEventRow{public long TicketId{get;set;}public string Status{get;set;}}
         private sealed class TicketRow{public long Id{get;set;}public long CustomerId{get;set;}public string TicketNumber{get;set;}public string Device{get;set;}public string Model{get;set;}public long AdvancePaidScaled{get;set;}public string Status{get;set;}public string DeliveryOperationKey{get;set;}public string DeliveryRequestHash{get;set;}}

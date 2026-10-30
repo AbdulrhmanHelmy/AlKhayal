@@ -35,7 +35,7 @@ namespace AlKhayal.IntegrationTests
                 await users.CreateAsync("owner", "مسؤول", hasher.Hash(password), UserRoles.Administrator, CancellationToken.None);
                 var cashierId = await users.CreateAsync("cashier", "كاشير", hasher.Hash(password), UserRoles.Cashier, CancellationToken.None);
                 var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
-                using (var server = new AlKhayalServer())
+                using (var server = new AlKhayalServer(new TestLicenseGate()))
                 {
                     server.Start(new HostOptions { DatabasePath = f.DatabasePath, FrontendPath = frontend, Url = "http://127.0.0.1:" + port });
                     var address = new Uri("http://127.0.0.1:" + port);

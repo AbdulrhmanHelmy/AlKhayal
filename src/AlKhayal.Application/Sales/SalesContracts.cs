@@ -44,6 +44,9 @@ namespace AlKhayal.Application.Sales
         public bool IsFullyReturned { get; set; }
         public string ReturnStatus => !HasReturns ? "none" : IsFullyReturned ? "full" : "partial";
         public string PaymentMode { get; set; }
+        public string ImmediateMethod { get; set; }
+        public long? PaymentInstrumentId { get; set; }
+        public string PaymentInstrumentName { get; set; }
         public long SubtotalScaled { get; set; }
         public long DiscountScaled { get; set; }
         public long TaxScaled { get; set; }
@@ -68,6 +71,10 @@ namespace AlKhayal.Application.Sales
         public long WarehouseId { get; set; }
         public string InvoiceDate { get; set; }
         public string PaymentMode { get; set; }
+        public string ImmediateMethod { get; set; }
+        public long? PaymentInstrumentId { get; set; }
+        public string PaymentAmount { get; set; }
+        public bool HasPaymentAllocations { get; set; }
         public string Discount { get; set; }
         public List<SaleLine> Lines { get; set; } = new List<SaleLine>();
     }

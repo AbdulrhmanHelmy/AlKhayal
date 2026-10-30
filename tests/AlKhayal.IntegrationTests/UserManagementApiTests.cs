@@ -25,7 +25,7 @@ namespace AlKhayal.IntegrationTests
             {
                 Directory.CreateDirectory(Path.Combine(root,"frontend","data"));File.WriteAllText(Path.Combine(root,"frontend","data","screens.json"),"{\"screens\":[{\"route\":\"dashboard\",\"title\":\"الرئيسية\",\"module\":\"الرئيسية\"},{\"route\":\"pos\",\"title\":\"نقطة البيع\",\"module\":\"المبيعات\"},{\"route\":\"users-list\",\"title\":\"المستخدمون\",\"module\":\"الإعدادات\",\"administratorOnly\":true}]}",Encoding.UTF8);
                 var cs=Db.ConnectionStringFor(path);Migrator.Run(cs);var users=new SqliteUserStore(cs);var hasher=new PasswordHasher();await users.CreateAsync("admin","مسؤول",hasher.Hash("secret"),UserRoles.Administrator,CancellationToken.None);await users.CreateAsync("cashier","كاشير",hasher.Hash("secret"),UserRoles.Cashier,CancellationToken.None);
-                var url="http://127.0.0.1:"+FreePort();server=new AlKhayalServer();server.Start(new HostOptions{DatabasePath=path,Url=url,FrontendPath=Path.Combine(root,"frontend")});
+                var url="http://127.0.0.1:"+FreePort();server=new AlKhayalServer(new TestLicenseGate());server.Start(new HostOptions{DatabasePath=path,Url=url,FrontendPath=Path.Combine(root,"frontend")});
                 using(var anonymous=Client(url))
                 {
                     Assert.Equal(HttpStatusCode.Unauthorized,(await anonymous.GetAsync("api/users")).StatusCode);

@@ -36,6 +36,7 @@
         "sales-list"
       ]
     },
+    { "id": "payment-methods", "title": "وسائل الدفع", "icon": "د", "items": ["payment-overview", "payment-wallets", "payment-terminals", "payment-history"] },
     {
       "id": "returns",
       "title": "المرتجعات",
@@ -85,16 +86,10 @@
     },
     {
       "id": "reports",
-      "title": "الإحصائيات والأرباح",
+      "title": "التقارير",
       "icon": "ح",
       "items": [
-        "profit-sales-report",
-        "profits",
-        "analytics-sales",
-        "analytics-purchases",
-        "analytics-suppliers",
-        "analytics-shifts",
-        "tracking-reports"
+        "report-sales", "report-purchases", "report-returns", "report-payment-methods", "report-expenses", "report-net-profit", "report-product-profit", "report-inventory-valuation", "report-top-products", "report-low-stock", "report-inventory-movements", "report-customers", "report-suppliers", "report-shifts", "report-attendance", "report-maintenance", "report-installments", "report-overview"
       ]
     },
     {
@@ -142,10 +137,33 @@
     { "route": "returns-overview", "label": "المرتجعات", "icon": "↶" },
     { "route": "accounts-balance", "label": "الرصيد", "icon": "ج" },
     { "route": "expense-add", "label": "سند صرف", "icon": "⇄" },
-    { "route": "low-stock", "label": "النواقص", "icon": "!" },
+    { "route": "report-low-stock", "label": "النواقص", "icon": "!" },
     { "route": "dashboard", "label": "المزيد", "icon": "•••", "more": true }
   ],
   "screens": [
+    {"route": "report-customers", "title": "تقرير العملاء والمديونيات", "module": "التقارير", "description": "تقارير تشغيلية من السجلات المحفوظة.", "renderer": "operational-reports"},
+    {"route": "report-suppliers", "title": "تقرير الموردين والمستحقات", "module": "التقارير", "description": "تقارير تشغيلية من السجلات المحفوظة.", "renderer": "operational-reports"},
+    {"route": "report-shifts", "title": "تقرير الورديات والكاشير", "module": "التقارير", "description": "تقارير تشغيلية من السجلات المحفوظة.", "renderer": "operational-reports", "featureKey": "advanced-shifts"},
+    {"route": "report-attendance", "title": "تقرير الموظفين والحضور", "module": "التقارير", "description": "تقارير تشغيلية من السجلات المحفوظة.", "renderer": "operational-reports", "featureKey": "employee-attendance"},
+    {"route": "report-maintenance", "title": "تقرير الصيانة", "module": "التقارير", "description": "تقارير تشغيلية من السجلات المحفوظة.", "renderer": "operational-reports", "featureKey": "maintenance-management"},
+    {"route": "report-installments", "title": "تقرير التقسيط", "module": "التقارير", "description": "تقارير تشغيلية من السجلات المحفوظة.", "renderer": "operational-reports", "featureKey": "installments"},
+    {"route": "report-overview", "title": "ملخص النشاط", "module": "التقارير", "description": "تقارير تشغيلية من السجلات المحفوظة.", "renderer": "operational-reports"},
+
+    {"route": "report-purchases", "module": "التقارير", "title": "تقرير المشتريات", "description": "تقارير المستندات والمدفوعات المحفوظة.", "renderer": "transaction-reports"},
+    {"route": "report-returns", "module": "التقارير", "title": "تقرير المرتجعات", "description": "تقارير المستندات والمدفوعات المحفوظة.", "renderer": "transaction-reports"},
+    {"route": "report-payment-methods", "module": "التقارير", "title": "تقرير وسائل الدفع", "description": "تقارير المستندات والمدفوعات المحفوظة.", "renderer": "transaction-reports"},
+    {"route": "report-product-profit", "module": "التقارير", "title": "تقرير أرباح المنتجات", "description": "تقارير محفوظة من قاعدة البيانات.", "renderer": "stock-reports"},
+    {"route": "report-inventory-valuation", "module": "التقارير", "title": "تقرير تقييم المخزون", "description": "تقارير محفوظة من قاعدة البيانات.", "renderer": "stock-reports"},
+    {"route": "report-top-products", "module": "التقارير", "title": "المنتجات الأكثر مبيعًا", "description": "تقارير محفوظة من قاعدة البيانات.", "renderer": "stock-reports"},
+    {"route": "report-low-stock", "module": "التقارير", "title": "تقرير نواقص المخزون", "description": "تقارير محفوظة من قاعدة البيانات.", "renderer": "stock-reports"},
+    {"route": "report-inventory-movements", "module": "التقارير", "title": "تقرير حركة المخزون", "description": "تقارير محفوظة من قاعدة البيانات.", "renderer": "stock-reports"},
+    {"route": "report-net-profit", "module": "التقارير", "title": "تقرير صافي الأرباح", "description": "صافي ربح المبيعات بعد المصروفات المسجلة.", "renderer": "net-profit-report"},
+    {"route": "report-expenses", "module": "التقارير", "title": "تقرير المصروفات", "description": "سندات المصروفات المسجلة.", "renderer": "expense-report"},
+    {"route": "report-sales", "module": "التقارير", "title": "تقرير المبيعات", "description": "الفواتير المنشورة والمرتجعات والإلغاءات المسجلة.", "renderer": "sales-report"},
+    {"route": "payment-overview", "module": "وسائل الدفع", "title": "نظرة عامة", "description": "وسائل الدفع المسجلة بالفواتير المحفوظة.", "renderer": "payment-methods", "administratorOnly": true},
+    {"route": "payment-wallets", "module": "وسائل الدفع", "title": "المحافظ الإلكترونية", "description": "وسائل الدفع المسجلة بالفواتير المحفوظة.", "renderer": "payment-methods", "administratorOnly": true},
+    {"route": "payment-terminals", "module": "وسائل الدفع", "title": "ماكينات الفيزا", "description": "وسائل الدفع المسجلة بالفواتير المحفوظة.", "renderer": "payment-methods", "administratorOnly": true},
+    {"route": "payment-history", "module": "وسائل الدفع", "title": "سجل العمليات", "description": "وسائل الدفع المسجلة بالفواتير المحفوظة.", "renderer": "payment-methods", "administratorOnly": true},
     {
       "route": "product-labels",
       "module": "المخازن",
@@ -791,10 +809,9 @@
       "route": "low-stock",
       "module": "المخزن",
       "title": "الأصناف الناقصة",
-      "description": "قائمة الأصناف الأقل من حد الطلب.",
-      "renderer": "entity-list",
-      "data": "products",
-      "filter": "low-stock",
+      "description": "مسار توافق لتقرير توافر المخزون الحالي.",
+      "renderer": "legacy-redirect",
+      "redirectTo": "report-low-stock",
       "navigationHidden": true
     },
     {

@@ -83,6 +83,8 @@ namespace AlKhayal.Application.Catalog
         public string SalePriceOverride { get; set; }
         public string PurchasePriceOverride { get; set; }
         public string EffectiveSalePrice { get; set; }
+        // Exact base-unit money for conversion before rounding the selected sale unit.
+        public string EffectiveSalePriceExact { get; set; }
         public string EffectivePurchasePrice { get; set; }
         public long Version { get; set; }
         public IReadOnlyList<ProductBarcodeDetail> Barcodes { get; set; }

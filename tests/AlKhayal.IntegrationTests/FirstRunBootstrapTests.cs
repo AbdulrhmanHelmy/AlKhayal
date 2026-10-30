@@ -99,7 +99,7 @@ namespace AlKhayal.IntegrationTests
         [Fact]
         public async Task Bootstrap_api_is_public_once_then_permanently_conflicts()
         {
-            var fixture = new Fixture(); var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0); listener.Start(); var port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); var server=new AlKhayalServer();
+            var fixture = new Fixture(); var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0); listener.Start(); var port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); var server=new AlKhayalServer(new TestLicenseGate());
             try
             {
                 server.Start(new HostOptions { Url="http://127.0.0.1:"+port, DatabasePath=fixture.Path, FrontendPath=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"missing-frontend") });

@@ -431,3 +431,39 @@ changed_notes_whitespace / other_customer), the repaired
 `Customer_manual_operation_key_never_replays_payment_provenance_rows`, the new
 `Customer_manual_key_starting_with_cp_or_sale_prefix_replays_and_legacy_payment_row_still_conflicts`,
 both real-OWIN API tests, and `QaPhase3EdgeTests.Customer_validation_duplicate_code_and_…`.
+
+### QA-101 verification re-run (fresh evidence, opencode-go/glm-5.3-flash, 2026-10-29)
+
+The committed state (after the phase-7 merge that carries the QA-101 repair and its continuation
+corrections) was re-verified end-to-end today with a brand-new GUID temp databases; the operator
+database at `%LOCALAPPDATA%\AlKhayal\alkhayal.db` and `seeded-database.db` were never opened. The
+prior failing evidence and all earlier records above are unchanged.
+
+Isolation verifications printed at run time (both runs):
+
+```text
+Run 1: ALKHAYAL_DATABASE_PATH=C:\Users\user\AppData\Local\Temp\opencode\qa101-rerun-5ad6440f63fb48f5b8ea768b8d9dffd3.db
+  ABSOLUTE=True  DIFFERS_FROM_DEFAULT=True  UNDER_LOCALAPPDATA_ALKHAYAL=False  PRE_EXISTING=False
+dotnet build tests/AlKhayal.IntegrationTests/AlKhayal.IntegrationTests.csproj
+  → Build succeeded, 0 Warning(s), 0 Error(s)
+dotnet test … --no-build --filter "FullyQualifiedName~QaCustomerOperationKeyTests|FullyQualifiedName~QaPhase3EdgeTests"
+  → Passed!  - Failed: 0, Passed: 12, Skipped: 0, Total: 12, Duration: 16 s
+
+Run 2 (per-test evidence listing, fresh path):
+ALKHAYAL_DATABASE_PATH=C:\Users\user\AppData\Local\Temp\opencode\qa101-evidence2-bbf8961515914c93bb350a220c06ff39.db
+  UNDER_LOCALAPPDATA_ALKHAYAL=False  PRE_EXISTING=False
+dotnet test … --no-build --filter "FullyQualifiedName~QaCustomerOperationKeyTests|FullyQualifiedName~QaPhase3EdgeTests" --logger "console;verbosity=normal"
+  → 12 Passed, 0 Failed:
+  QaCustomerOperationKeyTests.Customer_operation_key_replays_identical_retry_exactly_once
+  QaCustomerOperationKeyTests.Customer_operation_key_reuse_with_mismatched_payload_is_conflicted
+      × ALL 6 cases: changed_amount / changed_type / changed_date / changed_notes /
+        changed_notes_whitespace / other_customer
+  QaCustomerOperationKeyTests.Customer_manual_operation_key_never_replays_payment_provenance_rows
+  QaCustomerOperationKeyTests.Customer_manual_key_starting_with_cp_or_sale_prefix_replays_and_legacy_payment_row_still_conflicts
+  QaCustomerOperationKeyTests.Customer_transaction_api_replays_identical_retry_exactly_once
+  QaCustomerOperationKeyTests.Customer_transaction_api_returns_409_operation_key_conflict_for_changed_and_cross_customer_payloads
+  QaPhase3EdgeTests.Customer_validation_duplicate_code_and_idempotent_collections_preserve_balances_and_statement
+```
+
+Exact counters observed: `Passed: 12 / Failed: 0 / Skipped: 0 / Total: 12` in both runs. No test
+file, production file, or earlier evidence record was edited for this re-run.

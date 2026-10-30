@@ -13,7 +13,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Management" />
+    <EmbeddedResource Include="Licensing\TrustedKeys\*.xml" />
     <EmbeddedResource Include="Migrations\*.sql" />
   </ItemGroup>
+  <Target Name="ValidateLicensePublicKeys" BeforeTargets="PrepareResources">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\scripts\validate-license-public-keys.ps1&quot; -KeyDirectory &quot;$(MSBuildProjectDirectory)\Licensing\TrustedKeys&quot;" />
+  </Target>
 </Project>
 

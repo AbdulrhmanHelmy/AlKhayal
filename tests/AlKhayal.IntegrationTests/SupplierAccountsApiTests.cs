@@ -26,7 +26,7 @@ namespace AlKhayal.IntegrationTests
                 await new SqliteUserStore(f.ConnectionString).CreateAsync("account-owner","مسؤول",new PasswordHasher().Hash(password),UserRoles.Administrator,CancellationToken.None);
                 var cashierId=await new SqliteUserStore(f.ConnectionString).CreateAsync("supplier-cashier","كاشير",new PasswordHasher().Hash(password),UserRoles.Cashier,CancellationToken.None);
                 var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();var port=((IPEndPoint)listener.LocalEndpoint).Port;listener.Stop();
-                using(var server=new AlKhayalServer())
+                using(var server=new AlKhayalServer(new TestLicenseGate()))
                 {
                     server.Start(new HostOptions{DatabasePath=f.DatabasePath,FrontendPath=frontend,Url="http://127.0.0.1:"+port});
                     using(var client=Client(new Uri("http://127.0.0.1:"+port)))

@@ -1,5 +1,7 @@
 # Database
 
+Pre-Phase 9 introduces no schema migration or historical rewrite. Product price edits affect current defaults only; catalog purchase price is reference metadata. Configuration round-trips preserve exact persisted variant overrides, and remaining inventory cost comes from remaining FIFO layer values. See [pricing/FIFO invariants](phase-9/pre-phase-9-pricing-fifo.md) for immutable invoice/cost facts and Phase 9 joins.
+
 Migration `031_sales_refund_overdraft.sql` transactionally rebuilds the treasury ledger to allow narrowly scoped signed sales-refund post-balances, retaining all row IDs/history/source FKs. The migrator performs FK integrity checks before commit and restores FK enforcement after rollback or success. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
 
 Migration `032_customer_installments.sql` adds immutable installment contracts and due schedules plus append-only installment payment records. Contract creation and payment each write the customer transaction ledger and update the balance projection in the same transaction; historical customer records are unchanged. Retry keys and unique schedule-payment constraints prevent duplicate contracts or payments. See [installments.md](installments.md).
@@ -133,3 +135,31 @@ Additive `073_phase7_3_labels.sql` adds LabelConfiguration/LabelConfigurationAud
 ## Maintenance ticket storage
 
 033_maintenance_tickets.sql adds customer-linked tickets, append-only status history, and receipt records for intake advances and cash delivery. Monetary values use scale 4, operation keys protect intake/status/delivery retries, and ticket/customer-statement writes share short SQLite transactions. Cash delivery does not create a treasury/cashbox movement. See [maintenance workflow](maintenance.md).
+
+
+## Sales payment instruments
+
+Configured wallets and card terminals, atomic full-invoice attribution, administrator-only management/history, legacy contract mapping, electronic refund restrictions and physical cash shift exclusion are documented in [payment-methods.md](payment-methods.md). Migration 074 is additive; original financial records and credit collection workflows remain intact.
+
+
+## Maintenance advance posting correction
+
+No schema migration is required. Maintenance intake retains the advance solely in `MaintenanceTicketReceipts`; delivery writes the service charge and applies that advance to `CustomerTransactions` in the same transaction as the final customer balance and delivery status. Existing matching legacy advance collections are preserved and reused once. `Customers.Balance >= 0`, immutable receipt/ledger triggers, operation keys, and the lack of maintenance-to-treasury posting remain unchanged. See [maintenance-advance-hotfix.md](maintenance-advance-hotfix.md).
+
+## Phase 9.1 reporting reads
+
+No schema migration was added. Reports read SalesInvoices/SalesPayments/SalesReturns/SalesCancellations, PurchaseInvoices/posted PurchaseReturns, SalePaymentSelections and PaymentInstruments with current party/user labels. Count/sum/page share short read transactions. Event headers and independently aggregated payments prevent multiplication through lines or FIFO allocations; no history is rewritten. Saved scale-4 integers are formatted as exact decimal strings at the report boundary. Existing indexes were retained after an isolated 30k-sales/payments, 10k-purchases/returns check. See [query semantics, dates and performance evidence](phase-9/phase-9-1.md).
+
+The expense voucher report reads immutable `ExpenseVouchers` by `CreatedUtc`; `ExpenseDate` remains a distinct business date. It adds no migration or financial writes. See [Phase 9.2](phase-9/phase-9-2.md#expense-voucher-report--recovery-implementation).
+
+## Net Profit eligibility metadata — migration 075
+
+`075_expense_profit_classification.sql` appends `ExpenseProfitClassifications`: voucher FK, unique voucher/revision, explicit included/excluded/unclassified status, reason, actor FK, UTC time and unique operation key. Immutable audit triggers prohibit update/delete. Missing metadata means unclassified; voucher/category names never imply eligibility. Financial vouchers, treasury links and existing applied migrations are preserved. Posting-event and original-return-line indexes serve the report's actual predicates. Net Profit GET uses one read snapshot, independently aggregates original issue costs and streams relevant prior returns; no temporary tables, posting or historical rewrites occur. All migration/tests use disposable files. [Recognition, original tax and current-classification restatement policy](phase-9/phase-9-2.md).
+
+## Phase 9.2 product and inventory report reads
+
+No additional migration. Product reads reuse Net Profit original line/invoice evidence, `InventoryCostAllocations`, `SalesReturnCostAllocations` and the same original-tax allocator. Valuation reuses shared exact remaining-layer evidence and decimal selling-value calculation from the existing inventory endpoint, including unresolved/null acquisition-cost checks before batch grouping. Availability uses real existing warehouse/variant balance assignments only; there is no minimum-stock column. Movements read saved signed quantities/values and unique business source document links. SQL handles filtered grouping/count/sorting/LIMIT/OFFSET; short read snapshots preserve consistent summary and page. Return history and valuation batches stream with bounded memory. See [Phase 9.2 source/date/completeness policies](phase-9/phase-9-2.md#final-five-report-implementation--2026-10-30).
+
+## Phase 9.3 operational read models
+
+No migration or financial writer changes. `SqliteOperationalReportStore` aggregates authoritative customer/supplier ledgers, reuses the existing workforce shift source, and reads attendance, maintenance receipts/delivery history and installment schedules/allocated payments. All filtering/counts/summaries/pagination execute in SQLite; separate event aggregations avoid multiplicative joins. Current balances remain distinct from period registrations. Existing indexes and short read transactions are retained. [Exact sources and limitations](phase-9/phase-9-3.md).

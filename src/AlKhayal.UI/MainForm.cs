@@ -1,5 +1,8 @@
 using System;
 using System.Drawing;
+using System.IO;
+using AlKhayal.Application.Licensing;
+using AlKhayal.Data.Licensing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AlKhayal.Server.Host;
@@ -13,9 +16,13 @@ namespace AlKhayal.UI
         private readonly WebView2 _browser = new WebView2();
         private readonly Label _status = new Label();
         private AlKhayalServer _server;
+        private readonly LicenseService _licensing;
+        private FileSystemWatcher _licenseWatcher;
+        private bool _activationOpen;
 
-        public MainForm()
+        public MainForm(LicenseService licensing)
         {
+            _licensing = licensing ?? throw new ArgumentNullException(nameof(licensing));
             Text = "الخيال POS";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1280, 800);
@@ -33,6 +40,7 @@ namespace AlKhayal.UI
             FormClosed += (sender, args) =>
             {
                 _browser.Dispose();
+                _licenseWatcher?.Dispose();
                 _server?.Dispose();
             };
         }
@@ -41,6 +49,19 @@ namespace AlKhayal.UI
         {
             try
             {
+                if (!_licensing.Check().IsValid) { Close(); return; }
+                _licenseWatcher = new FileSystemWatcher(Path.GetDirectoryName(FileLicenseStorage.DefaultPath)) { NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.Security };
+                _licenseWatcher.Changed += LicenseChanged;
+                _licenseWatcher.Deleted += LicenseChanged;
+                _licenseWatcher.Created += LicenseChanged;
+                _licenseWatcher.Renamed += LicenseChanged;
+                _licenseWatcher.Error += (s, e) =>
+                {
+                    StartupFailureReporter.TryLog(e.GetException());
+                    if (!IsDisposed && IsHandleCreated) BeginInvoke(new Action(() => RequireActivation(true)));
+                };
+                _licenseWatcher.EnableRaisingEvents = true;
+                Activated += (s, e) => RequireActivation();
                 var runtime = CoreWebView2Environment.GetAvailableBrowserVersionString();
                 if (string.IsNullOrWhiteSpace(runtime))
                 {
@@ -56,7 +77,7 @@ namespace AlKhayal.UI
                 var url = Environment.GetEnvironmentVariable("ALKHAYAL_SERVER_URL");
                 if (string.IsNullOrWhiteSpace(url))
                 {
-                    _server = new AlKhayalServer();
+                    _server = new AlKhayalServer(_licensing);
                     _server.Start(new HostOptions());
                     url = _server.Options.Url;
                 }
@@ -91,6 +112,8 @@ namespace AlKhayal.UI
                         || target.Port != allowedOrigin.Port;
                 };
 
+                if (!_licensing.Check().IsValid) RequireActivation();
+                if (IsDisposed) return;
                 Controls.Clear();
                 Controls.Add(_browser);
                 _browser.Source = new Uri(allowedOrigin, "login.html");
@@ -106,6 +129,34 @@ namespace AlKhayal.UI
                     ? "تعذر بدء تشغيل التطبيق. يرجى التواصل مع الدعم الفني؛ حُفظت تفاصيل المشكلة في سجل التشخيص."
                     : "تعذر بدء تشغيل التطبيق. يرجى التواصل مع الدعم الفني.";
             }
+        }
+
+        private void LicenseChanged(object sender, FileSystemEventArgs args)
+        {
+            if (!IsDisposed && IsHandleCreated)
+                BeginInvoke(new Action(() => RequireActivation()));
+        }
+
+        private void RequireActivation(bool watcherFailed = false)
+        {
+            if (_activationOpen || IsDisposed) return;
+            if (!watcherFailed && _licensing.Check().IsValid) return;
+            _activationOpen = true;
+            _browser.Visible = false;
+            try
+            {
+                if (watcherFailed)
+                {
+                    MessageBox.Show(this, "تعذر مراقبة ملف التفعيل بأمان. أعد تشغيل البرنامج؛ وإذا تكررت المشكلة تواصل مع الدعم.", "التفعيل", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Close(); return;
+                }
+                using (var activation = new ActivationForm(_licensing))
+                    if (activation.ShowDialog(this) != DialogResult.OK || !_licensing.Check().IsValid) { Close(); return; }
+                if (_browser.CoreWebView2 != null && _browser.Source != null)
+                    _browser.CoreWebView2.Navigate(new Uri(new Uri(_browser.Source.GetLeftPart(UriPartial.Authority)), "login.html").AbsoluteUri);
+                _browser.Visible = true;
+            }
+            finally { _activationOpen = false; }
         }
     }
 }

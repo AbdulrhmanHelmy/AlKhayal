@@ -1,5 +1,7 @@
 # API contracts
 
+Pre-Phase 9: product detail variants add `effectiveSalePriceExact`, an invariant scale-4 decimal **base-unit** string alongside the existing formatted price. Standard Sales/Touch POS convert that price by the selected unit's `numerator/denominator`, then round once to piastres; draft saves validate the same Application calculation. Existing barcode lookup price fields retain their base-unit meaning. Posting uses saved draft prices and tax facts. See [pricing/FIFO contracts and reporting limitations](phase-9/pre-phase-9-pricing-fifo.md).
+
 Sales return posting may now make the sales-returns cashbox negative. For credit invoices it reduces current customer debt first (never below zero), then refunds the residual cash, including general-account collections. This changes existing return behavior without changing request contracts. Other withdrawal endpoints retain no-overdraft rules. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
 
 Purchase/sales invoice GET and list responses include `hasReturns`, `isFullyReturned` and `returnStatus` (`none` / `partial` / `full`), derived from persisted return quantities without changing `status`. See [returns-management.md](returns-management.md).
@@ -148,4 +150,35 @@ Touch POS converts an entered invoice percentage (0–100 with at most two decim
 
 ## Maintenance
 
-GET /api/maintenance/tickets?customerId={id} lists persisted tickets, POST /api/maintenance/tickets records device intake and optional advance, PUT /api/maintenance/tickets/{id}/status records status history, and POST /api/maintenance/tickets/{id}/deliver completes delivery as cash or installment. All writes require a valid session, effective screen access and CSRF; operation keys support safe retries. Intake advances are posted to the customer statement immediately; final charges and cash collections are posted at delivery. Cash maintenance settlement is not posted to treasury/cashbox. See [maintenance workflow](maintenance.md).
+GET /api/maintenance/tickets?customerId={id} lists persisted tickets, POST /api/maintenance/tickets records device intake and optional advance, PUT /api/maintenance/tickets/{id}/status records status history, and POST /api/maintenance/tickets/{id}/deliver completes delivery as cash or installment. All writes require a valid session, effective screen access and CSRF; operation keys support safe retries. Intake advances are saved as ticket receipts without reducing customer debt; final charges, application of the saved advance, and remaining cash collections are posted atomically at delivery. Already-posted legacy advances are validated and not collected again. Cash maintenance settlement is not posted to treasury/cashbox. See [maintenance workflow](maintenance.md).
+
+
+## Sales payment instruments
+
+Configured wallets and card terminals, atomic full-invoice attribution, administrator-only management/history, legacy contract mapping, electronic refund restrictions and physical cash shift exclusion are documented in [payment-methods.md](payment-methods.md). Migration 074 is additive; original financial records and credit collection workflows remain intact.
+
+## Phase 9.1 transaction reports
+
+Authenticated GET `/api/reports/sales`, `/api/reports/purchases`, `/api/reports/returns` and `/api/reports/payment-methods` expose read-only persisted data. Each requires admin or its exact effective `report-*` permission. Common local `from`/`to`, search and bounded server pagination are validated in Application; malformed primitive binding returns 400. Money is returned as scale-4 decimal strings. Sales/purchase totals are saved invoice activity; returns/cancellations use independent event dates; payment totals use immediate payment event time and exclude later collections. See [parameters, DTO fields, recognition rules and actual validation](phase-9/phase-9-1.md).
+
+## Expense voucher report
+
+`GET /api/reports/expenses` reports saved paid vouchers by posting time. It requires a session and the `report-expenses` screen grant for cashiers. See [Phase 9.2](phase-9/phase-9-2.md#expense-voucher-report--recovery-implementation) for filters, scope and limitations.
+
+## Net Profit report and expense eligibility
+
+`GET /api/reports/net-profit` requires a session and exact `report-net-profit` effective access. It accepts local inclusive `from`/`to`, `breakdown=daily|monthly` and expense-row `page`/`pageSize`; omitted dates mean month-to-date, maximum range is 3660 days. `summary` and all bounded `items` calendar buckets are independent of `expenseItems` pagination (`expenseCount`). Money is a four-place decimal string. Unknown revenue/COGS/gross/net values are null, with explicit missing-source counts, gross affected amount and unclassified voucher count/amount. Scope is `صافي ربح المبيعات بعد المصروفات المسجلة`.
+
+Administrator-only `POST /api/reports/net-profit/expenses/{id}/classification` requires CSRF and JSON `{ classification: "included"|"excluded"|"unclassified", reason, expectedRevision, operationKey }`. It appends auditable metadata, not financial facts. Identical retries succeed; stale revisions or changed operation intent return 409, missing vouchers 404, invalid data 400, anonymous 401, cashier/CSRF rejection 403. Latest classification restates the original voucher's posting period. See [financial definitions and coverage](phase-9/phase-9-2.md).
+
+## Phase 9.2 product and inventory reports
+
+Authenticated read-only GETs: `/api/reports/product-profit`, `/api/reports/inventory-valuation`, `/api/reports/top-products`, `/api/reports/low-stock`, `/api/reports/inventory-movements`. Each requires its exact `report-*` grant or administrator. Shared count/summary/items/scope contract, scale-4 money strings, SQL paging, validated filters, snapshot/event date semantics and source navigation are detailed in [Phase 9.2 final contracts](phase-9/phase-9-2.md#contracts-validation-and-access). Current valuation/availability reject historical dates. Top Sellers and Availability remove sensitive cost/profit/valuation fields on the server, not merely from their UI. Availability has no invented minimum threshold. No report GET writes financial/stock data.
+
+## Phase 9.3 operational reporting
+
+GET `/api/reports/customers|suppliers|shifts|attendance|maintenance|installments` adds independent permission-protected read models; `/api/reports/overview` authorizes every source metric server-side. Common operational filters are local `from/to`, bounded `search`, positive `personId`, validated `status`, bounded `page/pageSize`. Monetary summary/row dictionary values are exact four-place decimal strings, including keys ending `Scaled`; JSON keys use camelCase. Overview returns only permitted/available metrics, with explicit current/complete flags. No writer or posting endpoint was added. [Full API, status vocabulary, recognition and security definitions](phase-9/phase-9-3.md).
+
+## Licensing prerequisite (Phase 10.1)
+
+All HTTP methods and paths (including login, first-admin bootstrap, health, static files and existing sessions) require a valid machine license. Without it the host returns 403 with the normal envelope and error.code=activation_required. No activation or signing endpoint exists: activation uses native WinForms and owner-only offline issuance. Normal cookie, CSRF and role checks still apply after activation. See [licensing](phase-10/phase-10-1-licensing.md).

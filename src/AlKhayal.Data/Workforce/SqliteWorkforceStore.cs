@@ -138,7 +138,7 @@ namespace AlKhayal.Data.Workforce
             return PageAsync<AttendanceRecord>("SELECT a.*,e.Name EmployeeName FROM " + from, from, where, q, null, "a.CheckInUtc DESC,a.Id DESC", ct);
         }
         // Correlated sums use the covering shift index and avoid multiplying invoices by payments.
-        private const string ShiftSql = @"SELECT s.*,u.DisplayName CashierName,
+        internal const string ShiftSql = @"SELECT s.*,u.DisplayName CashierName,
             (SELECT COUNT(*) FROM CashierShiftEvents e WHERE e.ShiftId=s.Id AND e.Kind IN ('cash_sale','credit_sale')) SalesCount,
             COALESCE((SELECT SUM(AmountScaled) FROM CashierShiftEvents e WHERE e.ShiftId=s.Id AND e.Kind='cash_sale'),0) CashSalesScaled,
             COALESCE((SELECT SUM(AmountScaled) FROM CashierShiftEvents e WHERE e.ShiftId=s.Id AND e.Kind='credit_sale'),0) CreditSalesScaled,

@@ -43,7 +43,7 @@ namespace AlKhayal.IntegrationTests
                         }
                     }
                 },CancellationToken.None);
-                var url="http://127.0.0.1:"+FreePort();server=new AlKhayalServer();server.Start(new HostOptions{DatabasePath=path,Url=url,FrontendPath=frontend});
+                var url="http://127.0.0.1:"+FreePort();server=new AlKhayalServer(new TestLicenseGate());server.Start(new HostOptions{DatabasePath=path,Url=url,FrontendPath=frontend});
                 using(var anonymous=Client(url))Assert.Equal(HttpStatusCode.Unauthorized,(await anonymous.GetAsync("api/catalog/products")).StatusCode);
                 long productId;
                 using(var admin=Client(url))
@@ -72,7 +72,7 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(HttpStatusCode.Forbidden,(await Put(cashier,csrf,"api/catalog/products/"+productId+"/state","{\"isActive\":false,\"version\":1}")).StatusCode);
                 }
                 server.Dispose();server=null;
-                var secondUrl="http://127.0.0.1:"+FreePort();server=new AlKhayalServer();server.Start(new HostOptions{DatabasePath=path,Url=secondUrl,FrontendPath=frontend});
+                var secondUrl="http://127.0.0.1:"+FreePort();server=new AlKhayalServer(new TestLicenseGate());server.Start(new HostOptions{DatabasePath=path,Url=secondUrl,FrontendPath=frontend});
                 using(var admin=Client(secondUrl)){await Login(admin,"catalog-admin");var text=await admin.GetStringAsync("api/catalog/products/"+productId);Assert.Contains("شاي API",text);Assert.Contains("10.33",text);var list=await admin.GetStringAsync("api/catalog/products?page=1&pageSize=10");Assert.Contains("\"variantCount\":4",list);Assert.Contains("\"sizeValues\":[\"M\",\"L\"]",list);}
             }
             finally{if(server!=null)server.Dispose();SQLiteConnection.ClearAllPools();if(Directory.Exists(root))Directory.Delete(root,true);}

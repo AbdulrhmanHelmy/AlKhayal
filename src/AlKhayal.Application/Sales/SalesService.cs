@@ -42,6 +42,12 @@ namespace AlKhayal.Application.Sales
         {
             DateTime date;long discount;
             if(c==null||userId<=0||c.WarehouseId<=0||c.CustomerId.HasValue&&c.CustomerId<=0||c.PaymentMode!="cash"&&c.PaymentMode!="credit"||c.PaymentMode=="credit"&&!c.CustomerId.HasValue)throw new ArgumentException("اختر المخزن وطريقة الدفع الصحيحة؛ البيع الآجل يتطلب تحديد عميل.");
+            if(c.PaymentAmount!=null||c.HasPaymentAllocations)throw new ArgumentException("الدفع الفوري يستخدم طريقة واحدة لكامل الفاتورة؛ لا ترسل مبالغ أو أجزاء دفع.");
+            c.ImmediateMethod = c.ImmediateMethod ?? c.PaymentMode;
+            if (c.PaymentMode == "credit" ? c.ImmediateMethod != "credit" || c.PaymentInstrumentId.HasValue :
+                c.ImmediateMethod == "cash" ? c.PaymentInstrumentId.HasValue :
+                (c.ImmediateMethod != "wallet" && c.ImmediateMethod != "card") || !c.PaymentInstrumentId.HasValue || c.PaymentInstrumentId <= 0)
+                throw new ArgumentException("اختر طريقة دفع واحدة ووسيلة مناسبة لكامل الفاتورة.");
             ValidateDate(c.InvoiceDate,true);if(!DateTime.TryParseExact(c.InvoiceDate,"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out date))throw new ArgumentException("تاريخ الفاتورة غير صحيح.");
             if(c.Lines==null||c.Lines.Count==0||c.Lines.Count>100)throw new ArgumentException("أضف صنفًا واحدًا على الأقل.");
             long subtotal=0;
@@ -57,6 +63,7 @@ namespace AlKhayal.Application.Sales
         private static string Hash(SaleInvoice invoice,string key,long userId)
         {
             var s=new StringBuilder("sale-post-v2|").Append(invoice.Id).Append('|').Append(invoice.SubtotalScaled).Append('|').Append(invoice.DiscountScaled).Append('|').Append(invoice.TaxScaled).Append('|').Append(invoice.TotalScaled).Append('|').Append(invoice.WarehouseId).Append('|').Append(invoice.CustomerId).Append('|').Append(invoice.PaymentMode).Append('|').Append(key).Append('|').Append(userId);
+            if (invoice.PaymentInstrumentId.HasValue) s.Append("|instrument:").Append(invoice.ImmediateMethod).Append(':').Append(invoice.PaymentInstrumentId.Value);
             foreach(var x in invoice.Lines.OrderBy(x=>x.Id))
             {
                 s.Append('|').Append(x.Id).Append(':').Append(x.VariantId).Append(':').Append(x.ProductUnitId).Append(':').Append(x.Quantity).Append(':').Append(x.UnitPrice).Append(':').Append(x.Discount).Append(':').Append(x.BatchLotNumber).Append(':').Append(x.ExpirationDate);

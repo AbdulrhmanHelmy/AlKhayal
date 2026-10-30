@@ -59,7 +59,7 @@ namespace AlKhayal.IntegrationTests
                 {
                     Assert.Equal(1L, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='BusinessActivities'"));
                     Assert.Equal(1L, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='CapabilityConfiguration'"));
-                    Assert.Equal(34L,connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(MigrationTestExpectations.Count,connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                 }
             }
             finally { SQLiteConnection.ClearAllPools(); if (File.Exists(path)) File.Delete(path); }

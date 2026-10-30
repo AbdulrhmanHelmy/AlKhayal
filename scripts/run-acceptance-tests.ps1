@@ -1,643 +1,724 @@
 #requires -version 5.1
-<#
-.SYNOPSIS
-    Reusable local acceptance-test runner for AlKhayal QA scenarios (PowerShell 5.1 compatible).
+# AlKhayal POS acceptance-test runner (QA Batch F; extends the Batch 2 runner contract).
+#
+# Runs mapped automated acceptance scenarios locally, without AI assistance.
+# Compatible with Windows PowerShell 5.1. No dependencies beyond dotnet and node.
+#
+# Usage:
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-acceptance-tests.ps1 -All
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-acceptance-tests.ps1 -Phase 1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-acceptance-tests.ps1 -Phase 4 -Module purchasing
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-acceptance-tests.ps1 -Module inventory
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-acceptance-tests.ps1 -Scenario QA-001
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-acceptance-tests.ps1 -Scenario QA-001,QA-061
+#
+# Manifest contract (docs/qa/scenario-manifest.json, data-only):
+#   - A scenario with a non-empty "tests" array maps to exact xUnit
+#     FullyQualifiedName selectors and is executed through dotnet test.
+#   - A scenario with "group": "frontend" maps to the single coarse frontend
+#     suite (node frontend/tests/run-tests.js). That pass proves registry /
+#     renderer / static-source / VM assertions only and is NEVER reported as a
+#     business-transaction or native-UI proof.
+#   - A scenario with neither is reported BLOCKED (manual-only or
+#     not-implemented by design) and is never counted as a pass.
+#
+# Data safety:
+#   - The runner NEVER targets the normal operator database. It generates a
+#     per-process disposable SQLite path under the system temp directory,
+#     exports ALKHAYAL_DATABASE_PATH to every child test process, and refuses
+#     to run unless the resolved full path differs from
+#     %LOCALAPPDATA%\AlKhayal\alkhayal.db (and from the repository
+#     seeded-database.db).
+#   - It never deletes any pre-existing path (its own artifacts are left in
+#     place as audit evidence).
+#   - Performance testing against the normal seeded database is excluded by
+#     design: no such suite is invoked and the seeded database is never
+#     referenced.
+#
+# Status semantics (see the manifest statusSemantics block):
+#   PASS    - every mapped test ran in this run and passed, no manual remainder.
+#   PARTIAL - every mapped test ran and passed, but the scenario carries a
+#             documented manual remainder (manualRemainder). Never a full PASS.
+#   FAIL    - a mapped test failed, or a mapped test did not appear in the run
+#             results (selector/discovery problem is loud, not silent).
+#   SKIP    - mapped scenario outside the requested run scope (not executed).
+#   BLOCKED - selected scenario with no automated mapping (manual-only /
+#             not-implemented by design), or tooling could not run mapped tests
+#             (dotnet/node missing, no TRX, timeout).
+#
+# Exit codes: 0 = no FAIL (PARTIAL / out-of-scope SKIP / by-design BLOCKED do
+#             not fail the run); 1 = any FAIL; 2 = mapped tests could not run
+#             (tooling/infrastructure BLOCKED); 3 = usage or isolation error.
 
-.DESCRIPTION
-    Reads the data-only scenario manifest (docs/qa/scenario-manifest.json), runs exactly the
-    mapped xUnit tests for the requested scope using exact FullyQualifiedName filters, and
-    emits a JSON result with per-scenario PASS/PARTIAL/FAIL/SKIP/BLOCKED statuses, durations, and
-    failure summaries.
-
-    Status semantics (never infer a scenario pass from an aggregate suite result):
-      PASS     every mapped test for the scenario ran in this run and passed AND the caller
-               recorded no manual/browser/desktop/hardware remainder in the manifest
-      PARTIAL  every mapped test for the scenario ran and passed, but the scenario carries an
-               unexecuted manual remainder (browser/native/desktop/hardware); PARTIAL is never
-               converted to PASS and the manual remainder is reported in the record
-      FAIL     a mapped test failed, or a mapped test did not appear in the run results
-      SKIP     mapped scenario outside the requested run scope
-      BLOCKED  unmapped placeholder, no automated mapping, missing tool (dotnet/node), or a
-               build failure; also used for a blocked frontend checkpoint
-
-    Exit codes: 0 = no FAIL (PARTIAL is not a FAIL; it means the automated portion passed with
-    an open manual remainder), 1 = one or more FAIL (or a failed -All coarse checkpoint),
-    2 = database safety gate failed closed, 3 = infrastructure failure (missing tool/build).
-
-    Safety gate: before ANY write-capable test process the runner creates a unique absolute
-    SQLite path under the system temp directory (never a pre-existing path), sets the
-    ALKHAYAL_DATABASE_PATH process environment for the runner and its children, prints the
-    effective path, and verifies the canonical path is outside %LOCALAPPDATA%\AlKhayal and
-    differs from the normal alkhayal.db and the repository seeded-database.db. Any guard
-    violation fails closed (exit 2) before any test process starts. No source database is
-    copied and no unknown path is ever cleaned up.
-
-.PARAMETER All
-    Run the complete .NET test suite (both test projects, unfiltered) and the frontend
-    registry suite as coarse checkpoints, then attribute per-scenario statuses from the
-    per-test results. A global suite pass is never treated as a per-scenario pass.
-
-.PARAMETER Phase
-    Run only scenarios whose phase equals this number (1..5). Only mapped relevant tests
-    are executed, never the full suite.
-
-.PARAMETER Module
-    Run only scenarios whose module equals this value (case-insensitive).
-
-.PARAMETER Scenario
-    Run only the scenario with this exact ID (for example QA-004).
-
-.PARAMETER NoBuild
-    Skip the build step (test binaries must already be current).
-
-.PARAMETER OutputJson
-    Optional path for a UTF-8 JSON result file. JSON is always also written to stdout.
-
-.EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\run-acceptance-tests.ps1 -Scenario QA-004
-#>
-[CmdletBinding()]
 param(
     [switch]$All,
-    [ValidateRange(1, 5)]
-    [int]$Phase,
-    [string]$Module,
-    [string]$Scenario,
-    [string]$ManifestPath,
-    [string]$OutputJson,
-    [switch]$NoBuild
+    [int[]]$Phase,
+    [string[]]$Module,
+    [string[]]$Scenario,
+    [string]$ResultsJson = "",
+    [string]$OutputJson = "",
+    [switch]$NoBuild,
+    [int]$TimeoutMinutes = 45
 )
 
 $ErrorActionPreference = 'Stop'
-try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
-$OutputEncoding = [System.Text.Encoding]::UTF8
 
-$ScriptRoot = $PSScriptRoot
-if (-not $ScriptRoot) { $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
-$RepoRoot = Split-Path -Parent $ScriptRoot
-if (-not $ManifestPath) { $ManifestPath = Join-Path $RepoRoot 'docs\qa\scenario-manifest.json' }
+# ---------------------------------------------------------------- helpers
 
-$UnitProject = Join-Path $RepoRoot 'tests\AlKhayal.UnitTests\AlKhayal.UnitTests.csproj'
-$IntegrationProject = Join-Path $RepoRoot 'tests\AlKhayal.IntegrationTests\AlKhayal.IntegrationTests.csproj'
-$FrontendTestScript = Join-Path $RepoRoot 'frontend\tests\run-tests.js'
-
-$RunId = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-$startedUtc = (Get-Date).ToUniversalTime().ToString('o')
-$ResultsDir = Join-Path ([System.IO.Path]::GetTempPath()) (Join-Path 'alkhayal-qa-results' $RunId)
-
-function Write-Info {
-    param([string]$Message)
-    Write-Host "[acceptance] $Message"
+function Resolve-FullPath([string]$Path) {
+    return [System.IO.Path]::GetFullPath($Path)
 }
 
-function New-ResultObject {
-    # Build a mutable ordered result record for one scenario.
-    param([object]$Entry)
-    return [ordered]@{
-        id              = $Entry.id
-        phase           = $Entry.phase
-        module          = $Entry.module
-        title           = $Entry.title
-        mapped          = [bool]$Entry.mapped
-        partial         = [bool]$Entry.partial
-        status          = 'SKIP'
-        reason          = $null
-        durationMs      = 0
-        manualRemainder = $Entry.manualRemainder
-        notes           = $Entry.notes
-        tests           = @()
-        failureSummary  = $null
-    }
+function Same-Path([string]$Left, [string]$Right) {
+    return ([string]$Left).TrimEnd('\') -ieq ([string]$Right).TrimEnd('\')
 }
 
-function Get-ToolVersion {
-    param([string]$Command, [string]$VersionArgument)
-    try {
-        $output = & $Command $VersionArgument 2>&1
-        if ($LASTEXITCODE -eq 0) { return (("$output" | Select-Object -First 1)).Trim() }
-    } catch { }
-    return $null
+function StartsWith-Path([string]$Path, [string]$Root) {
+    $p = ([string]$Path).TrimEnd('\')
+    $r = ([string]$Root).TrimEnd('\')
+    return $p.StartsWith($r + '\', [System.StringComparison]::OrdinalIgnoreCase)
 }
 
-function Invoke-DatabaseSafetyGate {
-    # Fail-closed guard executed before any write-capable test process.
-    $gate = [ordered]@{
-        enforced               = $true
-        passed                 = $false
-        databasePath           = $null
-        canonicalPath          = $null
-        differsFromDefault     = $false
-        outsideAppDataAlKhayal = $false
-        differsFromSeeded      = $false
-        previousEnvValue       = $env:ALKHAYAL_DATABASE_PATH
-        violations             = @()
-    }
-
-    $tempRoot = [System.IO.Path]::GetTempPath()
-    $dbPath = $null
-    for ($attempt = 0; $attempt -lt 8; $attempt++) {
-        $candidateDir = Join-Path $tempRoot ('alkhayal-qa-' + [Guid]::NewGuid().ToString('N'))
-        $candidate = Join-Path $candidateDir 'alkhayal-qa.db'
-        if (-not (Test-Path -LiteralPath $candidate)) { $dbPath = $candidate; break }
-    }
-    if (-not $dbPath) {
-        $gate.violations = @('Could not generate a unique non-existing database path under the system temp directory after 8 attempts.')
-        return $gate
-    }
-
-    $canonical = [System.IO.Path]::GetFullPath($dbPath)
-    $gate.databasePath = $canonical
-    $gate.canonicalPath = $canonical
-
-    $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
-    $appDir = [System.IO.Path]::GetFullPath((Join-Path $localAppData 'AlKhayal'))
-    $defaultDb = Join-Path $appDir 'alkhayal.db'
-    $seededDb = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot 'seeded-database.db'))
-
-    $compare = [System.StringComparison]::OrdinalIgnoreCase
-    if ($canonical.Equals($defaultDb, $compare)) {
-        $gate.violations += 'Candidate path equals the normal operator database alkhayal.db.'
-    }
-    if ($canonical.StartsWith($appDir, $compare)) {
-        $gate.violations += ('Candidate path is inside {0}.' -f $appDir)
-    }
-    if ($canonical.Equals($seededDb, $compare)) {
-        $gate.violations += 'Candidate path equals the repository seeded-database.db.'
-    }
-    if (Test-Path -LiteralPath $canonical) {
-        $gate.violations += 'Candidate path already exists; a pre-existing path must never be touched.'
-    }
-
-    $gate.differsFromDefault = -not $canonical.Equals($defaultDb, $compare)
-    $gate.outsideAppDataAlKhayal = -not $canonical.StartsWith($appDir, $compare)
-    $gate.differsFromSeeded = -not $canonical.Equals($seededDb, $compare)
-    $gate.passed = ($gate.violations.Count -eq 0)
-
-    if ($gate.passed) {
-        # Set the process environment for this runner and every child test process.
-        $env:ALKHAYAL_DATABASE_PATH = $canonical
-        Write-Info ('SAFETY GATE PASSED')
-        Write-Info ('  effective ALKHAYAL_DATABASE_PATH = {0}' -f $canonical)
-        Write-Info ('  canonical path                   = {0}' -f $canonical)
-        Write-Info ('  DIFFERS_FROM_DEFAULT             = {0} (operator default: {1})' -f $gate.differsFromDefault, $defaultDb)
-        Write-Info ('  OUTSIDE_APPDATA_ALKHAYAL         = {0} ({1})' -f $gate.outsideAppDataAlKhayal, $appDir)
-        Write-Info ('  DIFFERS_FROM_SEEDED_DATABASE     = {0}' -f $gate.differsFromSeeded)
-    } else {
-        Write-Info 'SAFETY GATE FAILED - failing closed; no test process will be started.'
-        foreach ($violation in $gate.violations) { Write-Info ('  violation: {0}' -f $violation) }
-    }
-    return $gate
-}
-
-function Read-TrxResults {
-    param([string]$TrxPath)
-    $results = New-Object System.Collections.ArrayList
-    if (-not (Test-Path -LiteralPath $TrxPath)) { return , $results }
-    [xml]$xml = Get-Content -LiteralPath $TrxPath -Raw
-    foreach ($node in $xml.SelectNodes("//*[local-name()='UnitTestResult']")) {
-        $testName = $node.GetAttribute('testName')
-        $outcome = $node.GetAttribute('outcome')
-        $durationMs = 0
-        try { $durationMs = [int][Math]::Round([TimeSpan]::Parse($node.GetAttribute('duration')).TotalMilliseconds) } catch { }
-        $message = $null
-        $errorNodes = $node.SelectNodes("./*[local-name()='Output']/*[local-name()='ErrorInfo']/*[local-name()='Message']")
-        if ($errorNodes -and $errorNodes.Count -gt 0) {
-            $message = $errorNodes[0].InnerText
-            if ($message) { $message = ($message -replace '\r?\n', ' - ') }
-            if ($message -and $message.Length -gt 600) { $message = $message.Substring(0, 600) + ' [...]' }
-        }
-        [void]$results.Add([pscustomobject]@{
-                TestName  = $testName
-                Outcome   = $outcome
-                DurationMs = $durationMs
-                Message   = $message
-            })
-    }
-    return , $results
-}
-
-function Get-TestOutcomeForFqn {
-    # Match exact FQN, or theory cases whose testName starts with FQN followed by '('.
-    param([string]$FullyQualifiedName, [object]$TrxResults)
-    $matched = @($TrxResults | Where-Object {
-            $_.TestName -eq $FullyQualifiedName -or $_.TestName.StartsWith($FullyQualifiedName + '(')
-        })
-    if ($matched.Count -eq 0) { return $null }
-    $failed = @($matched | Where-Object { $_.Outcome -ne 'Passed' })
-    $firstFailure = $null
-    if ($failed.Count -gt 0) { $firstFailure = $failed[0] }
-    return [pscustomobject]@{
-        FullyQualifiedName = $FullyQualifiedName
-        Found              = $true
-        Cases              = $matched.Count
-        Passed             = ($failed.Count -eq 0)
-        Outcome            = $(if ($failed.Count -eq 0) { 'Passed' } else { $failed[0].Outcome })
-        DurationMs         = [int]($matched | Measure-Object -Property DurationMs -Sum).Sum
-        Message            = $(if ($firstFailure) { $firstFailure.Message } else { $null })
-    }
-}
-
-function Invoke-DotnetTest {
+function Invoke-LoggedProcess {
     param(
-        [string]$ProjectPath,
-        [string]$Filter,
-        [string]$TrxFileName,
-        [switch]$NoBuild,
-        [string]$ProjectLabel
+        [string]$FileName,
+        [string]$Arguments,
+        [string]$WorkingDirectory,
+        [hashtable]$Environment,
+        [int]$TimeoutMilliseconds
     )
-    $trxPath = Join-Path $ResultsDir $TrxFileName
-    $arguments = @('test', $ProjectPath)
-    if ($NoBuild) { $arguments += '--no-build' }
-    $arguments += @(
-        '--logger', ('trx;logfilename={0}' -f $TrxFileName),
-        '--results-directory', $ResultsDir
-    )
-    if ($Filter) { $arguments += @('--filter', $Filter) }
-
-    Write-Info ('Running {0} tests{1}: dotnet {2}' -f $ProjectLabel, $(if ($Filter) { ' (exact-FQN filter)' } else { ' (full suite)' }), ($arguments -join ' '))
-    $tail = $null
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $output = & dotnet @arguments 2>&1
-    $exitCode = $LASTEXITCODE
-    $stopwatch.Stop()
-    $outputText = ($output | ForEach-Object { $_.ToString() }) -join "`n"
-
-    $summary = [ordered]@{
-        label      = $ProjectLabel
-        ran        = $true
-        filter     = $Filter
-        exitCode   = $exitCode
-        durationMs = $stopwatch.ElapsedMilliseconds
-        trxPath    = $trxPath
-        total      = 0
-        passed     = 0
-        failed     = 0
-        skipped    = 0
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $FileName
+    $psi.Arguments = $Arguments
+    $psi.WorkingDirectory = $WorkingDirectory
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    if ($Environment) {
+        foreach ($key in $Environment.Keys) {
+            $psi.EnvironmentVariables[[string]$key] = [string]$Environment[$key]
+        }
     }
-    $trxResults = Read-TrxResults -TrxPath $trxPath
-    $summary.total = $trxResults.Count
-    $summary.passed = @($trxResults | Where-Object { $_.Outcome -eq 'Passed' }).Count
-    $summary.failed = @($trxResults | Where-Object { $_.Outcome -eq 'Failed' }).Count
-    $summary.skipped = @($trxResults | Where-Object { $_.Outcome -notin @('Passed', 'Failed') }).Count
-    Write-Info ('{0}: exit={1} total={2} passed={3} failed={4} other={5} durationMs={6}' -f `
-            $ProjectLabel, $exitCode, $summary.total, $summary.passed, $summary.failed, $summary.skipped, $summary.durationMs)
-    if ($exitCode -ne 0) {
-        $tail = ($outputText -split "`n" | Select-Object -Last 25) -join "`n"
-        Write-Info ('{0} reported a nonzero exit code. Output tail:{1}{2}' -f $ProjectLabel, [Environment]::NewLine, $tail)
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+    $timedOut = $false
+    $startError = $null
+    try {
+        [void]$proc.Start()
+    } catch {
+        $startError = $_.Exception.Message
     }
-    return [pscustomobject]@{ Summary = $summary; Results = $trxResults; OutputTail = $tail }
+    if ($null -ne $startError) {
+        return [pscustomobject]@{ Started = $false; TimedOut = $false; ExitCode = -1; DurationMs = $sw.ElapsedMilliseconds; Output = ''; ErrorText = $startError }
+    }
+    $outTask = $proc.StandardOutput.ReadToEndAsync()
+    $errTask = $proc.StandardError.ReadToEndAsync()
+    if (-not $proc.WaitForExit($TimeoutMilliseconds)) {
+        $timedOut = $true
+        try { $proc.Kill() } catch { }
+    }
+    try { $proc.WaitForExit() } catch { }
+    $sw.Stop()
+    $out = ''
+    $err = ''
+    try { $out = $outTask.Result } catch { }
+    try { $err = $errTask.Result } catch { }
+    return [pscustomobject]@{
+        Started    = $true
+        TimedOut   = $timedOut
+        ExitCode   = $proc.ExitCode
+        DurationMs = $sw.ElapsedMilliseconds
+        Output     = [string]$out
+        ErrorText  = [string]$err
+    }
 }
 
-# ---------------------------------------------------------------------------
-# 1. Load manifest and resolve scope
-# ---------------------------------------------------------------------------
+function Parse-TrxFile([string]$Path) {
+    $parsed = @()
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw
+        [xml]$trx = $raw
+    } catch {
+        return $parsed
+    }
+    $definitions = @{}
+    $units = @($trx.TestRun.TestDefinitions.UnitTest)
+    foreach ($unit in $units) {
+        if ($unit.TestMethod -and $unit.TestMethod.className -and $unit.TestMethod.name) {
+            $definitions[[string]$unit.id] = ([string]$unit.TestMethod.className + '.' + [string]$unit.TestMethod.name)
+        }
+    }
+    $unitResults = @($trx.TestRun.Results.UnitTestResult)
+    foreach ($res in $unitResults) {
+        $fqn = $null
+        $key = [string]$res.testId
+        if ($definitions.ContainsKey($key)) { $fqn = $definitions[$key] } else { $fqn = [string]$res.testName }
+        $message = ''
+        $stack = ''
+        if ($res.Output -and $res.Output.ErrorInfo) {
+            if ($res.Output.ErrorInfo.Message) { $message = [string]$res.Output.ErrorInfo.Message }
+            if ($res.Output.ErrorInfo.StackTrace) { $stack = [string]$res.Output.ErrorInfo.StackTrace }
+        }
+        $durMs = [int64]0
+        try {
+            if ($res.duration) {
+                $durMs = [int64][TimeSpan]::Parse([string]$res.duration, [System.Globalization.CultureInfo]::InvariantCulture).TotalMilliseconds
+            }
+        } catch { $durMs = [int64]0 }
+        $parsed += [pscustomobject]@{
+            Fqn        = [string]$fqn
+            Outcome    = [string]$res.outcome
+            DurationMs = $durMs
+            Message    = $message
+            Stack      = $stack
+        }
+    }
+    return $parsed
+}
+
+function Clip-Text([string]$Text, [int]$Max) {
+    $t = [string]$Text
+    $t = $t -replace "`r", '' -replace "`n", ' | '
+    $t = $t.Trim()
+    if ($t.Length -gt $Max) { $t = $t.Substring(0, $Max) + '...' }
+    if ([string]::IsNullOrWhiteSpace($t)) { $t = '(no detail)' }
+    return $t
+}
+
+# ---------------------------------------------------------------- setup
+
+$RepoRoot = Resolve-FullPath (Join-Path $PSScriptRoot '..')
+$ManifestPath = Join-Path $RepoRoot 'docs\qa\scenario-manifest.json'
+$SolutionPath = Join-Path $RepoRoot 'AlKhayal.slnx'
+$FrontendTestPath = Join-Path $RepoRoot 'frontend\tests\run-tests.js'
+
 if (-not (Test-Path -LiteralPath $ManifestPath)) {
-    Write-Info "FATAL: manifest not found at $ManifestPath"
+    Write-Output "ERROR: scenario manifest not found: $ManifestPath"
     exit 3
 }
-$manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$allScenarios = @($manifest.scenarios)
-Write-Info ('Manifest {0}: version {1}, {2} scenarios.' -f $ManifestPath, $manifest.manifestVersion, $allScenarios.Count)
+$Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+$AllScenarios = @($Manifest.scenarios)
 
-$scopeParts = @()
-if ($All) { $scopeParts += 'all' }
-if ($PSBoundParameters.ContainsKey('Phase')) { $scopeParts += ('phase={0}' -f $Phase) }
-if ($Module) { $scopeParts += ('module={0}' -f $Module) }
-if ($Scenario) { $scopeParts += ('scenario={0}' -f $Scenario) }
-if ($scopeParts.Count -eq 0) { $scopeParts = @('all') ; $All = $true }
-$runMode = ($scopeParts -join ',')
+$Usage = @"
+Usage:
+  -All                     run every scenario (full dotnet suite + frontend coarse group)
+  -Phase 1..5              run scenarios of one or more phases (e.g. -Phase 1 or -Phase 1,5)
+  -Module <name>           run scenarios of one or more modules (e.g. -Module sales or -Module sales,inventory)
+  -Scenario QA-NNN         run specific scenarios (e.g. -Scenario QA-001 or -Scenario QA-001,QA-061)
+Options:
+  -ResultsJson <path>      machine-readable result path (default: disposable run folder under system temp)
+  -OutputJson <path>       alias of -ResultsJson (Batch 2 runner compatibility)
+  -NoBuild                 pass --no-build to dotnet test (requires a prior build)
+  -TimeoutMinutes <n>      per-process timeout (default 45)
+Selectors may be combined (e.g. -Phase 4 -Module purchasing). -All ignores other selectors.
+Available modules: $((@($AllScenarios | ForEach-Object { $_.module } | Sort-Object -Unique)) -join ', ')
+"@
 
-$inScope = @($allScenarios | Where-Object {
-        $keep = $true
-        if ($All) { return $true }
-        if ($PSBoundParameters.ContainsKey('Phase') -and $_.phase -ne $Phase) { $keep = $false }
-        if ($keep -and $Module -and $_.module -ne $Module) { $keep = $false }
-        if ($keep -and $Scenario -and $_.id -ne $Scenario) { $keep = $false }
-        return $keep
-    })
-if (-not $All) {
-    # Explicit filters combine with AND; an empty result means the caller asked for
-    # something the manifest cannot satisfy.
-    if ($inScope.Count -eq 0) {
-        Write-Info 'FATAL: no scenario matches the requested scope in the manifest.'
+# ---------------------------------------------------------------- selection
+
+$SelectionMode = 'All'
+$Selection = $null
+if ($All) {
+    $Selection = $AllScenarios
+    $SelectionMode = 'All'
+} else {
+    $selected = $AllScenarios
+    $anySelector = $false
+    if ($Scenario -and $Scenario.Count -gt 0) {
+        $anySelector = $true
+        $SelectionMode = 'Scenario'
+        foreach ($id in $Scenario) {
+            if ($id -notmatch '^(?i)QA-\d{3,}$') {
+                Write-Output "ERROR: scenario id must look like QA-NNN: $id"
+                exit 3
+            }
+        }
+        $missingIds = @()
+        foreach ($id in $Scenario) {
+            if (-not (@($AllScenarios | Where-Object { ([string]$_.id) -ieq ([string]$id) }).Count -gt 0)) { $missingIds += $id }
+        }
+        if ($missingIds.Count -gt 0) {
+            Write-Output "ERROR: unknown scenario id(s): $($missingIds -join ', ') (valid ids are QA-001..QA-$($AllScenarios.Count.ToString('000')) in docs/qa/scenario-manifest.json)"
+            Write-Output $Usage
+            exit 3
+        }
+        $wanted = @{}
+        foreach ($id in $Scenario) { $wanted[([string]$id).ToUpperInvariant()] = $true }
+        $selected = @($selected | Where-Object { $wanted.ContainsKey(([string]$_.id).ToUpperInvariant()) })
+    }
+    if ($Phase -and $Phase.Count -gt 0) {
+        $anySelector = $true
+        $SelectionMode = 'Phase'
+        foreach ($p in $Phase) {
+            if ($p -lt 1 -or $p -gt 5) {
+                Write-Output "ERROR: -Phase accepts values 1..5 only (received $p)."
+                exit 3
+            }
+        }
+        $phaseSet = @{}
+        foreach ($p in $Phase) { $phaseSet[[int]$p] = $true }
+        $selected = @($selected | Where-Object { $phaseSet.ContainsKey([int]$_.phase) })
+    }
+    if ($Module -and $Module.Count -gt 0) {
+        $anySelector = $true
+        if ($SelectionMode -eq 'Phase') { $SelectionMode = 'Phase+Module' } else { $SelectionMode = 'Module' }
+        $knownModules = @($AllScenarios | ForEach-Object { [string]$_.module } | Sort-Object -Unique)
+        foreach ($m in $Module) {
+            if ($knownModules -notcontains ([string]$m)) {
+                Write-Output "ERROR: unknown module '$m'. Available: $($knownModules -join ', ')"
+                exit 3
+            }
+        }
+        $moduleSet = @{}
+        foreach ($m in $Module) { $moduleSet[[string]$m] = $true }
+        $selected = @($selected | Where-Object { $moduleSet.ContainsKey([string]$_.module) })
+    }
+    if (-not $anySelector) {
+        Write-Output "ERROR: choose one of -All, -Phase, -Module, or -Scenario."
+        Write-Output $Usage
         exit 3
     }
-}
-Write-Info ('Run mode: {0}; {1} of {2} scenarios in scope.' -f $runMode, $inScope.Count, $allScenarios.Count)
-
-# ---------------------------------------------------------------------------
-# 2. Tool checks (missing dotnet/node -> BLOCKED, exit 3)
-# ---------------------------------------------------------------------------
-$dotnetVersion = Get-ToolVersion -Command 'dotnet' -VersionArgument '--version'
-$nodeVersion = Get-ToolVersion -Command 'node' -VersionArgument '--version'
-Write-Info ('Tools: dotnet={0} node={1}' -f $(if ($dotnetVersion) { $dotnetVersion } else { 'MISSING' }), $(if ($nodeVersion) { $nodeVersion } else { 'MISSING' }))
-
-$needDotnet = @($inScope | Where-Object { $_.mapped -and @($_.tests).Count -gt 0 }).Count -gt 0
-$needNode = $All
-if ($needDotnet -and -not $dotnetVersion) {
-    Write-Info 'FATAL: dotnet is not available; mapped scenarios cannot run and will be reported BLOCKED.'
-}
-if ($needNode -and -not $nodeVersion) {
-    Write-Info 'node is not available; the frontend coarse checkpoint will be reported BLOCKED.'
+    $Selection = $selected
 }
 
-# ---------------------------------------------------------------------------
-# 3. Database safety gate (before ANY write-capable test process)
-# ---------------------------------------------------------------------------
-$anyTestExecutionPlanned = ($needDotnet -and $dotnetVersion)
-$safetyGate = [ordered]@{
-    enforced               = $false
-    passed                 = $null
-    databasePath           = $null
-    canonicalPath          = $null
-    differsFromDefault     = $null
-    outsideAppDataAlKhayal = $null
-    differsFromSeeded      = $null
-    previousEnvValue       = $env:ALKHAYAL_DATABASE_PATH
-    violations             = @()
+if ($Selection.Count -eq 0) {
+    Write-Output "ERROR: the requested selection matched no scenarios."
+    exit 3
 }
-if ($anyTestExecutionPlanned) {
-    $gateResult = Invoke-DatabaseSafetyGate
-    $safetyGate = $gateResult
-    if (-not $gateResult.passed) {
-        # Fail closed: emit JSON with every planned scenario BLOCKED and exit 2.
-        $results = New-Object System.Collections.ArrayList
-        foreach ($entry in $allScenarios) {
-            $record = New-ResultObject -Entry $entry
-            if ($inScope.id -contains $entry.id) {
-                $record.status = 'BLOCKED'
-                $record.reason = 'Database safety gate failed closed; no test process was started.'
-            } else {
-                $record.status = 'SKIP'
-                $record.reason = 'Outside the requested run scope.'
+
+# ---------------------------------------------------------------- database isolation
+
+$TempRoot = [System.IO.Path]::GetTempPath()
+$RunToken = 'AlKhayal-QA-{0}-{1}' -f $PID, [Guid]::NewGuid().ToString('N')
+$RunRoot = Join-Path $TempRoot $RunToken
+$OverrideDb = Join-Path $RunRoot 'alkhayal-qa.db'
+
+$IsolationFailure = $null
+$DefaultAppDataDir = $null
+$DefaultOperatorDb = $null
+$SeededDb = Join-Path $RepoRoot 'seeded-database.db'
+
+if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $IsolationFailure = 'LOCALAPPDATA is not set; the normal operator database path cannot be verified.'
+} else {
+    $DefaultAppDataDir = Join-Path $env:LOCALAPPDATA 'AlKhayal'
+    $DefaultOperatorDb = Join-Path $DefaultAppDataDir 'alkhayal.db'
+}
+
+if ($null -eq $IsolationFailure) {
+    $resolvedOverride = Resolve-FullPath $OverrideDb
+    $resolvedDefault = Resolve-FullPath $DefaultOperatorDb
+    if (Same-Path $resolvedOverride $resolvedDefault) {
+        $IsolationFailure = "The resolved override path equals the normal operator database: $resolvedOverride"
+    } elseif (StartsWith-Path $resolvedOverride (Resolve-FullPath $DefaultAppDataDir)) {
+        $IsolationFailure = "The resolved override path lies inside the normal operator database folder: $resolvedOverride"
+    } elseif (-not (StartsWith-Path $resolvedOverride $TempRoot)) {
+        $IsolationFailure = "The resolved override path is not under the system temp directory: $resolvedOverride"
+    } elseif (Same-Path $resolvedOverride (Resolve-FullPath $SeededDb)) {
+        $IsolationFailure = "The resolved override path equals the repository seeded database: $resolvedOverride"
+    } elseif (Test-Path -LiteralPath $resolvedOverride) {
+        $IsolationFailure = "The disposable database path already exists and will not be deleted or reused: $resolvedOverride"
+    }
+}
+
+if ($null -ne $IsolationFailure) {
+    Write-Output "ISOLATION CHECK FAILED - refusing to run."
+    Write-Output "Reason: $IsolationFailure"
+    if ($DefaultOperatorDb) { Write-Output "Normal operator database (must never be targeted): $DefaultOperatorDb" }
+    exit 3
+}
+
+[void](New-Item -ItemType Directory -Path $RunRoot -Force)
+$DotnetResultsDir = Join-Path $RunRoot 'dotnet-results'
+[void](New-Item -ItemType Directory -Path $DotnetResultsDir -Force)
+
+$ChosenResultsJson = $ResultsJson
+if ([string]::IsNullOrWhiteSpace($ChosenResultsJson) -and -not [string]::IsNullOrWhiteSpace($OutputJson)) {
+    $ChosenResultsJson = $OutputJson
+}
+if ([string]::IsNullOrWhiteSpace($ChosenResultsJson)) {
+    $ResultsJsonPath = Join-Path $RunRoot 'qa-acceptance-results.json'
+} else {
+    if ([System.IO.Path]::IsPathRooted($ChosenResultsJson)) {
+        $ResultsJsonPath = $ChosenResultsJson
+    } else {
+        $ResultsJsonPath = Join-Path (Get-Location) $ChosenResultsJson
+    }
+    $parent = Split-Path -Parent $ResultsJsonPath
+    if (-not (Test-Path -LiteralPath $parent)) { [void](New-Item -ItemType Directory -Path $parent -Force) }
+}
+
+$ChildEnvironment = @{ 'ALKHAYAL_DATABASE_PATH' = (Resolve-FullPath $OverrideDb) }
+
+Write-Output "=================================================================="
+Write-Output "AlKhayal POS acceptance-test runner"
+Write-Output "Mode            : $SelectionMode"
+Write-Output "Started (UTC)   : $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))"
+Write-Output "Repository      : $RepoRoot"
+Write-Output "------------------------------------------------------------------"
+Write-Output "ISOLATION VERIFIED"
+Write-Output "  Effective ALKHAYAL_DATABASE_PATH : $(Resolve-FullPath $OverrideDb)"
+if ($DefaultOperatorDb) {
+Write-Output "  Normal operator database (unused): $DefaultOperatorDb (exists: $(Test-Path -LiteralPath $DefaultOperatorDb))"
+}
+Write-Output "  Repository seeded database (unused): $SeededDb (never referenced)"
+Write-Output "  ALKHAYAL_DATABASE_PATH is exported to every dotnet/node child process."
+Write-Output "  No pre-existing path is deleted; disposable artifacts stay in the run folder."
+Write-Output "------------------------------------------------------------------"
+Write-Output "Selected scenarios : $($Selection.Count) of $($AllScenarios.Count)"
+Write-Output "Run folder         : $RunRoot"
+Write-Output "Results JSON       : $ResultsJsonPath"
+Write-Output "=================================================================="
+
+# ---------------------------------------------------------------- tooling
+
+$DotnetExe = $null
+$NodeExe = $null
+try { $DotnetExe = (Get-Command dotnet -ErrorAction Stop).Source } catch { }
+try { $NodeExe = (Get-Command node -ErrorAction Stop).Source } catch { }
+
+# ---------------------------------------------------------------- partition
+
+$DotnetScenarios = @($Selection | Where-Object { $_.tests -and @($_.tests).Count -gt 0 })
+$FrontendScenarios = @($Selection | Where-Object { -not ($_.tests -and @($_.tests).Count -gt 0) -and [string]$_.group -eq 'frontend' })
+$UnmappedScenarios = @($Selection | Where-Object { -not ($_.tests -and @($_.tests).Count -gt 0) -and [string]$_.group -ne 'frontend' })
+
+# ---------------------------------------------------------------- dotnet group
+
+$Commands = @()
+$TrxResults = @()
+$DotnetInfraBlock = $null
+$DotnetExitCode = $null
+$DotnetDurationMs = [int64]0
+$DotnetFilterCount = 0
+
+if ($DotnetScenarios.Count -gt 0) {
+    if ($null -eq $DotnetExe) {
+        $DotnetInfraBlock = 'dotnet executable not found on PATH.'
+    } else {
+        $filters = New-Object System.Collections.Generic.List[string]
+        foreach ($s in $DotnetScenarios) {
+            foreach ($t in @($s.tests)) {
+                $expr = 'FullyQualifiedName=' + [string]$t.fullyQualifiedName
+                if (-not $filters.Contains($expr)) { $filters.Add($expr) }
             }
-            [void]$results.Add($record)
         }
-        $payload = [ordered]@{
-            runner        = 'scripts/run-acceptance-tests.ps1'
-            runMode       = $runMode
-            startedUtc    = (Get-Date).ToUniversalTime().ToString('o')
-            finishedUtc   = (Get-Date).ToUniversalTime().ToString('o')
-            tools         = [ordered]@{ dotnet = $dotnetVersion; node = $nodeVersion }
-            safetyGate    = $safetyGate
-            build         = [ordered]@{ attempted = $false; succeeded = $null; scope = $null }
-            checkpoints   = [ordered]@{ }
-            exitCode      = 2
-            totals        = [ordered]@{ pass = 0; partial = 0; fail = 0; skip = @($results | Where-Object { $_.status -eq 'SKIP' }).Count; blocked = @($results | Where-Object { $_.status -eq 'BLOCKED' }).Count }
-            scenarios     = $results
+        $DotnetFilterCount = $filters.Count
+        $argLine = "test `"$SolutionPath`" --no-restore"
+        if ($NoBuild) { $argLine += ' --no-build' }
+        $runFullSuite = $All
+        if (-not $runFullSuite) {
+            $filterExpr = ($filters -join '|')
+            if ($filters.Count -gt 1) { $filterExpr = '(' + $filterExpr + ')' }
+            $argLine += " --filter `"$filterExpr`""
         }
-        $json = $payload | ConvertTo-Json -Depth 6
-        if ($OutputJson) { [IO.File]::WriteAllText($OutputJson, $json, (New-Object System.Text.UTF8Encoding($false))) }
-        Write-Output $json
-        exit 2
-    }
-}
-
-# ---------------------------------------------------------------------------
-# 4. Build (test projects only; the running desktop UI process locks solution
-#    build output, so a full AlKhayal.slnx build is deliberately not attempted)
-# ---------------------------------------------------------------------------
-$buildInfo = [ordered]@{
-    attempted = $false
-    succeeded = $null
-    scope     = 'test projects only (tests/AlKhayal.UnitTests, tests/AlKhayal.IntegrationTests); full solution build skipped because the running desktop UI process locks solution build output'
-    output    = $null
-}
-$buildOk = $true
-if ($anyTestExecutionPlanned -and -not $NoBuild) {
-    $buildInfo.attempted = $true
-    $buildOutput = New-Object System.Collections.ArrayList
-    foreach ($project in @($UnitProject, $IntegrationProject)) {
-        Write-Info ('Building {0}' -f (Split-Path -Leaf $project))
-        $output = & dotnet build $project --no-restore 2>&1
-        $buildExit = $LASTEXITCODE
-        foreach ($line in $output) { [void]$buildOutput.Add($line.ToString()) }
-        if ($buildExit -ne 0) {
-            $buildOk = $false
-            Write-Info ('Build FAILED for {0} (exit {1}).' -f $project, $buildExit)
-            break
+        $argLine += " --logger trx --results-directory `"$DotnetResultsDir`""
+        $purpose = 'dotnet test'
+        if ($runFullSuite) { $purpose = 'dotnet test (full suite, -All)' } else { $purpose = "dotnet test (filtered: $DotnetFilterCount mapped selector(s))" }
+        Write-Output ""
+        Write-Output "[$purpose]"
+        Write-Output "  $DotnetExe $argLine"
+        $timeoutMs = [int]([Math]::Max(1, $TimeoutMinutes)) * 60000
+        $run = Invoke-LoggedProcess -FileName $DotnetExe -Arguments $argLine -WorkingDirectory $RepoRoot -Environment $ChildEnvironment -TimeoutMilliseconds $timeoutMs
+        $DotnetExitCode = $run.ExitCode
+        $DotnetDurationMs = $run.DurationMs
+        $Commands += [pscustomobject]@{
+            purpose = $purpose; command = ($DotnetExe + ' ' + $argLine); exitCode = $run.ExitCode
+            durationMs = $run.DurationMs; timedOut = $run.TimedOut
         }
-    }
-    $buildInfo.succeeded = $buildOk
-    $buildInfo.output = (($buildOutput | Select-Object -Last 15) -join "`n")
-} elseif ($NoBuild) {
-    $buildInfo.scope = 'skipped by -NoBuild'
-}
-
-# ---------------------------------------------------------------------------
-# 5. Execute tests
-# ---------------------------------------------------------------------------
-if (-not (Test-Path -LiteralPath $ResultsDir)) { New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null }
-
-$unitRun = $null
-$integrationRun = $null
-$frontendCheckpoint = [ordered]@{ ran = $false; exitCode = $null; passed = $null; durationMs = $null; outputTail = $null; blockedReason = $null }
-
-if ($All) {
-    # Coarse checkpoints: complete unfiltered suites for both test projects + frontend.
-    if ($dotnetVersion -and $buildOk) {
-        $unitRun = Invoke-DotnetTest -ProjectPath $UnitProject -Filter $null -TrxFileName 'unit-full.trx' -NoBuild:(-not $buildInfo.attempted) -ProjectLabel 'unit-suite'
-        $integrationRun = Invoke-DotnetTest -ProjectPath $IntegrationProject -Filter $null -TrxFileName 'integration-full.trx' -NoBuild:(-not $buildInfo.attempted) -ProjectLabel 'integration-suite'
-    }
-    if ($nodeVersion) {
-        Write-Info 'Running frontend registry suite (coarse checkpoint): node frontend/tests/run-tests.js'
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $frontendOutput = & node $FrontendTestScript 2>&1
-        $frontendExit = $LASTEXITCODE
-        $sw.Stop()
-        $frontendText = ($frontendOutput | ForEach-Object { $_.ToString() }) -join "`n"
-        $frontendCheckpoint.ran = $true
-        $frontendCheckpoint.exitCode = $frontendExit
-        $frontendCheckpoint.passed = ($frontendExit -eq 0)
-        $frontendCheckpoint.durationMs = $sw.ElapsedMilliseconds
-        $frontendCheckpoint.outputTail = (($frontendText -split "`n" | Select-Object -Last 20) -join "`n")
-        Write-Info ('frontend-suite: exit={0} durationMs={1}' -f $frontendExit, $sw.ElapsedMilliseconds)
-    } else {
-        $frontendCheckpoint.blockedReason = 'node is not available.'
-        Write-Info 'frontend-suite: BLOCKED (node missing).'
-    }
-} else {
-    # Filtered runs: execute ONLY the union of mapped tests for in-scope scenarios.
-    $fqnsByProject = @{}
-    foreach ($entry in $inScope) {
-        if (-not $entry.mapped) { continue }
-        foreach ($test in @($entry.tests)) {
-            if (-not $fqnsByProject.ContainsKey($test.project)) { $fqnsByProject[$test.project] = New-Object System.Collections.ArrayList }
-            [void]$fqnsByProject[$test.project].Add($test.fullyQualifiedName)
-        }
-    }
-    if ($dotnetVersion -and $buildOk) {
-        $unitFqns = @($fqnsByProject['AlKhayal.UnitTests'] | Select-Object -Unique)
-        $integrationFqns = @($fqnsByProject['AlKhayal.IntegrationTests'] | Select-Object -Unique)
-        if ($unitFqns.Count -gt 0) {
-            $filter = ($unitFqns | ForEach-Object { 'FullyQualifiedName={0}' -f $_ }) -join ' | '
-            $unitRun = Invoke-DotnetTest -ProjectPath $UnitProject -Filter $filter -TrxFileName 'unit-filtered.trx' -NoBuild:(-not $buildInfo.attempted) -ProjectLabel 'unit-filtered'
-        }
-        if ($integrationFqns.Count -gt 0) {
-            $filter = ($integrationFqns | ForEach-Object { 'FullyQualifiedName={0}' -f $_ }) -join ' | '
-            $integrationRun = Invoke-DotnetTest -ProjectPath $IntegrationProject -Filter $filter -TrxFileName 'integration-filtered.trx' -NoBuild:(-not $buildInfo.attempted) -ProjectLabel 'integration-filtered'
-        }
-    }
-}
-
-# ---------------------------------------------------------------------------
-# 6. Attribute per-scenario statuses (never from aggregate results)
-# ---------------------------------------------------------------------------
-$unitResults = $(if ($unitRun) { $unitRun.Results } else { New-Object System.Collections.ArrayList })
-$integrationResults = $(if ($integrationRun) { $integrationRun.Results } else { New-Object System.Collections.ArrayList })
-
-function Get-OutcomeForTest {
-    param([string]$Project, [string]$FullyQualifiedName)
-    $pool = $(if ($Project -eq 'AlKhayal.UnitTests') { $unitResults } else { $integrationResults })
-    return Get-TestOutcomeForFqn -FullyQualifiedName $FullyQualifiedName -TrxResults $pool
-}
-
-$results = New-Object System.Collections.ArrayList
-foreach ($entry in $allScenarios) {
-    $record = New-ResultObject -Entry $entry
-    $inScopeThisRun = ($inScope.id -contains $entry.id)
-
-    if (-not $inScopeThisRun) {
-        $record.status = 'SKIP'
-        $record.reason = 'Outside the requested run scope.'
-        [void]$results.Add($record)
-        continue
-    }
-
-    if (-not $entry.mapped -and @($entry.tests).Count -eq 0) {
-        if ($entry.placeholder) {
-            $record.status = 'BLOCKED'
-            $record.reason = 'Unmapped placeholder: no canonical scenario definition or test mapping exists yet; it must never be reported PASS.'
+        if (-not $run.Started) {
+            $DotnetInfraBlock = "dotnet test failed to start: $($run.ErrorText)"
+        } elseif ($run.TimedOut) {
+            $DotnetInfraBlock = "dotnet test exceeded the $TimeoutMinutes-minute timeout."
         } else {
-            $record.status = 'BLOCKED'
-            $record.reason = 'No automated test mapping (manual/native or unimplemented scope); automated coverage must be added before this can pass.'
-        }
-        [void]$results.Add($record)
-        continue
-    }
-
-    if (-not $dotnetVersion) {
-        $record.status = 'BLOCKED'
-        $record.reason = 'dotnet is not available on this machine.'
-        [void]$results.Add($record)
-        continue
-    }
-    if (-not $buildOk) {
-        $record.status = 'BLOCKED'
-        $record.reason = 'Test project build failed; no tests could run.'
-        [void]$results.Add($record)
-        continue
-    }
-
-    $testRecords = New-Object System.Collections.ArrayList
-    $scenarioFailed = $false
-    $failureParts = New-Object System.Collections.ArrayList
-    $scenarioDuration = 0
-    foreach ($test in @($entry.tests)) {
-        $outcome = Get-OutcomeForTest -Project $test.project -FullyQualifiedName $test.fullyQualifiedName
-        if (-not $outcome) {
-            $scenarioFailed = $true
-            [void]$testRecords.Add([ordered]@{
-                    fullyQualifiedName = $test.fullyQualifiedName
-                    project            = $test.project
-                    outcome            = 'Missing'
-                    cases              = 0
-                    durationMs         = 0
-                    message            = 'Mapped test did not appear in the run results (selector mismatch or discovery failure).'
-                })
-            [void]$failureParts.Add(('{0}: mapped test absent from run results' -f $test.fullyQualifiedName))
-            continue
-        }
-        [void]$testRecords.Add([ordered]@{
-                fullyQualifiedName = $test.fullyQualifiedName
-                project            = $test.project
-                outcome            = $outcome.Outcome
-                cases              = $outcome.Cases
-                durationMs         = $outcome.DurationMs
-                message            = $outcome.Message
-            })
-        $scenarioDuration += $outcome.DurationMs
-        if (-not $outcome.Passed) {
-            $scenarioFailed = $true
-            $messageText = $(if ($outcome.Message) { $outcome.Message } else { 'no failure message captured' })
-            [void]$failureParts.Add(('{0}: {1}' -f $test.fullyQualifiedName, $messageText))
+            $trxFiles = @(Get-ChildItem -LiteralPath $DotnetResultsDir -Filter '*.trx' -File)
+            foreach ($trx in $trxFiles) {
+                $TrxResults += @(Parse-TrxFile $trx.FullName)
+            }
+            if ($trxFiles.Count -eq 0) {
+                $detail = Clip-Text (($run.Output + ' ' + $run.ErrorText), 400)
+                $DotnetInfraBlock = "dotnet test produced no TRX results (exit code $($run.ExitCode)). $detail"
+            } else {
+                $tail = ''
+                try { $tail = (@($run.Output -split "`r?`n") | Where-Object { $_ -match '^(Passed|Failed|Skipped)!' } | Select-Object -Last 3) -join '; ' } catch { }
+                if (-not [string]::IsNullOrWhiteSpace($tail)) { Write-Output "  $tail" }
+                Write-Output "  exit code: $($run.ExitCode); TRX files: $($trxFiles.Count); wall time: $([Math]::Round($run.DurationMs / 1000.0, 1)) s"
+            }
         }
     }
-    $record.tests = @($testRecords)
-    $record.durationMs = $scenarioDuration
+}
 
-    if ($scenarioFailed) {
-        $record.status = 'FAIL'
-        $record.failureSummary = ($failureParts -join ' | ')
-        $record.reason = 'One or more mapped tests failed or were absent from the run results.'
-    } elseif ($entry.partial -and $entry.manualRemainder) {
-        # A passing automated portion with an unexecuted manual remainder is PARTIAL, never PASS.
-        $record.status = 'PARTIAL'
-        $record.reason = ('All mapped tests for this scenario ran and passed in this run; manual remainder remains unexecuted: {0}' -f $entry.manualRemainder)
-    } elseif ($entry.partial) {
-        # partial=true but no manualRemainder text: still PARTIAL so coverage is never overstated.
-        $record.status = 'PARTIAL'
-        $record.reason = 'All mapped tests for this scenario ran and passed in this run; the scenario is marked partial in the manifest and its non-automated remainder has not been executed.'
+# ---------------------------------------------------------------- frontend group
+
+$FrontendPassed = $null
+$FrontendDurationMs = [int64]0
+$FrontendFailure = $null
+
+if ($FrontendScenarios.Count -gt 0) {
+    if ($null -eq $NodeExe) {
+        $FrontendFailure = 'node executable not found on PATH.'
     } else {
-        $record.status = 'PASS'
-        $record.reason = 'All mapped tests for this scenario ran and passed in this run; the manifest records no manual remainder.'
-    }
-    [void]$results.Add($record)
-}
-
-$totals = [ordered]@{
-    pass    = @($results | Where-Object { $_.status -eq 'PASS' }).Count
-    partial = @($results | Where-Object { $_.status -eq 'PARTIAL' }).Count
-    fail    = @($results | Where-Object { $_.status -eq 'FAIL' }).Count
-    skip    = @($results | Where-Object { $_.status -eq 'SKIP' }).Count
-    blocked = @($results | Where-Object { $_.status -eq 'BLOCKED' }).Count
-}
-
-$exitCode = 0
-if ($totals.fail -gt 0) { $exitCode = 1 }
-elseif ($safetyGate.enforced -and ($safetyGate.passed -eq $false)) { $exitCode = 2 }
-elseif (-not $dotnetVersion -and $needDotnet) { $exitCode = 3 }
-elseif ($buildInfo.attempted -and ($buildInfo.succeeded -eq $false)) { $exitCode = 3 }
-elseif ($All -and $frontendCheckpoint.ran -and ($frontendCheckpoint.passed -ne $true)) { $exitCode = 1 }
-
-$checkpoints = [ordered]@{ }
-if ($unitRun) {
-    $checkpoints.unitTests = $unitRun.Summary
-} else {
-    $checkpoints.unitTests = [ordered]@{ ran = $false; blockedReason = $(if (-not $dotnetVersion) { 'dotnet missing' } elseif (-not $buildOk) { 'build failed' } else { 'not in run scope' }) }
-}
-if ($integrationRun) {
-    $checkpoints.integrationTests = $integrationRun.Summary
-} else {
-    $checkpoints.integrationTests = [ordered]@{ ran = $false; blockedReason = $(if (-not $dotnetVersion) { 'dotnet missing' } elseif (-not $buildOk) { 'build failed' } else { 'not in run scope' }) }
-}
-$checkpoints.frontendSuite = $frontendCheckpoint
-
-$payload = [ordered]@{
-    runner        = 'scripts/run-acceptance-tests.ps1'
-    manifestPath  = $ManifestPath
-    manifestVersion = $manifest.manifestVersion
-    runMode       = $runMode
-    startedUtc    = $null
-    finishedUtc   = (Get-Date).ToUniversalTime().ToString('o')
-    tools         = [ordered]@{ dotnet = $dotnetVersion; node = $nodeVersion }
-    safetyGate    = $safetyGate
-    build         = $buildInfo
-    checkpoints   = $checkpoints
-    exitCode      = $exitCode
-    totals        = $totals
-    scenarios     = $results
-    trxDirectory  = $ResultsDir
-}
-$payload.startedUtc = $startedUtc
-$json = $payload | ConvertTo-Json -Depth 6
-if ($OutputJson) { [IO.File]::WriteAllText($OutputJson, $json, (New-Object System.Text.UTF8Encoding($false))) }
-
-Write-Info ('Totals: PASS={0} PARTIAL={1} FAIL={2} SKIP={3} BLOCKED={4}; exit code {5}.' -f $totals.pass, $totals.partial, $totals.fail, $totals.skip, $totals.blocked, $exitCode)
-foreach ($record in $results) {
-    if ($record.status -in @('FAIL', 'BLOCKED')) {
-        Write-Info ('{0} {1}{2}' -f $record.id, $record.status, $(if ($record.failureSummary) { ' - ' + $record.failureSummary } elseif ($record.reason) { ' - ' + $record.reason } else { '' }))
+        $frontendArgs = "`"$FrontendTestPath`""
+        Write-Output ""
+        Write-Output "[frontend suite (single coarse group: registry/renderer/static-source/VM assertions only)]"
+        Write-Output "  $NodeExe $frontendArgs"
+        $run = Invoke-LoggedProcess -FileName $NodeExe -Arguments $frontendArgs -WorkingDirectory $RepoRoot -Environment $ChildEnvironment -TimeoutMilliseconds ([int]([Math]::Max(1, $TimeoutMinutes)) * 60000)
+        $FrontendDurationMs = $run.DurationMs
+        $Commands += [pscustomobject]@{
+            purpose = 'frontend suite (coarse group)'; command = ($NodeExe + ' ' + $frontendArgs); exitCode = $run.ExitCode
+            durationMs = $run.DurationMs; timedOut = $run.TimedOut
+        }
+        if (-not $run.Started) {
+            $FrontendFailure = "frontend suite failed to start: $($run.ErrorText)"
+        } elseif ($run.TimedOut) {
+            $FrontendFailure = "frontend suite exceeded the $TimeoutMinutes-minute timeout."
+        } elseif ($run.ExitCode -eq 0) {
+            $FrontendPassed = $true
+            Write-Output "  exit code: 0 (suite passed); wall time: $([Math]::Round($run.DurationMs / 1000.0, 1)) s"
+        } else {
+            $FrontendPassed = $false
+            $FrontendFailure = Clip-Text (($run.ErrorText + ' ' + $run.Output), 500)
+            Write-Output "  exit code: $($run.ExitCode) (suite FAILED): $FrontendFailure"
+        }
     }
 }
-Write-Output $json
-exit $exitCode
+
+# ---------------------------------------------------------------- scenario evaluation
+
+function Get-EvidenceMatches([string]$Fqn) {
+    $exact = @($TrxResults | Where-Object { $_.Fqn -ieq $Fqn })
+    if ($exact.Count -gt 0) { return $exact }
+    return @($TrxResults | Where-Object { $_.Fqn -and $_.Fqn.StartsWith($Fqn, [System.StringComparison]::OrdinalIgnoreCase) })
+}
+
+$SelectedIds = @{}
+foreach ($s in $Selection) { $SelectedIds[[string]$s.id] = $true }
+
+$Results = @()
+foreach ($s in $AllScenarios) {
+    $id = [string]$s.id
+    $inScope = $SelectedIds.ContainsKey($id)
+    $status = $null
+    $durationMs = [int64]0
+    $detail = ''
+    $mapped = @()
+    $scope = [string]$s.evidenceScope
+    $isPartial = [bool]$s.partial
+    $hasTests = ($s.tests -and @($s.tests).Count -gt 0)
+    $isFrontend = ((-not $hasTests) -and [string]$s.group -eq 'frontend')
+
+    if (-not $inScope) {
+        $status = 'SKIP'
+        $detail = 'mapped scenario outside the requested run scope (not executed in this run)'
+    } elseif ($hasTests) {
+        if ($null -ne $DotnetInfraBlock) {
+            $status = 'BLOCKED'
+            $detail = $DotnetInfraBlock
+        } else {
+            $totalMatched = 0
+            $failed = @()
+            $notRun = @()
+            $notExecuted = @()
+            foreach ($t in @($s.tests)) {
+                $fqn = [string]$t.fullyQualifiedName
+                $matches = @(Get-EvidenceMatches $fqn)
+                if ($matches.Count -eq 0) {
+                    $notRun += $fqn
+                    continue
+                }
+                foreach ($m in $matches) {
+                    $totalMatched++
+                    $durationMs += [int64]$m.DurationMs
+                    if ($m.Outcome -eq 'Passed') {
+                        $mapped += [pscustomobject]@{ fqn = $fqn; outcome = $m.Outcome }
+                    } elseif ($m.Outcome -eq 'Failed') {
+                        $failed += [pscustomobject]@{ fqn = $fqn; outcome = $m.Outcome; message = (Clip-Text $m.Message 400) }
+                    } else {
+                        $notExecuted += [pscustomobject]@{ fqn = $fqn; outcome = $m.Outcome; message = (Clip-Text $m.Message 300) }
+                    }
+                }
+            }
+            if ($totalMatched -eq 0) {
+                $status = 'FAIL'
+                $detail = 'Mapped test(s) did not appear in the run results (selector or discovery problem): ' + (($notRun | Select-Object -Unique) -join '; ')
+            } elseif ($failed.Count -gt 0) {
+                $status = 'FAIL'
+                $msgs = @($failed | ForEach-Object { "$($_.fqn): $($_.message)" }) | Select-Object -Unique
+                $detail = ($msgs -join ' || ')
+            } elseif ($notExecuted.Count -gt 0) {
+                $status = 'BLOCKED'
+                $detail = 'Mapped test(s) were not executed: ' + ((@($notExecuted | ForEach-Object { "$($_.fqn) [$($_.outcome)]" }) | Select-Object -Unique) -join '; ')
+            } elseif ($isPartial) {
+                $status = 'PARTIAL'
+                $detail = "all mapped assertion(s) passed ($totalMatched case(s)); manual remainder: $(Clip-Text ([string]$s.manualRemainder) 220)"
+            } else {
+                $status = 'PASS'
+                $detail = "direct assertion(s) passed ($totalMatched case(s))"
+            }
+        }
+    } elseif ($isFrontend) {
+        if ($null -eq $FrontendPassed) {
+            $status = 'BLOCKED'
+            $detail = $FrontendFailure
+        } elseif ($FrontendPassed) {
+            $durationMs = $FrontendDurationMs
+            $mapped += [pscustomobject]@{ fqn = 'frontend/tests/run-tests.js (coarse group)'; outcome = 'Passed' }
+            if ($isPartial) {
+                $status = 'PARTIAL'
+                $detail = 'coarse frontend-group pass (registry/renderer/static-source/VM assertions only, never a transaction proof); manual remainder: ' + (Clip-Text ([string]$s.manualRemainder) 220)
+            } else {
+                $status = 'PASS'
+                $detail = 'coarse frontend-group pass (registry/renderer/static-source/VM assertions only, never a transaction proof); scope: ' + $scope
+            }
+        } else {
+            $status = 'FAIL'
+            $durationMs = $FrontendDurationMs
+            $detail = 'coarse frontend-group failure: ' + $FrontendFailure
+            $mapped += [pscustomobject]@{ fqn = 'frontend/tests/run-tests.js (coarse group)'; outcome = 'Failed' }
+        }
+    } else {
+        $status = 'BLOCKED'
+        $reason = [string]$s.skipReason
+        if ([string]::IsNullOrWhiteSpace($reason)) { $reason = 'no-automated-mapping' }
+        $detail = 'not executable in this harness: ' + $reason
+        if ($s.manualRemainder) { $detail += ' -- manual remainder: ' + (Clip-Text ([string]$s.manualRemainder) 180) }
+        if ($s.missing) { $detail += ' -- ' + (Clip-Text ([string]$s.missing) 220) }
+    }
+
+    $Results += [pscustomobject]@{
+        id = $id
+        phase = [int]$s.phase
+        module = [string]$s.module
+        title = [string]$s.title
+        level = [string]$s.level
+        inScope = $inScope
+        evidenceScope = $scope
+        partial = $isPartial
+        status = $status
+        durationMs = $durationMs
+        mappedTests = @($mapped)
+        failureDetail = $detail
+    }
+}
+
+# ---------------------------------------------------------------- reporting
+
+$InScopeResults = @($Results | Where-Object { $_.inScope })
+$Passed = @($InScopeResults | Where-Object { $_.status -eq 'PASS' })
+$Partial = @($InScopeResults | Where-Object { $_.status -eq 'PARTIAL' })
+$Failed = @($InScopeResults | Where-Object { $_.status -eq 'FAIL' })
+$Skipped = @($Results | Where-Object { $_.status -eq 'SKIP' })
+$Blocked = @($InScopeResults | Where-Object { $_.status -eq 'BLOCKED' })
+$BlockedInfra = @($Blocked | Where-Object { $_.failureDetail -match 'dotnet|node|TRX|timeout|not found on PATH' })
+$BlockedByDesign = @($Blocked | Where-Object { $_.failureDetail -notmatch 'dotnet|node|TRX|timeout|not found on PATH' })
+
+Write-Output ""
+Write-Output "=================================================================="
+Write-Output "SCENARIO RESULTS (in scope: $($InScopeResults.Count))"
+Write-Output ("{0,-7} {1,-5} {2,-14} {3,-8} {4,10}  {5}" -f 'ID', 'Phase', 'Module', 'Status', 'DurationMs', 'EvidenceScope')
+foreach ($r in $InScopeResults) {
+    Write-Output ("{0,-7} {1,-5} {2,-14} {3,-8} {4,10}  {5}" -f $r.id, $r.phase, $r.module, $r.status, $r.durationMs, $r.evidenceScope)
+}
+if ($Skipped.Count -gt 0) {
+    Write-Output ""
+    Write-Output "Out-of-scope scenarios (SKIP, not executed in this run): $(@($Skipped | ForEach-Object { $_.id }) -join ', ')"
+}
+
+if ($Failed.Count -gt 0) {
+    Write-Output ""
+    Write-Output "------------------------------------------------------------------"
+    Write-Output "FAILURE SUMMARIES"
+    foreach ($r in $Failed) {
+        Write-Output "  [$($r.id)] $($r.title)"
+        Write-Output "    $($r.failureDetail)"
+    }
+}
+if ($Blocked.Count -gt 0) {
+    Write-Output ""
+    Write-Output "------------------------------------------------------------------"
+    Write-Output "BLOCKED SUMMARIES"
+    foreach ($r in $Blocked) {
+        Write-Output "  [$($r.id)] $($r.title)"
+        Write-Output "    $($r.failureDetail)"
+    }
+}
+if ($Partial.Count -gt 0) {
+    Write-Output ""
+    Write-Output "------------------------------------------------------------------"
+    Write-Output "PARTIAL (mapped assertions passed; documented manual remainder stays open)"
+    foreach ($r in $Partial) {
+        Write-Output "  [$($r.id)] $($r.failureDetail)"
+    }
+}
+
+Write-Output ""
+Write-Output "=================================================================="
+Write-Output "SUMMARY"
+Write-Output "  In scope        : $($InScopeResults.Count)"
+Write-Output "  PASS            : $($Passed.Count)"
+Write-Output "  PARTIAL         : $($Partial.Count)"
+Write-Output "  FAIL            : $($Failed.Count)"
+Write-Output "  SKIP (oos)      : $($Skipped.Count)"
+Write-Output "  BLOCKED (design): $($BlockedByDesign.Count) (manual-only / not-implemented; not exit-affecting)"
+Write-Output "  BLOCKED (infra) : $($BlockedInfra.Count) (mapped tests could not run)"
+
+$ExitCode = 0
+if ($Failed.Count -gt 0) { $ExitCode = 1 }
+elseif ($BlockedInfra.Count -gt 0) { $ExitCode = 2 }
+
+if ($ExitCode -eq 0) {
+    Write-Output "  Result          : no FAIL - all executable mapped scenarios passed (PARTIAL keeps manual remainders visible)."
+} elseif ($ExitCode -eq 1) {
+    Write-Output "  Result          : FAILED - see failure summaries."
+} else {
+    Write-Output "  Result          : BLOCKED - mapped tests could not run (tooling/infrastructure)."
+}
+
+# ---------------------------------------------------------------- machine-readable output
+
+$JsonRoot = [pscustomobject]@{
+    runner = 'scripts/run-acceptance-tests.ps1'
+    manifest = 'docs/qa/scenario-manifest.json'
+    runId = $RunToken
+    completedUtc = (Get-Date).ToUniversalTime().ToString('o')
+    mode = $SelectionMode
+    selection = [pscustomobject]@{
+        all = [bool]$All
+        phases = @($Phase)
+        modules = @($Module)
+        scenarios = @($Scenario)
+        matched = @($InScopeResults | ForEach-Object { $_.id })
+    }
+    isolation = [pscustomobject]@{
+        verified = $true
+        effectiveDatabaseOverride = (Resolve-FullPath $OverrideDb)
+        normalOperatorDatabase = $DefaultOperatorDb
+        normalDatabaseUsed = $false
+        seededDatabasePath = $SeededDb
+        seededDatabaseUsed = $false
+        tempRoot = $TempRoot
+        note = 'ALKHAYAL_DATABASE_PATH was exported to every child test process; tests additionally use their own temp GUID fixtures.'
+    }
+    commands = @($Commands)
+    summary = [pscustomobject]@{
+        inScope = $InScopeResults.Count
+        pass = $Passed.Count
+        partial = $Partial.Count
+        fail = $Failed.Count
+        skipOutOfScope = $Skipped.Count
+        blockedByDesign = $BlockedByDesign.Count
+        blockedInfra = $BlockedInfra.Count
+        exitCode = $ExitCode
+    }
+    results = @($InScopeResults)
+}
+
+$jsonText = ConvertTo-Json -InputObject $JsonRoot -Depth 8
+[System.IO.File]::WriteAllText($ResultsJsonPath, $jsonText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Output ""
+Write-Output "Machine-readable results: $ResultsJsonPath"
+Write-Output "Disposable run artifacts: $RunRoot (kept as evidence; nothing was deleted)"
+Write-Output "Exit code: $ExitCode"
+exit $ExitCode

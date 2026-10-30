@@ -1,5 +1,7 @@
 # Architecture
 
+Pre-Phase 9 pricing keeps Application `SalesPricing` responsible for exact selected-unit sale-price conversion; Data validates the current default during draft save and retains persisted prices/costs at posting. Catalog edits preserve variant overrides and only release an evidenced sole-variant receipt mirror when the simple product price is explicitly changed. See [pricing/FIFO audit and reporting contracts](phase-9/pre-phase-9-pricing-fifo.md). No reporting boundary or migration is introduced.
+
 Sales refund overdraft is an explicit scoped treasury-writer capability. Application `SalesRefundPolicy` prioritizes reducing current credit-customer debt to zero and allocates any remaining return value to cash. Return transactions never touch shift revenue. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
 
 Unified Returns uses `ReturnService`/`IReturnReadStore` and existing Sales/Purchase posting services. Both return writers share their transaction with treasury cash effects, source links and sales-return withdrawal solely from the returns cashbox. See [returns-management.md](returns-management.md).
@@ -54,7 +56,7 @@ Startup resolves a writable SQLite path, applies embedded migrations in lexical 
 
 The operational sidebar and administration hub share that same registry and access pipeline. `settings-program` renders Settings entries from `settingsGroup` metadata; it is not a second navigation registry. Hidden legacy aliases resolve through centralized `redirectTo` handling before access and tab creation. Static no-store headers plus a one-time desktop network-cache clear prevent a cached shell from loading a newer registry without its renderer scripts.
 
-Maintenance is a persisted workflow behind the local API: Application validates intake/status/delivery commands, `IMaintenanceRepository` owns the persistence boundary, and SQLite stores tickets, status history and advance/delivery receipt records. Delivery posts the final service charge and any advance/cash settlement to the customer's statement in one database transaction. These maintenance entries do not post to treasury/cashbox.
+Maintenance is a persisted workflow behind the local API: Application validates intake/status/delivery commands, `IMaintenanceRepository` owns the persistence boundary, and SQLite stores tickets, status history and advance/delivery receipt records. Intake advances are ticket prepayments rather than collections of existing customer debt. Delivery posts the final service charge and applies the saved advance plus any remaining cash settlement to the customer's statement in one database transaction, reusing matching legacy advance entries without duplication. These maintenance entries do not post to treasury/cashbox.
 
 `access-state.js` loads the authenticated account's effective screen IDs, deduplicates concurrent reads, and emits only when the role/access signature changes. The shell requires both feature and screen access for sidebar, quick access, search, dashboard shortcuts, direct routes, and open tabs. Feature changes refresh access without a recursive renderer event.
 
@@ -80,3 +82,32 @@ Application owns validated print contracts, document projections and orchestrati
 ## Barcode and native label extension — Phase 7.3
 
 BarcodeService extends the existing catalog aggregate through IProductBarcodeStore; SQLite owns atomic replacement/retirement/version/audit/operation replay. LabelService/ILabelRepository load authoritative catalog snapshots. LabelBatch/ILabelRenderer/ILabelPrinterBackend are nonfinancial contracts implemented by the same WindowsPrinterBackend and shared PrintingService/PrintJobs lifecycle as receipts. No browser/PDF output or second printing subsystem. See [Phase 7.3](phase-7/phase-7-3.md) and [final Phase 7 acceptance](phase-7/phase-7-final-report.md).
+
+
+## Sales payment instruments
+
+Configured wallets and card terminals, atomic full-invoice attribution, administrator-only management/history, legacy contract mapping, electronic refund restrictions and physical cash shift exclusion are documented in [payment-methods.md](payment-methods.md). Migration 074 is additive; original financial records and credit collection workflows remain intact.
+
+## Phase 9.1 read-only reporting
+
+Application Reports query contracts/services own input and business-calendar validation; SQLite reporting stores own parameterized aggregates and server pages; ReportsController owns session/effective-screen authorization and HTTP mapping. Server.Host composes both reporting services. Original financial/header/event sources remain authoritative and no posting/repricing/FIFO logic is invoked by a report. All four screens use the shared frontend and existing navigation/permission contracts. See [report boundaries, verification and remaining visual acceptance](phase-9/phase-9-1.md).
+
+The Phase 9.2 expense voucher report extends the existing reporting Application port and SQLite adapter. It reads voucher records without posting or interpreting treasury movements as additional expenses. See [Phase 9.2](phase-9/phase-9-2.md#expense-voucher-report--recovery-implementation).
+
+Net Profit uses `NetProfitService`/`INetProfitStore`, `SqliteNetProfitStore`, the existing `ReportsController`, and host composition. Application validates dates/breakdown/classification and builds timezone-aware calendar boundaries. Data performs authoritative SQL aggregation and invokes the existing Application return-allocation helper over streamed immutable histories. Classification is separate append-only metadata, protected by administrator/CSRF checks, optimistic revisions and operation identity. Reports never invoke a posting or new FIFO algorithm; incomplete accounting remains explicit through API/UI nulls and coverage warnings. See [the completed vertical slice and remaining Phase 9.2 scope](phase-9/phase-9-2.md).
+
+## Phase 9.2 product and inventory reporting
+
+`StockReportService` / `IStockReportStore` extend the existing Reports Application boundary. Data `SqliteStockReportStore` reuses the product partial of `SqliteNetProfitStore` and shared existing inventory valuation evidence/calculation; controllers remain session/permission/HTTP adapters and Server.Host owns composition. Top Sellers/Availability receive server-side financial-field removal to preserve independent profit/valuation permissions. The five frontend screens use the existing same-origin API client, registry, report controls and workspace. No new writer, migration, dependency or UI-owned financial arithmetic. [Full contracts and accounting scope](phase-9/phase-9-2.md#final-five-report-implementation--2026-10-30).
+
+## Phase 9.3 operational reports
+
+Application adds `OperationalReportService`/read port plus `BusinessOverviewService`; Data supplies read-only SQLite aggregates. Existing `ReportsController` authenticates each report and each overview source, including module availability; Host composes these services. Overview reuses authoritative reporting services and does not own a second profit formula. The existing workforce shift SQL source is shared internally. Frontend adds a renderer using `report-ui.js` and original module record links; no posting/domain dependency enters WinForms. [Contracts and acceptance](phase-9/phase-9-3.md).
+
+## Mandatory offline activation
+
+Application licensing ports/policy, Data RSA/WMI/file adapters, native pre-WebView2 activation, and API/OWIN fail-closed gates are implemented. Customer binaries trust embedded public keys only; owner issuance is a separate owner-only HTML/CSS/JavaScript + Node.js/SQLite utility with a bundled runtime and Desktop launcher, excluded from customer packages. The POS approved stack and directional dependencies are unchanged. See [Phase 10.1](phase-10/phase-10-1-licensing.md) for provisioning, trust rotation, hardware/cache policy and deployment limits.
+
+## License installation privilege boundary
+
+Normal activation validates in Application, invokes a fixed-executable UAC helper mode through ILicenseInstaller, and rereads persisted content before continuing. Helper mode exits before host/database/WebView2 composition and independently validates with embedded keys/fresh hardware identity. Data owns protected fixed-path provisioning and atomic writes. Normal startup remains asInvoker and an installed valid entitlement skips elevation. [Storage hotfix and installer contract](phase-10/activation-storage-hotfix.md).

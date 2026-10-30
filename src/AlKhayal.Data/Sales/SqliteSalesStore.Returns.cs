@@ -27,6 +27,7 @@ namespace AlKhayal.Data.Sales
                     if(prior!=null){tx.Commit();return prior.RequestHash==hash?prior.ToResult(true):new SaleReturnResult{ErrorCode="operation_key_conflict",ErrorMessage="مفتاح العملية مستخدم لبيانات مختلفة."};}
                     var invoice=await c.QuerySingleOrDefaultAsync<ReturnInvoice>(Cmd("SELECT Id,CustomerId,WarehouseId,Status,PaymentMode,InvoiceNumber,PaidScaled FROM SalesInvoices WHERE Id=@Id",new{Id=id},tx,ct)).ConfigureAwait(false);
                     if(invoice==null)return new SaleReturnResult{ErrorCode="not_found",ErrorMessage="الفاتورة غير موجودة."};
+                    if(await c.ExecuteScalarAsync<long>(Cmd("SELECT COUNT(*) FROM SalePaymentSelections WHERE SalesInvoiceId=@Id AND Method IN ('wallet','card')",new{Id=id},tx,ct)).ConfigureAwait(false)>0)return new SaleReturnResult{ErrorCode="electronic_reversal_unsupported",ErrorMessage="إرجاع فاتورة إلكترونية يتطلب ردًا إلكترونيًا موثقًا غير متاح حاليًا؛ لم يتغير المخزون أو الدفع."};
                     if(invoice.Status!="posted"||await c.ExecuteScalarAsync<long>(Cmd("SELECT COUNT(*) FROM SalesCancellations WHERE SalesInvoiceId=@Id",new{Id=id},tx,ct)).ConfigureAwait(false)>0)return new SaleReturnResult{ErrorCode="return_not_allowed",ErrorMessage="لا يمكن إرجاع فاتورة غير منشورة أو ملغاة."};
                     var rows=new List<ReturnLine>();var seen=new HashSet<long>();long total=0;
                     foreach(var request in command.Lines)
@@ -67,11 +68,13 @@ namespace AlKhayal.Data.Sales
                     var netPaid=await c.ExecuteScalarAsync<long>(Cmd("SELECT COALESCE(SUM(CASE WHEN EventType IN ('cash_sale','customer_collection') THEN AmountScaled WHEN EventType='refund' AND PaymentMethod<>'credit_adjustment' THEN -AmountScaled ELSE 0 END),0) FROM SalesPayments WHERE SalesInvoiceId=@Id",new{Id=id},tx,ct)).ConfigureAwait(false);
                     var cash=Math.Min(total,Math.Max(0,netPaid));var credit=total-cash;
                     if(credit>0&&(invoice.PaymentMode!="credit"||!invoice.CustomerId.HasValue))return new SaleReturnResult{ErrorCode="refund_unfunded",ErrorMessage="قيمة الإرجاع تتجاوز المدفوع ولا يوجد رصيد آجل للعميل."};
+                    long balanceAfterCredit=0;
                     if(invoice.PaymentMode=="credit" && invoice.CustomerId.HasValue)
                     {
                         var balance=await c.ExecuteScalarAsync<long>(Cmd("SELECT CAST(ROUND(Balance*10000) AS INTEGER) FROM Customers WHERE Id=@Id",new{Id=invoice.CustomerId},tx,ct)).ConfigureAwait(false);
                         var settlement=SalesRefundPolicy.CapDebtReduction(total,balance);
                         cash=settlement.Cash; credit=settlement.Credit;
+                        balanceAfterCredit=checked(balance-credit);
                     }
                     var now=Now();var returnNumber="RET-"+DateTime.UtcNow.ToString("yyyyMMdd",CultureInfo.InvariantCulture)+"-"+Guid.NewGuid().ToString("N").Substring(0,8).ToUpperInvariant();
                     await c.ExecuteAsync(Cmd(@"INSERT INTO InventoryDocuments(DocumentType,Status,SourceWarehouseId,Reason,Notes,CreatedByUserId,CreatedUtc,OperationKey,RequestHash)
@@ -129,7 +132,11 @@ namespace AlKhayal.Data.Sales
                             VALUES(@Invoice,@Customer,@Return,@User,'refund','credit_adjustment',@Amount,@Key,@Hash,@Date,@Notes,@Now)",new{Invoice=id,Customer=invoice.CustomerId,Return=returnId,User=userId,Amount=credit,Key="credit-refund:"+command.OperationKey,Hash=hash,Date=date,Notes="تخفيض مديونية بإرجاع "+invoice.InvoiceNumber,Now=now},tx,ct)).ConfigureAwait(false);
                         await c.ExecuteAsync(Cmd(@"INSERT INTO CustomerTransactions(CustomerId,OperationKey,RequestHash,TransactionType,AmountScaled,OccurredOn,Notes,CreatedUtc,Reference,SalesInvoiceId,SalesReturnId)
                             VALUES(@Customer,@Key,@Hash,'reduction',@Amount,@Date,@Notes,@Now,@Reference,@Invoice,@Return)",new{Customer=invoice.CustomerId,Key="sale-return:"+command.OperationKey,Hash=hash,Amount=credit,Date=date,Notes="إرجاع فاتورة "+invoice.InvoiceNumber,Now=now,Reference=returnNumber,Invoice=id,Return=returnId},tx,ct)).ConfigureAwait(false);
-                        await c.ExecuteAsync(Cmd("UPDATE Customers SET Balance=Balance-@Amount,UpdatedAt=@Now WHERE Id=@Id",new{Amount=credit/10000m,Now=now,Id=invoice.CustomerId},tx,ct)).ConfigureAwait(false);
+                        // Balance is a legacy NUMERIC projection: SQLite subtraction uses REAL
+                        // and can turn an exact final debt reduction into a negative residue.
+                        // Calculate in the same scale-4 integers used by the settlement/ledger,
+                        // then replace the projection inside this writer transaction.
+                        await c.ExecuteAsync(Cmd("UPDATE Customers SET Balance=@Balance,UpdatedAt=@Now WHERE Id=@Id",new{Balance=balanceAfterCredit/10000m,Now=now,Id=invoice.CustomerId},tx,ct)).ConfigureAwait(false);
                     }
                     await c.ExecuteAsync(Cmd("UPDATE SalesInvoices SET PaidScaled=MAX(0,PaidScaled-@Amount) WHERE Id=@Id",new{Amount=cash,Id=id},tx,ct)).ConfigureAwait(false);
                     await AlKhayal.Data.Treasury.SqliteReturnTreasury.PostAsync(c,tx,true,returnId,cash,command.OperationKey,hash,userId,ct).ConfigureAwait(false);

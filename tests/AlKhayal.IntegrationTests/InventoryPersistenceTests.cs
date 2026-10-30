@@ -136,7 +136,7 @@ namespace AlKhayal.IntegrationTests
         {
             using(var f=new Fixture())
             {
-                using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(34,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(0,c.ExecuteScalar<long>("PRAGMA foreign_key_check"));}
+                using(var c=new SQLiteConnection(f.Cs)){c.Open();Assert.Equal(MigrationTestExpectations.Count,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(0,c.ExecuteScalar<long>("PRAGMA foreign_key_check"));}
                 var receipt=await f.Store.PostAsync(f.Command("opening","open","1"),"hash",CancellationToken.None);Assert.True(receipt.Succeeded,receipt.ErrorMessage);
                 using(var c=new SQLiteConnection(f.Cs))
                 {
@@ -264,7 +264,7 @@ namespace AlKhayal.IntegrationTests
                     c.Execute("INSERT INTO ProductUnits(ProductId,UnitId,ToBaseNumerator,ToBaseDenominator,IsBase,IsSaleUnit,IsPurchaseUnit,IsActive,CreatedUtc,UpdatedUtc) VALUES(77,1,1,1,1,1,1,1,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')");
                 }
                 Migrator.Run(cs);Migrator.Run(cs);
-                using(var c=new SQLiteConnection(cs)){c.Open();Assert.Equal(34,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(77,c.ExecuteScalar<long>("SELECT ProductId FROM ProductDetails WHERE ProductId=77"));Assert.Equal(88,c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=77"));Assert.Equal(33,c.ExecuteScalar<long>("SELECT Id FROM Users WHERE Id=33"));Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM Warehouses WHERE IsDefault=1"));}
+                using(var c=new SQLiteConnection(cs)){c.Open();Assert.Equal(MigrationTestExpectations.Count,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));Assert.Equal(77,c.ExecuteScalar<long>("SELECT ProductId FROM ProductDetails WHERE ProductId=77"));Assert.Equal(88,c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=77"));Assert.Equal(33,c.ExecuteScalar<long>("SELECT Id FROM Users WHERE Id=33"));Assert.Equal(1,c.ExecuteScalar<long>("SELECT COUNT(*) FROM Warehouses WHERE IsDefault=1"));}
             }
             finally{SQLiteConnection.ClearAllPools();if(File.Exists(path))File.Delete(path);}
         }

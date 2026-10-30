@@ -36,7 +36,7 @@ namespace AlKhayal.IntegrationTests
                 Assert.True(product.Succeeded,product.ErrorMessage);
                 long variant,unit;using(var c=new SQLiteConnection(cs)){c.Open();variant=c.ExecuteScalar<long>("SELECT Id FROM ProductVariants WHERE ProductId=@Id",new{Id=product.Value.Id});unit=c.ExecuteScalar<long>("SELECT Id FROM ProductUnits WHERE ProductId=@Id",new{Id=product.Value.Id});}
                 var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();var port=((IPEndPoint)listener.LocalEndpoint).Port;listener.Stop();
-                server=new AlKhayalServer();server.Start(new HostOptions{DatabasePath=db,Url="http://127.0.0.1:"+port,FrontendPath=frontend});
+                server=new AlKhayalServer(new TestLicenseGate());server.Start(new HostOptions{DatabasePath=db,Url="http://127.0.0.1:"+port,FrontendPath=frontend});
                 var baseUrl=new Uri("http://127.0.0.1:"+port);
                 using(var anonymous=new HttpClient(new HttpClientHandler{UseCookies=true}){BaseAddress=baseUrl})
                 {

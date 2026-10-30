@@ -18,7 +18,7 @@ namespace AlKhayal.IntegrationTests
             {
                 c.Open(); c.Execute("PRAGMA foreign_keys=ON; CREATE TABLE SchemaVersion(Name TEXT PRIMARY KEY,AppliedAt TEXT NOT NULL)");
                 var assembly = typeof(Migrator).Assembly;
-                var scripts = assembly.GetManifestResourceNames().Where(n => !n.EndsWith("071_phase7_1_workforce.sql", StringComparison.Ordinal) && !n.EndsWith("072_phase7_2_printing.sql", StringComparison.Ordinal) && !n.EndsWith("073_phase7_3_labels.sql", StringComparison.Ordinal)).Where(x => x.EndsWith(".sql", StringComparison.Ordinal) && !x.EndsWith("017_integrated_purchasing.sql", StringComparison.Ordinal) && !x.EndsWith("018_purchasing_provenance_and_credit.sql", StringComparison.Ordinal) && !x.EndsWith("019_sales_foundation.sql", StringComparison.Ordinal) && !x.EndsWith("020_sales_lifecycle.sql", StringComparison.Ordinal) && !x.EndsWith("022_pos_browse_indexes.sql", StringComparison.Ordinal) && !x.EndsWith("023_directory_query_indexes.sql", StringComparison.Ordinal) && !x.EndsWith("024_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("025_purchase_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("026_supplier_payment_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("027_supplier_payment_allocations.sql", StringComparison.Ordinal) && !x.EndsWith("028_expenses.sql", StringComparison.Ordinal) && !x.EndsWith("029_sales_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("030_returns_management.sql", StringComparison.Ordinal) && !x.EndsWith("031_sales_refund_overdraft.sql", StringComparison.Ordinal)).OrderBy(x => x, StringComparer.Ordinal).ToList();
+                var scripts = assembly.GetManifestResourceNames().Where(n => !n.EndsWith("071_phase7_1_workforce.sql", StringComparison.Ordinal) && !n.EndsWith("072_phase7_2_printing.sql", StringComparison.Ordinal) && !n.EndsWith("073_phase7_3_labels.sql", StringComparison.Ordinal) && !n.EndsWith("032_customer_installments.sql", StringComparison.Ordinal) && !n.EndsWith("033_maintenance_tickets.sql", StringComparison.Ordinal) && !n.EndsWith("074_payment_instruments.sql", StringComparison.Ordinal) && !n.EndsWith("075_expense_profit_classification.sql", StringComparison.Ordinal)).Where(x => x.EndsWith(".sql", StringComparison.Ordinal) && !x.EndsWith("017_integrated_purchasing.sql", StringComparison.Ordinal) && !x.EndsWith("018_purchasing_provenance_and_credit.sql", StringComparison.Ordinal) && !x.EndsWith("019_sales_foundation.sql", StringComparison.Ordinal) && !x.EndsWith("020_sales_lifecycle.sql", StringComparison.Ordinal) && !x.EndsWith("022_pos_browse_indexes.sql", StringComparison.Ordinal) && !x.EndsWith("023_directory_query_indexes.sql", StringComparison.Ordinal) && !x.EndsWith("024_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("025_purchase_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("026_supplier_payment_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("027_supplier_payment_allocations.sql", StringComparison.Ordinal) && !x.EndsWith("028_expenses.sql", StringComparison.Ordinal) && !x.EndsWith("029_sales_treasury.sql", StringComparison.Ordinal) && !x.EndsWith("030_returns_management.sql", StringComparison.Ordinal) && !x.EndsWith("031_sales_refund_overdraft.sql", StringComparison.Ordinal)).OrderBy(x => x, StringComparer.Ordinal).ToList();
                 foreach (var script in scripts)
                 {
                     using (var stream = assembly.GetManifestResourceStream(script)) using (var reader = new StreamReader(stream)) c.Execute(reader.ReadToEnd());
@@ -70,7 +70,7 @@ namespace AlKhayal.IntegrationTests
                 using (var c = new SQLiteConnection(cs))
                 {
                     c.Open();
-                    Assert.Equal(34,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(MigrationTestExpectations.Count,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(new long[] { -100000, 500000, 600000 }, c.Query<long>("SELECT AmountScaled FROM SupplierLedgerEntries ORDER BY AmountScaled").ToArray());
                     Assert.Equal(2, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierInvoices") + c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierPayments"));
                     Assert.Equal(1000000, c.ExecuteScalar<long>("SELECT SUM(AmountScaled) FROM SupplierLedgerEntries"));
@@ -134,7 +134,7 @@ namespace AlKhayal.IntegrationTests
                 using (var c = new SQLiteConnection(cs))
                 {
                     c.Open();
-                    Assert.Equal(34,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(MigrationTestExpectations.Count,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(3, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries"));
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries e JOIN SupplierPayments p ON p.Id=e.LegacyPaymentId WHERE e.EntryType='legacy_payment' AND e.SupplierInvoiceId=p.InvoiceId"));
                     Assert.Equal(1000000, c.ExecuteScalar<long>("SELECT SUM(AmountScaled) FROM SupplierLedgerEntries"));

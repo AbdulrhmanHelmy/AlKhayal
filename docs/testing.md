@@ -1,5 +1,7 @@
 # Testing and verification
 
+Pre-Phase 9 adds `PricingFifoInvariantTests`, `SalesPricingTests` and `frontend/tests/pricing-fifo-tests.js` (included in the normal frontend suite). They cover current prices on old stock, exact selected-unit conversion/variant precedence, immutable sale/COGS facts, the approved two-layer example, inclusive/exclusive tax with discounts, partial returns, cancellation, new purchases, warehouse transfers, retry/restart and potential versus realized margin. See [audit, commands, actual results and limitations](phase-9/pre-phase-9-pricing-fifo.md).
+
 Refund overdraft tests cover negative post-balances, ordinary-withdrawal protection, partial replenishment, replay/rollback, debt-first settlement, exact cash residuals and populated pre-031 migration preservation/failure rollback. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
 
 The returns initial-load regression now has real HTTP coverage for omitted/empty/whitespace search and cleared search after posting, plus frontend coverage for opening the visible Details page directly, selecting a saved return and searching/clearing its picker. The focused `Returns_only_cashier` HTTP test and full frontend suite passed on 2026-10-28. The test reproduced the original `?search=` 400 before the boundary-binding fix. See [returns-management.md](returns-management.md).
@@ -122,3 +124,39 @@ PrintingLayoutTests exercise native Arabic/mixed text rasterization, five paper 
 ## Barcode and label verification — Phase 7.3
 
 Final complete suites: **97 unit + 224 integration passed**, zero failed/skipped; frontend registry/behavior passed for **105 routes**, all frontend JavaScript syntax and diff whitespace checks passed. LabelLayoutTests cover real encoding/decoding, integer DPI bars/quiet zones, all presets/custom/A4/roll pitch, start cells and overflow. LabelPersistenceTests/LabelsApiTests cover atomic identifiers, persisted fields, independent settings, durable jobs/concurrency/failure/financial nonmutation and HTTP security. `label-tests.js` executes production frontend handlers for replay, bulk pagination/staleness, designer and draft survival. Tests use disposable databases/recording printers. No physical output. See [commands, timings and manual acceptance matrix](phase-7/phase-7-final-report.md).
+
+
+## Sales payment instruments
+
+Configured wallets and card terminals, atomic full-invoice attribution, administrator-only management/history, legacy contract mapping, electronic refund restrictions and physical cash shift exclusion are documented in [payment-methods.md](payment-methods.md). Migration 074 is additive; original financial records and credit collection workflows remain intact.
+
+
+## Maintenance advance regression hotfix
+
+`MaintenancePersistenceTests` now verifies receipt-only intake for customers whose existing debt is zero or smaller than the advance, cash/credit delivery, full prepayment, existing legacy-advance reuse, invalid/mismatched settlements, atomic intake and late-delivery rollback, and operation-key replay/conflicts. The original test was reproduced with `Customers.Balance = -95`, then corrected by moving advance application to final-charge posting rather than weakening the nonnegative customer balance constraint. All databases use the disposable temporary fixture. The focused class passed 11 cases and the full integration suite passed 250/250. See [maintenance-advance-hotfix.md](maintenance-advance-hotfix.md) for commands, evidence, accounting timing and remaining limits.
+
+## Phase 9.1 report regressions
+
+SalesReportTests, TransactionReportTests, ReportsApiTests (TreasuryApiTests partial) and ReportPeriodTests exercise real isolated SQLite queries, real purchase/sales/return lifecycles, gross/event/payment reconciliation, legacy instrument attribution, exact strings, stable pages, 30k sales/payments plus 10k purchases/returns, nonmutation/reopening, timezone/DST boundaries and direct HTTP session/effective-screen authorization. `frontend/tests/report-tests.js` executes all four production report renderers, including filters/reset, summaries, pages, error/retry, permission-aware links and stale results; it runs from the complete frontend suite. Full execution: 279 integration and 130 unit tests passed; frontend passed for 112 routes. Distinct TRX files, complete commands and blocked rendered/native acceptance are recorded in [Phase 9.1](phase-9/phase-9-1.md).
+
+The Phase 9.2 expense voucher report adds disposable-fixture reconciliation and real HTTP permission checks plus frontend handler coverage. See [Phase 9.2](phase-9/phase-9-2.md#expense-voucher-report--recovery-implementation).
+
+`NetProfitReportTests`, `NetProfitApiTests` (TreasuryApiTests partial), `NetProfitServiceTests` and the extended executable report renderer tests cover the real SQLite-to-UI Net Profit slice. Coverage includes original saved tax/discount return residuals, original FIFO, eligibility audit/retry/conflict/CSRF, missing sources, later events, daily/monthly/DST reconciliation, excluded collections/advances, 30k saved sales, bounded ranges, paging and read-only snapshots. Historic migration fixtures now exclude 075 until their upgrade step. [Actual commands/results and compatibility limits](phase-9/phase-9-2.md#this-deliverys-validation).
+
+Resumed Net Profit acceptance on 2026-10-30 completed **296 integration + 137 unit tests**, zero failed/skipped, with distinct TRX files under `artifacts/net-profit-completion/results`. Focused checks passed 15 SQLite/HTTP cases and 7 original-tax/service cases. Added regressions cover cross-layer FIFO returns, missing saved tax/restored cost and final-calendar-month clipping (reproduced date overflow before its fix). Frontend passed 114 routes; syntax passed 50 JavaScript files; the isolated full solution build passed with zero warnings/errors. Native WebView2/Windows 7 acceptance remains separate.
+
+## Phase 9.2 final product/inventory coverage
+
+`StockReportTests`, `StockInventoryReportTests`, `StockReportsApiTests` and `StockReportServiceTests`, plus the converted-unit pricing/FIFO regression, exercise actual saved FIFO batches, price edits, gross-profit reconciliation, original tax/discount repeated returns, cancellation event periods, variants/units, stable sorting/paging, 105-row catalog aggregation, current exact valuation, transfers/counts/adjustments/purchase returns, active availability assignments, missing evidence, independent HTTP permissions and server-side financial-field removal. `report-tests.js` executes all five renderers for filtering/paging, focus-node survival, escaping, empty/error/retry, source navigation and stale responses. All test databases are isolated temporary files; build artifacts/TRX outputs are separate from running binaries. [Final executed commands/counts and outstanding native acceptance](phase-9/phase-9-2.md#final-automated-validation).
+
+## Phase 9.3 operational regression
+
+`OperationalReportTests`, `Operational_reports_HTTP_independent_permissions_module_gates_overview_nonleakage_and_read_only`, `OperationalReportServiceTests` and operational cases in `frontend/tests/report-tests.js` cover ledger snapshots versus period events, registration boundaries, frozen shift cash and separate differences, actual attendance durations, maintenance advances/delivery, schedule allocations/coverage, exact overview reuse/incomplete profit, independent permissions, module gates, read-only bytes, paging, links and stale responses. All SQLite fixtures are disposable; set `ALKHAYAL_DATABASE_PATH` to a unique isolated fallback. Use `--artifacts-path artifacts/phase-9-3`, separate assembly TRX filenames and the commands/results in [Phase 9.3](phase-9/phase-9-3.md). DOM tests do not establish native visual acceptance.
+
+## Phase 10.1 licensing
+
+Use the isolated commands and actual results in [Phase 10.1](phase-10/phase-10-1-licensing.md). LicensingTests uses disposable RSA keys and fake hardware; ActivationDialogTests runs actual WinForms copy/paste, three-control, title-bar-close and 100–150% logical layout checks on an STA thread without WebView2; NodeLicenseCompatibilityTests issues through the JavaScript/SQLite manager and verifies/activates with .NET; LicenseAccessTests exercises the real signed-license/storage pipeline with localhost HTTP and a direct Web API host. Existing HTTP fixtures explicitly inject TestLicenseGate from the test assembly, never an environment bypass. Node tests also exercise authenticated loopback endpoints, hostile-origin rejection, append-only SQLite backup/restore, and the installed Desktop package with external network calls denied and process restart. Windows 7 and complete WebView2/installer acceptance remain separate deployment checks.
+
+## Activation storage/UAC regression
+
+LicenseInstallationTests distinguishes actual medium-token Windows ACL/CreateNew denial, native path/rename/hard-link/junction and CLI rejection from simulated elevated targets/UAC results. ActivationDialogTests uses explicit fake installation ports to test preserved text and retry without raising real UAC. Full separate-standard-account credentialed elevation and Windows 7 remain UNVERIFIED; no real license is a fixture. [Actual results and manual acceptance](phase-10/activation-storage-hotfix.md).

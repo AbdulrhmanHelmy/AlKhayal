@@ -53,7 +53,7 @@ namespace AlKhayal.IntegrationTests
 
                 var frontendPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "frontend"));
                 var firstUrl = "http://127.0.0.1:" + FreePort();
-                server = new AlKhayalServer();
+                server = new AlKhayalServer(new TestLicenseGate());
                 server.Start(new HostOptions { DatabasePath = path, Url = firstUrl, FrontendPath = frontendPath });
                 long purchaseId;
                 using (var client = Client(firstUrl))
@@ -92,7 +92,7 @@ namespace AlKhayal.IntegrationTests
                 using (var connection = new SQLiteConnection(connectionString))
                 {
                     connection.Open();
-                    Assert.Equal(34,connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(MigrationTestExpectations.Count,connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM Suppliers WHERE Id=@Id", new { Id = supplierId }));
                     Assert.Equal(1, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM PurchaseInvoices WHERE Id=@Id AND Status='posted'", new { Id = purchaseId }));
                     Assert.Equal(2, connection.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries WHERE PurchaseInvoiceId=@Id", new { Id = purchaseId }));
@@ -101,7 +101,7 @@ namespace AlKhayal.IntegrationTests
                 }
 
                 var secondUrl = "http://127.0.0.1:" + FreePort();
-                server = new AlKhayalServer();
+                server = new AlKhayalServer(new TestLicenseGate());
                 server.Start(new HostOptions { DatabasePath = path, Url = secondUrl, FrontendPath = frontendPath });
                 using (var client = Client(secondUrl))
                 {

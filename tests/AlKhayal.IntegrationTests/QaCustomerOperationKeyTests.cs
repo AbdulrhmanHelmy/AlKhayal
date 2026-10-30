@@ -395,7 +395,7 @@ namespace AlKhayal.IntegrationTests
             await users.CreateAsync("qa-admin", "مسؤول الجودة", new PasswordHasher().Hash("qa-secret"), "administrator", CancellationToken.None);
 
             var options = new HostOptions { DatabasePath = path, Url = "http://127.0.0.1:" + FreePort(), FrontendPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "missing-frontend") };
-            var server = new AlKhayalServer();
+            var server = new AlKhayalServer(new TestLicenseGate());
             server.Start(options);
 
             return new Qa101ApiHarness

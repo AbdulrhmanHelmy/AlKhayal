@@ -39,6 +39,11 @@ namespace AlKhayal.Server.Host
     public sealed class AlKhayalServer : IDisposable
     {
         private IDisposable _server;
+        private readonly AlKhayal.Application.Licensing.ILicenseGate licenseGate;
+        public AlKhayalServer(AlKhayal.Application.Licensing.ILicenseGate licenseGate = null)
+        {
+            this.licenseGate = licenseGate ?? AlKhayal.Data.Licensing.MachineLicensing.Create();
+        }
 
         public HostOptions Options { get; private set; }
 
@@ -67,7 +72,12 @@ namespace AlKhayal.Server.Host
             var supplierAccounts = new SupplierAccountService(new SqliteSupplierAccountRepository(connectionString));
             var supplierLedger = new SupplierLedgerService(new SqliteSupplierLedgerRepository(connectionString));
             var purchases = new PurchaseService(new SqlitePurchaseRepository(connectionString), new SqliteSupplierRepository(connectionString));
+            var paymentMethods = new AlKhayal.Application.Payments.PaymentInstrumentService(new AlKhayal.Data.Payments.SqlitePaymentInstrumentStore(connectionString));
             var sales = new SalesService(new SqliteSalesStore(connectionString));
+            var transactionReports = new AlKhayal.Application.Reports.TransactionReportService(new AlKhayal.Data.Reports.SqliteTransactionReportStore(connectionString));
+            var stockReports = new AlKhayal.Application.Reports.StockReportService(new AlKhayal.Data.Reports.SqliteStockReportStore(connectionString));
+            var netProfit = new AlKhayal.Application.Reports.NetProfitService(new AlKhayal.Data.Reports.SqliteNetProfitStore(connectionString));
+            var salesReport = new AlKhayal.Application.Reports.SalesReportService(new AlKhayal.Data.Reports.SqliteSalesReportStore(connectionString));
             var treasury = new AlKhayal.Application.Treasury.TreasuryService(new AlKhayal.Data.Treasury.SqliteTreasuryStore(connectionString));
             var expenses = new AlKhayal.Application.Expenses.ExpenseService(new AlKhayal.Data.Expenses.SqliteExpenseStore(connectionString));
             var returns = new AlKhayal.Application.Returns.ReturnService(new AlKhayal.Data.Returns.SqliteReturnReadStore(connectionString), sales, purchases);
@@ -76,10 +86,24 @@ namespace AlKhayal.Server.Host
             var printing = new AlKhayal.Application.Printing.PrintingService(new AlKhayal.Data.Printing.SqlitePrintRepository(connectionString), new AlKhayal.Application.Printing.PrintDocumentProvider(sales, purchases, returns, workforce, settings, new AlKhayal.Data.Printing.SqlitePrintPaymentReader(connectionString)), outputBackend);
             var labels = new AlKhayal.Application.Printing.LabelService(new AlKhayal.Data.Printing.SqliteLabelRepository(connectionString), outputBackend as AlKhayal.Application.Printing.ILabelPrinterBackend, printing);
             var barcodes = new AlKhayal.Application.Catalog.BarcodeService(new SqliteCatalogStore(connectionString));
-            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AlKhayal.Application.Printing.LabelService) ? labels : type == typeof(AlKhayal.Application.Catalog.BarcodeService) ? barcodes : type == typeof(AlKhayal.Application.Printing.PrintingService) ? printing : type == typeof(AlKhayal.Application.Workforce.WorkforceService) ? workforce : type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : type == typeof(InstallmentService) ? installments : type == typeof(MaintenanceService) ? maintenance : type == typeof(SupplierService) ? suppliers : type == typeof(SupplierAccountService) ? supplierAccounts : type == typeof(SupplierLedgerService) ? supplierLedger : type == typeof(PurchaseService) ? purchases : type == typeof(SalesService) ? sales : type == typeof(AlKhayal.Application.Treasury.TreasuryService) ? treasury : type == typeof(AlKhayal.Application.Expenses.ExpenseService) ? expenses : type == typeof(AlKhayal.Application.Returns.ReturnService) ? returns : null);
+            var operationalReports = new AlKhayal.Application.Reports.OperationalReportService(new AlKhayal.Data.Reports.SqliteOperationalReportStore(connectionString));
+            var businessOverview = new AlKhayal.Application.Reports.BusinessOverviewService(salesReport,transactionReports,netProfit,operationalReports);
+            var config = ApiBootstrap.CreateConfiguration(type => type == typeof(AlKhayal.Application.Reports.OperationalReportService) ? operationalReports : type == typeof(AlKhayal.Application.Reports.BusinessOverviewService) ? businessOverview : type == typeof(AlKhayal.Application.Reports.StockReportService) ? stockReports : type == typeof(AlKhayal.Application.Reports.NetProfitService) ? netProfit : type == typeof(AlKhayal.Application.Reports.TransactionReportService) ? transactionReports : type == typeof(AlKhayal.Application.Reports.SalesReportService) ? salesReport : type == typeof(AlKhayal.Application.Payments.PaymentInstrumentService) ? paymentMethods : type == typeof(AlKhayal.Application.Printing.LabelService) ? labels : type == typeof(AlKhayal.Application.Catalog.BarcodeService) ? barcodes : type == typeof(AlKhayal.Application.Printing.PrintingService) ? printing : type == typeof(AlKhayal.Application.Workforce.WorkforceService) ? workforce : type == typeof(AuthService) ? auth : type == typeof(BusinessActivityService) ? activities : type == typeof(FeatureService) ? features : type == typeof(UserManagementService) ? userManagement : type == typeof(SettingsService) ? settings : type == typeof(CatalogService) ? catalog : type == typeof(InventoryService) ? inventory : type == typeof(CustomerService) ? customers : type == typeof(CustomerAccountService) ? accounts : type == typeof(InstallmentService) ? installments : type == typeof(MaintenanceService) ? maintenance : type == typeof(SupplierService) ? suppliers : type == typeof(SupplierAccountService) ? supplierAccounts : type == typeof(SupplierLedgerService) ? supplierLedger : type == typeof(PurchaseService) ? purchases : type == typeof(SalesService) ? sales : type == typeof(AlKhayal.Application.Treasury.TreasuryService) ? treasury : type == typeof(AlKhayal.Application.Expenses.ExpenseService) ? expenses : type == typeof(AlKhayal.Application.Returns.ReturnService) ? returns : null, licenseGate);
 
             _server = WebApp.Start(options.Url, app =>
             {
+                app.Use(async (context, next) =>
+                {
+                    if (!licenseGate.Check().IsValid)
+                    {
+                        context.Response.StatusCode = 403;
+                        context.Response.ContentType = "application/json; charset=utf-8";
+                        context.Response.Headers.Set("Cache-Control", "no-store");
+                        await context.Response.WriteAsync("{\"success\":false,\"data\":null,\"error\":{\"code\":\"activation_required\",\"message\":\"يلزم تفعيل البرنامج على هذا الجهاز. التفعيل مجاني ودائم.\"}}");
+                        return;
+                    }
+                    await next();
+                });
                 app.UseWebApi(config);
                 if (!Directory.Exists(options.FrontendPath)) return;
 

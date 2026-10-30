@@ -57,7 +57,7 @@ namespace AlKhayal.IntegrationTests
             finally { if (server != null) server.Dispose(); System.Data.SQLite.SQLiteConnection.ClearAllPools(); if (File.Exists(path)) File.Delete(path); }
         }
 
-        private static AlKhayalServer Start(string path, string url) { var server = new AlKhayalServer(); server.Start(new HostOptions { DatabasePath = path, Url = url, FrontendPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "missing-frontend") }); return server; }
+        private static AlKhayalServer Start(string path, string url) { var server = new AlKhayalServer(new TestLicenseGate()); server.Start(new HostOptions { DatabasePath = path, Url = url, FrontendPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "missing-frontend") }); return server; }
         private static HttpClient Client(string url) { return new HttpClient(new HttpClientHandler { UseCookies = true }) { BaseAddress = new Uri(url) }; }
         private static StringContent Json(string json) { return new StringContent(json, Encoding.UTF8, "application/json"); }
         private static async Task<string> Login(HttpClient client, string username) { var response = await client.PostAsync("api/auth/login", Json("{\"username\":\"" + username + "\",\"password\":\"secret\"}")); Assert.Equal(HttpStatusCode.OK, response.StatusCode); return Regex.Match(await response.Content.ReadAsStringAsync(), "\\\"csrfToken\\\":\\\"([^\\\"]+)\\\"").Groups[1].Value; }

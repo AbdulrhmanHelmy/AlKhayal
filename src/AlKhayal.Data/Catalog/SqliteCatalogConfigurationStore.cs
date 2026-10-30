@@ -601,7 +601,7 @@ namespace AlKhayal.Data.Catalog
                             new { record.ProductId }, transaction, cancellationToken: ct)).ConfigureAwait(false)).ToList();
 
                         var existingVariants = (await connection.QueryAsync<ProductVariantRecord>(
-                            new CommandDefinition("SELECT Id, Name, IsDefault, IsActive, CombinationKey, ArchivedUtc, Version FROM ProductVariants WHERE ProductId=@ProductId",
+                            new CommandDefinition("SELECT Id, Name, IsDefault, IsActive, CombinationKey, ArchivedUtc, Version, SellPriceOverrideScaled, PurchasePriceOverrideScaled FROM ProductVariants WHERE ProductId=@ProductId",
                             new { record.ProductId }, transaction, cancellationToken: ct)).ConfigureAwait(false)).ToList();
 
                         var existingBarcodes = (await connection.QueryAsync<ProductBarcodeRecord>(
@@ -659,6 +659,21 @@ namespace AlKhayal.Data.Catalog
                         }
 
                         var now = UtcNow();
+                        // A receipt mirrors a simple product's price into its sole variant.
+                        // Let that mirror inherit an explicitly edited product price. Distinct
+                        // overrides and products configured with variants retain their precedence.
+                        if (!existingDetail.VariantMode && !variantMode && existingVariants.Count == 1 && existingVariants[0].IsDefault)
+                        {
+                            await connection.ExecuteAsync(new CommandDefinition(@"
+                                UPDATE ProductVariants SET SellPriceOverrideScaled=NULL, Version=Version+1, UpdatedUtc=@Now
+                                WHERE Id=@VariantId AND ProductId=@ProductId
+                                  AND SellPriceOverrideScaled=(SELECT SellPriceScaled FROM ProductDetails WHERE ProductId=@ProductId)
+                                  AND SellPriceOverrideScaled<>@Price
+                                  AND EXISTS(SELECT 1 FROM CatalogAuditLog WHERE ProductId=@ProductId
+                                    AND EntityType='variant' AND EntityId=@VariantId AND Action='inventory_receipt_price')",
+                                new { VariantId=existingVariants[0].Id, record.ProductId, Price=record.SellPriceScaled, Now=now },
+                                transaction, cancellationToken: ct)).ConfigureAwait(false);
+                        }
                         var affected = await connection.ExecuteAsync(new CommandDefinition(
                             @"UPDATE ProductDetails SET Description=@Description, CategoryId=@CategoryId, BaseUnitId=@BaseUnitId,
                             ProductType=@ProductType, SellPriceScaled=@SellPriceScaled, PurchasePriceScaled=@PurchasePriceScaled,
@@ -828,6 +843,11 @@ namespace AlKhayal.Data.Catalog
                                     if (v.Id.HasValue && v.Id.Value > 0)
                                     {
                                         vId = v.Id.Value;
+                                        // The application catalog editor omits override mutations.
+                                        // Keep exact persisted prices when no new override is supplied.
+                                        var persisted = existingVariants.Single(old => old.Id == vId);
+                                        v.SellPriceOverrideScaled = v.SellPriceOverrideScaled ?? persisted.SellPriceOverrideScaled;
+                                        v.PurchasePriceOverrideScaled = v.PurchasePriceOverrideScaled ?? persisted.PurchasePriceOverrideScaled;
                                         await connection.ExecuteAsync(new CommandDefinition(
                                             @"UPDATE ProductVariants SET Name=@Name, NormalizedName=@NormName, CombinationKey=@CombKey,
                                             IsDefault=@IsDefault, IsActive=@IsActive, SellPriceOverrideScaled=@SellOverride,

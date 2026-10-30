@@ -1,5 +1,7 @@
 # Design system
 
+Standard Sales and Touch POS derive each new line's selected-unit price from the current exact base-unit variant price, applying unit conversion before rounding to piastres. Changing the picker variant uses that variant's price; adding quantity to an existing draft line preserves its saved price. Potential inventory margin remains explicitly separate from realized profit. See [pre-Phase 9 audit](phase-9/pre-phase-9-pricing-fifo.md).
+
 The return form explains that sales-refund cashbox balances may become negative. Credit returns settle remaining customer debt first and show the residual cash and account adjustment in saved details. See [sales-refund-overdraft.md](sales-refund-overdraft.md).
 
 Purchase and sales invoice history display saved return-state badges (`مرتجعة جزئيًا` / `مرتجعة بالكامل`) alongside their posting state. Untouched invoices have no return badge; cumulative saved returned quantities determine the distinction. See [returns-management.md](returns-management.md).
@@ -116,3 +118,30 @@ The registry-derived Settings hub hosts Admin-only employee and attendance workf
 ## Product label designer and workflow — Phase 7.3
 
 The existing printer settings screen includes independent label profiles/templates and a numeric selected-element editor over native PNG preview. Physical mm dimensions, custom stock, roll feed pitch, sheet cells/gaps and initial used cells are explicit. Product directory actions and collapsed saved-product print panels preserve unsaved form fields; production output reads persisted data only. `product-labels` is a hidden contextual, module-gated paged bulk workflow. Old barcode/printer design routes redirect to settings-printers. See [Phase 7.3 design and limitations](phase-7/phase-7-3.md#settings-paper-and-designer).
+
+
+## Sales payment instruments
+
+Configured wallets and card terminals, atomic full-invoice attribution, administrator-only management/history, legacy contract mapping, electronic refund restrictions and physical cash shift exclusion are documented in [payment-methods.md](payment-methods.md). Migration 074 is additive; original financial records and credit collection workflows remain intact.
+
+## Phase 9.1 transaction report screens
+
+The التقارير group contains Sales, Purchases, Returns and Payment Methods reports using saved SQLite facts, simple date/filter controls, numeric cards and compact paged tables. Shared report helpers retain mounted inputs, stale-response guards and permission-aware original-document/history links. Scoped intrinsic styles reuse RTL Light/Dark card/table tokens and existing responsive breakpoints; no chart library or viewport owner was added. Payment history now accepts an instrument identity in route state. See [routes, labels, accounting distinctions and blocked visual acceptance](phase-9/phase-9-1.md).
+
+The Arabic expense voucher report uses the shared report period controls and paged tables. It labels its totals as saved paid vouchers rather than verified operating expenses. See [Phase 9.2](phase-9/phase-9-2.md#expense-voucher-report--recovery-implementation).
+
+`report-net-profit` is a real report in the التقارير group. It uses the shared date presets, daily/monthly selector, compact exact-value cards and table, paged voucher review and administrator classification/reason controls. Its visible scope is `صافي ربح المبيعات بعد المصروفات المسجلة`. Incomplete source evidence or unclassified vouchers suppress net profit and show missing counts/amounts. Filters remain mounted, responses are guarded against stale renders, uncertain classification retries retain their operation key, and existing RTL Light/Dark tokens and workspace scrolling remain in use. No charts, framework, remote resource or new viewport owner is introduced. [Sources, limits and validation](phase-9/phase-9-2.md).
+
+## Phase 9.2 simple product and stock reports
+
+Five real routes use shared `stock-reports.js`: gross product profit, current FIFO valuation, top products, availability and saved stock movements. Numeric cards and compact RTL tables reuse existing tokens/scroll ownership, date presets for event reports, mounted searches, category/warehouse ID filters, status/type/order dropdowns, server pagination and permission-aware document references. Unknown evidence displays `غير مكتمل`; expected inventory margin is visibly distinct from realized gross profit. Availability says zero/available because configured minima do not exist. Current snapshots have no date presets. No charts or new frontend dependencies. Rendered 1366×768 Light/Dark/native acceptance remains unverified. [Semantics and acceptance](phase-9/phase-9-2.md#frontend-and-compatibility-acceptance).
+
+## Phase 9.3 simple operational reports
+
+Seven التقارير routes use numeric cards, compact server-paged tables, existing date presets, mounted search/person/status filters and permission-aware source links. Current debt/payables/status/overdue labels remain distinct from period event labels. Overview suppresses incomplete profit and displays only server-authorized metrics. Shared Arabic RTL Light/Dark tokens, table wrappers and workspace scrolling are retained. No charts or new frontend dependency. Rendered/native acceptance remains unverified. [Screen inventory and semantics](phase-9/phase-9-3.md).
+
+## Native mandatory activation
+
+Before WebView2 or the login page, the RTL WinForms dialog presents تفعيل برنامج الخيال, explains free perpetual activation, and provides a selectable readonly request display and exactly three action/edit controls: copy request, signed-license input and activate. Only the title-bar X closes startup; save/import/paste/exit buttons are removed. It uses local Segoe UI, navy/gold colors, DPI scaling and keyboard controls. Invalid/insufficient identity stays locked. No trial, skip, guest, expiry, payment or online option exists. Administrator activation installs a machine-wide license; cashiers only read it. [Flow and limitations](phase-10/phase-10-1-licensing.md).
+
+The activation dialog now performs async validation/install/revalidation, disables Activate only while pending, and preserves the pasted code after UAC cancellation/denial. Its two buttons, editable license input, selectable request display and layout are unchanged. Only the bounded helper operation requests elevation; normal startup remains non-elevated. [Storage/UAC hotfix](phase-10/activation-storage-hotfix.md).

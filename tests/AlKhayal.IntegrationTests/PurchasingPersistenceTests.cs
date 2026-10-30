@@ -133,7 +133,7 @@ namespace AlKhayal.IntegrationTests
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM InventoryCostLayers WHERE Basis='receipt'"));
                     Assert.Equal(83250, c.ExecuteScalar<long>("SELECT ValueScaled FROM InventoryCostLayers WHERE Basis='receipt'"));
                     Assert.Equal(1, c.ExecuteScalar<long>("SELECT COUNT(*) FROM SupplierLedgerEntries WHERE PurchaseInvoiceId=@Id AND EntryType='purchase'", new { Id = draft.Id }));
-                    Assert.Equal(34,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
+                    Assert.Equal(MigrationTestExpectations.Count,c.ExecuteScalar<long>("SELECT COUNT(*) FROM SchemaVersion"));
                     Assert.Empty(c.Query<dynamic>("PRAGMA foreign_key_check"));
                 }
                 Assert.True(await f.Store.VerifyProjectionAsync(CancellationToken.None));

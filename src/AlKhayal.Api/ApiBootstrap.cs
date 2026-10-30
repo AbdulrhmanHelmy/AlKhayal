@@ -11,9 +11,10 @@ namespace AlKhayal.Api
     public static class ApiBootstrap
     {
         public static HttpConfiguration CreateConfiguration(
-            Func<Type, object> resolver)
+            Func<Type, object> resolver, AlKhayal.Application.Licensing.ILicenseGate licenseGate = null)
         {
             var config = new HttpConfiguration();
+            config.MessageHandlers.Add(new LicenseAccessHandler(licenseGate ?? AlKhayal.Data.Licensing.MachineLicensing.Create()));
 
             config.MapHttpAttributeRoutes();
             config.DependencyResolver = new SimpleResolver(resolver);
@@ -172,6 +173,25 @@ namespace AlKhayal.Api
                     (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
                     (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
                     (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.PaymentMethodsController))
+                return new Controllers.PaymentMethodsController(
+                    (Application.Payments.PaymentInstrumentService)_get(typeof(Application.Payments.PaymentInstrumentService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)));
+
+            if (t == typeof(Controllers.ReportsController))
+                return new Controllers.ReportsController(
+                    (Application.Reports.SalesReportService)_get(typeof(Application.Reports.SalesReportService)),
+                    (Application.Reports.TransactionReportService)_get(typeof(Application.Reports.TransactionReportService)),
+                    (Application.Reports.NetProfitService)_get(typeof(Application.Reports.NetProfitService)),
+                    (Application.Authentication.AuthService)_get(typeof(Application.Authentication.AuthService)),
+                    (Application.Users.UserManagementService)_get(typeof(Application.Users.UserManagementService)),
+                    (Application.Features.FeatureService)_get(typeof(Application.Features.FeatureService)),
+                    (Application.Reports.StockReportService)_get(typeof(Application.Reports.StockReportService)),
+                    (Application.Reports.OperationalReportService)_get(typeof(Application.Reports.OperationalReportService)),
+                    (Application.Reports.BusinessOverviewService)_get(typeof(Application.Reports.BusinessOverviewService)));
 
             if (t == typeof(Controllers.SalesController))
                 return new Controllers.SalesController(

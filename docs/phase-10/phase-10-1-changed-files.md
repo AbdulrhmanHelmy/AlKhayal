@@ -1,0 +1,60 @@
+
+# Files changed by Phase 10.1
+
+Existing changes were preserved. Existing HTTP test files below only receive explicit TestLicenseGate injection for this phase. Other pre-existing changes shown by git status are not attributed to this work.
+
+- `AlKhayal.slnx`
+- `docs/api-contracts.md`
+- `docs/architecture.md`
+- `docs/design.md`
+- `docs/phase-10/phase-10-1-licensing.md`
+- `docs/testing.md`
+- `scripts/validate-license-public-keys.ps1`
+- `src/AlKhayal.Api/ApiBootstrap.cs`
+- `src/AlKhayal.Api/LicenseAccessHandler.cs`
+- `src/AlKhayal.Application/Licensing/LicenseContracts.cs`
+- `src/AlKhayal.Application/Licensing/LicenseFormat.cs`
+- `src/AlKhayal.Data/AlKhayal.Data.csproj`
+- `src/AlKhayal.Data/Licensing/FileLicenseStorage.cs`
+- `src/AlKhayal.Data/Licensing/RsaLicenseSignatures.cs`
+- `src/AlKhayal.Data/Licensing/TrustedKeys/README.md`
+- `src/AlKhayal.Data/Licensing/WindowsHardwareIdentity.cs`
+- `src/AlKhayal.Server.Host/AlKhayalServer.cs`
+- `src/AlKhayal.UI/ActivationForm.cs`
+- `src/AlKhayal.UI/MainForm.cs`
+- `src/AlKhayal.UI/Program.cs`
+- `tests/AlKhayal.IntegrationTests/ApiEndpointTests.cs`
+- `tests/AlKhayal.IntegrationTests/BusinessActivityApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/CatalogApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/CustomerInstallmentApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/CustomerStatementApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/ExpenseApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/FeatureApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/FirstRunBootstrapTests.cs`
+- `tests/AlKhayal.IntegrationTests/InventoryApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/LabelsApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/LicenseAccessTests.cs`
+- `tests/AlKhayal.IntegrationTests/NetProfitApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/OperationalReportsApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/PaymentMethodsApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/PrintingApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/QaCustomerOperationKeyTests.cs`
+- `tests/AlKhayal.IntegrationTests/QaPhase1SessionSecurityTests.cs`
+- `tests/AlKhayal.IntegrationTests/ReportsApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/ReturnManagementApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/SalesReturnConflictApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/SalesTreasuryApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/SettingsApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/StockReportsApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/SupplierAccountsApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/SupplierRestartApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/TestLicenseGate.cs`
+- `tests/AlKhayal.IntegrationTests/TreasuryApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/UserManagementApiTests.cs`
+- `tests/AlKhayal.IntegrationTests/WorkforceApiTests.cs`
+- `tests/AlKhayal.UnitTests/ActivationDialogTests.cs`
+- `tests/AlKhayal.UnitTests/AlKhayal.UnitTests.csproj`
+- `tests/AlKhayal.UnitTests/LicensingTests.cs`
+- `tools/AlKhayal.LicenseIssuer/AlKhayal.LicenseIssuer.csproj`
+- `tools/AlKhayal.LicenseIssuer/Program.cs`
+- `docs/phase-10/phase-10-1-changed-files.md`

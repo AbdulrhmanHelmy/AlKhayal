@@ -31,7 +31,7 @@ namespace AlKhayal.IntegrationTests
                 var otherId = await users.CreateAsync("print-other", "آخر", hasher.Hash(password), UserRoles.Cashier, CancellationToken.None);
                 var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
                 var backend = new PrintingPersistenceTests.RecordingBackend();
-                using (var server = new AlKhayalServer())
+                using (var server = new AlKhayalServer(new TestLicenseGate()))
                 {
                     var url = new Uri("http://127.0.0.1:" + port); server.Start(new HostOptions { DatabasePath = f.DatabasePath, FrontendPath = frontend, Url = url.ToString().TrimEnd('/') }, backend);
                     using (var admin = Client(url)) using (var cashier = Client(url)) using (var other = Client(url)) using (var anon = Client(url))
